@@ -106,6 +106,18 @@ class MeApi implements IntencaoDeFotoDoUsuario {
     /// O `upload_id` de uma foto cujos BYTES JA SUBIRAM, ou `null` para nao
     /// mexer na foto.
     String? fotoUpload,
+
+    /// `public_profile_enabled`: **o perfil público** (cliente, 02/11/2026), ou
+    /// `null` para **não mexer**.
+    ///
+    /// **`false` DESLIGA, e não é o mesmo que `null`** — é por isso que ele
+    /// entra no corpo com `?` (omite só quando é nulo) e não com um
+    /// `if (… == true)`, que tornaria desligar impossível.
+    ///
+    /// **Ligar sem apelido o servidor RECUSA com 400**, nomeando o campo
+    /// (`CHECK users_perfil_publico_exige_apelido` é a garantia; a recusa do
+    /// servidor é a mensagem). Quem chamar isto precisa tratar a recusa.
+    bool? perfilPublico,
   }) async {
     final regiao = <String, dynamic>{
       'postal_code': ?cep,
@@ -120,6 +132,7 @@ class MeApi implements IntencaoDeFotoDoUsuario {
         'handle': ?apelido,
         'phone_e164': ?telefone,
         'photo_upload_id': ?fotoUpload,
+        'public_profile_enabled': ?perfilPublico,
         if (regiao.isNotEmpty) 'reference_area': regiao,
       },
     );

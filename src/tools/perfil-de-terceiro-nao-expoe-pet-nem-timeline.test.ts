@@ -73,16 +73,26 @@ function todasAsPropriedadesDoPerfil(): string[] {
 
 void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', () => {
 
-  void it('a etiqueta `people` tem TRES operacoes, e a lista e exata', () => {
+  void it('a etiqueta `people` tem QUATRO operacoes, e a lista e exata', () => {
     assert.deepEqual(
       operacoesDePessoa()
         .map(({ metodo, caminho }) => `${metodo} ${caminho}`)
         .sort(),
-      ['get /people', `get ${CAMINHO}`, 'post /connection-invites/resolution'],
-      'uma QUARTA operação em `people` é listagem ou descoberta por outro nome. As três ' +
+      ['get /people', `get ${CAMINHO}`, 'get /region/people', 'post /connection-invites/resolution'],
+      'uma QUINTA operação em `people` é listagem ou descoberta por outro nome. As quatro ' +
         'que existem são: a busca (com piso de 3 caracteres, teto por conta e campo ' +
-        'vazio que não lista ninguém), a leitura de um perfil pelo apelido, e a mesma ' +
-        'leitura endereçada pelo token do convite.',
+        'vazio que não lista ninguém), a leitura de um perfil pelo apelido, a mesma ' +
+        'leitura endereçada pelo token do convite, e a LISTAGEM DA PRÓPRIA REGIÃO.\n\n' +
+        'A QUARTA entrou em 02/11/2026, por decisão do cliente: *"trazer a listagem de ' +
+        'usuarios que estao na mesma regiao dele e que as pessoas podem adicionar"*. Ela ' +
+        'é listagem, e o nome dela diz isso -- o que a torna defensável são os freios, e ' +
+        'não a ausência de um nome. Os dela, medidos em ' +
+        '`people/adapters/persistence/lista-da-regiao-na-clausula-where.test.ts`: exige ' +
+        'conta; SÓ QUEM ADERIU aparece, e a adesão nasce DESLIGADA (foi a escolha dele ' +
+        'entre duas perguntas fechadas); só quem tem canal de contato confirmado ' +
+        'aparece; teto de 60/h por conta; página de 20; SEM FOTO; e SEM TERMO DE BUSCA ' +
+        '-- um `q` aqui seria uma segunda busca sem os freios da primeira, e o cliente ' +
+        'decidiu no mesmo dia que a busca não muda em nada.',
     );
     assert.ok(
       spec.tags.some((etiqueta) => etiqueta.name === 'people'),
@@ -90,7 +100,7 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  void it('as TRES operacoes de `people` exigem conta, sem alternativa vazia', () => {
+  void it('as QUATRO operacoes de `people` exigem conta, sem alternativa vazia', () => {
     for (const { metodo, caminho, op } of operacoesDePessoa()) {
       const seguranca = op.security ?? [];
       assert.ok(seguranca.length > 0, `${metodo} ${caminho} sem \`security\` nasceria pública`);

@@ -4822,6 +4822,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/region/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usuarios da MESMA regiao com perfil publico e foto
+         * @description **A listagem de usuarios da mesma regiao**, decisao do cliente de
+         *     02/11/2026: *"trazer a listagem de usuarios que estao na mesma regiao
+         *     dele e que as pessoas podem adicionar"*.
+         *
+         *     **Nao aceita termo de busca.** Isto nao e `searchPeople` com um
+         *     parametro novo: a busca continua inteira como esta, com o piso de tres
+         *     caracteres, o campo vazio que nao lista ninguem e o teto por conta (a
+         *     decisao 2 do cliente, literal).
+         *
+         *     ## A REGIAO E `reference_city` + `reference_state`
+         *
+         *     Casa por **cidade E estado**, normalizados por `texto_para_busca` -- a
+         *     MESMA funcao do banco que o diretorio e a busca usam, e nao uma segunda
+         *     normalizacao, que divergiria em silencio ficando so lenta.
+         *
+         *     Ela e `STRICT`: cidade nula devolve nulo, e `NULL = NULL` nao e
+         *     verdadeiro. **Entao quem nao tem regiao de referencia nao casa com
+         *     ninguem e nao e casado por ninguem**, e isso vale sem nenhum `if` --
+         *     a pendencia `reference_area` de `Me.pending_profile_fields` e o que a
+         *     tela usa para dizer isso a quem chama.
+         *
+         *     **O bairro nao entra, nem para casar, nem para ordenar, nem para
+         *     exibir** -- ver o comentario acima desta operacao: `reference_neighborhood`
+         *     e texto livre sem forma canonica, e ordenar por ele entregaria o bairro
+         *     pela POSICAO.
+         *
+         *     ## OS FILTROS, E CADA UM TEM CASO PROPRIO
+         *
+         *     **Os sete estao na clausula `WHERE`** (ADR-0021), e nao num filtro de
+         *     borda -- o mesmo arranjo dos seis predicados de `searchPeople`:
+         *
+         *     | Filtro | Por que |
+         *     |---|---|
+         *     | **cidade e estado iguais** aos de quem chama | e a listagem que o cliente pediu, e o recorte dela |
+         *     | **aparece**: perfil publico LIGADO + FOTO pronta + apelido | a decisao 1 do cliente, na forma que ele refinou em 02/11/2026: *"o aderir e apenas referente a criar um perfil publico"*, e *"o que coloca a pessoa na listagem e foto + perfil publico"*. O predicado **vem de `shared/perfil-publico/perfil-publico-de-pessoa.ts`** e nao esta reescrito aqui: ele e o MESMO que `updateMe` e a tela usam, na outra forma |
+         *     | **canal de contato confirmado** | `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a MESMA regua do selo (`shared/db/canal-de-contato-confirmado.ts`), numa fonte so |
+         *     | **conta habilitada**, dos DOIS lados | decisao de 17/10/2026: conta desabilitada *"nao e mais encontrada em nenhuma pagina ou funcionalidade"* |
+         *     | **sem bloqueio entre as duas**, nos DOIS sentidos | `bloqueio_entre` e simetrica de proposito: sem a simetria, quem foi bloqueado continuaria vendo quem o bloqueou |
+         *     | **perfil que quem olha denunciou nao aparece** | o mesmo predicado da busca, pela mesma razao |
+         *     | **quem chama nao aparece para si mesmo** | a conta nao se conecta consigo mesma, e o unico botao de um item e `Pedir conexao` |
+         *
+         *     **E REVOGAVEL, E DESLIGAR VALE NA HORA.** O predicado e lido na consulta,
+         *     a cada requisicao: nao ha cache, e a resposta sai com
+         *     `Cache-Control: private, no-store`. Ligar o perfil publico faz a pessoa
+         *     aparecer na proxima leitura; desligar a tira dela. **E tirar a FOTO tem
+         *     o mesmo efeito**, porque a foto e metade da regra -- e isso vale dito,
+         *     porque e consequencia que ninguem escolheu de proposito: quem tirar a
+         *     propria foto sai da lista junto.
+         *
+         *     ## PAGINA VAZIA, E NUNCA 403
+         *
+         *     **Quem nao apareceria na lista recebe pagina vazia** -- a reciprocidade
+         *     e parte do desenho (ver o comentario acima, que a registra como
+         *     RECOMENDACAO reversivel, com a pergunta ainda aberta com o cliente). E
+         *     pagina vazia, e nao 403, pela mesma razao da busca: distinguir "nao ha
+         *     ninguem" de "ha, mas nao para voce" seria o oraculo que nenhuma destas
+         *     superficies pode ser.
+         *
+         *     **A tela nao fica muda com isso**, e e o ponto: ela nao pergunta o
+         *     motivo ao servidor -- `Me.public_profile_enabled`, `Me.photo.status`,
+         *     `Me.handle` e `Me.reference_area` sao dados do PROPRIO DONO, entao a tela
+         *     diz QUAL das quatro coisas falta e oferece a saida **sem chegar a chamar
+         *     esta rota**. A ordem em que ela as resolve e a de
+         *     `motivoDeNaoAparecerNaListagem`, que e a do cliente: mandar tirar quatro
+         *     pendencias de uma vez e pior do que mandar tirar a primeira.
+         *
+         *     O vazio funde, de proposito, estas situacoes: quem chama nao apareceria
+         *     (perfil publico desligado, sem foto pronta ou sem apelido); quem chama
+         *     nao tem regiao de referencia; ninguem mais na regiao apareceria; e os que
+         *     apareceriam nao existem para quem chama (conta desabilitada, par
+         *     bloqueado, perfil denunciado).
+         *
+         *     ## `adicionar` NAO E UMA ACAO NOVA
+         *
+         *     A conexao ja existe, e esta listagem **nao cria nenhuma operacao de
+         *     conexao**: cada item traz `handle` e `connection_state`, que e
+         *     exatamente o que `requestConnection` consome pelo caminho do apelido e o
+         *     que o botao precisa para nao oferecer *"Pedir conexao"* a quem ja e
+         *     conexao. Tocar no item abre `getPersonProfile`, como no Mural.
+         */
+        get: operations["listPeopleInMyRegion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/connection-invites": {
         parameters: {
             query?: never;
@@ -13111,6 +13209,145 @@ export interface components {
              *     conjunto que `items` pagina -- os dois saem da MESMA consulta, com
              *     os mesmos predicados, porque duas consultas seriam duas chances de
              *     a pagina e o total discordarem sem nada acusar.
+             */
+            total: number;
+            page: number;
+            limit: number;
+        };
+        /**
+         * @description Uma pessoa como a **LISTAGEM DA PROPRIA REGIAO** a entrega (cliente,
+         *     02/11/2026): **cinco campos, e nada mais**.
+         *
+         *     **Quem esta aqui tem foto, e a foto nao esta aqui.** As duas coisas
+         *     convivem porque a foto e **criterio de ENTRADA e nao conteudo de
+         *     SAIDA**: ter foto pronta e metade da regra que o cliente definiu
+         *     (*"o que coloca a pessoa na listagem e foto + perfil publico"*), e
+         *     servi-la numa lista que se folheia e outra decisao -- a de baixo.
+         *
+         *     **E `PersonSearchResult` MENOS A FOTO**, e os cinco que ficam sao os
+         *     mesmos, com os mesmos motivos -- `display_name` pela emenda 2 do
+         *     ADR-0010, as duas contagens pela mesma emenda e pelo plano 4-B,
+         *     `handle` como referencia publica e endereco do perfil, e
+         *     `connection_state` para o botao nao oferecer *"Pedir conexao"* a quem
+         *     ja e conexao (o defeito que o cliente relatou em 22/10/2026).
+         *
+         *     ## A FOTO NAO SAI AQUI, E O MOTIVO NAO E O MESMO DA BUSCA
+         *
+         *     **Nao e a emenda 5 item 2.** Aquela emenda foi EMENDADA pelo proprio
+         *     cliente em 21/10/2026, e `PersonSearchResult.photo_icon_url` existe
+         *     desde entao -- dizer que a foto nao sai "como na busca" seria citar uma
+         *     regra que nao esta mais la.
+         *
+         *     **O motivo e o argumento com que a foto ENTROU na busca**, escrito em
+         *     `PersonSearchResult` e ainda de pe: os tres freios *"sao a diferenca
+         *     entre busca e catalogo de rostos"*, e somados eles garantem que
+         *     *"quem ve a foto e alguem que JA SABE APROXIMADAMENTE QUEM PROCURA, e
+         *     nao alguem folheando"*. A listagem e, por construcao, **alguem
+         *     folheando**: nao ha termo, nao ha piso de tres caracteres, e nao existe
+         *     "campo vazio nao lista ninguem" -- vazio e o estado normal dela.
+         *     Nenhum dos tres freios que tornaram a foto defensavel na busca existe
+         *     aqui, e com a foto esta lista seria exatamente *"o catalogo que o plano
+         *     4-B recusou"*.
+         *
+         *     O cliente dele proprio deu o proposito da foto na busca -- *"para
+         *     identificar usuarios com nomes parecidos"* --, e ele nao se aplica aqui:
+         *     numa lista de vizinhos que a pessoa NAO esta procurando, nao ha empate
+         *     a desfazer. A tela cai para a inicial no circulo, que e o recurso da
+         *     emenda 3, e **quem e conexao aceita ja ve a foto por outro caminho**
+         *     (`Conversation.participants.photo_icon_url`, e o perfil).
+         *
+         *     ## O QUE MAIS NAO SAI, e cada ausencia tem dono
+         *
+         *     | NAO sai | Por que |
+         *     |---|---|
+         *     | **foto** | ver acima: os tres freios da busca nao existem nesta lista |
+         *     | **cidade, estado, bairro** | a unica regiao em jogo e a de QUEM CHAMA, e ela ja volta em `Me.reference_area`. A de cada pessoa da lista seria o item 1 do ADR-0010 saindo por porta nova, e `searchPeople` ja registra `cidade, bairro` entre o que nao sai |
+         *     | **o perfil publico, e a foto** | quem esta na lista esta por ter LIGADO o perfil publico e por TER foto -- as duas coisas sao criterio de ENTRADA, e repeti-las como campo diria a terceiro uma escolha de privacidade que so interessa ao dono (`Me.public_profile_enabled`). A foto em particular: ela e o que deixa a pessoa entrar, e nao sai -- ver acima |
+         *     | `public_ref` | a mesma razao da busca: AQUELA tela hospeda denunciar e bloquear, e esta nao hospeda nenhuma das tres -- referencia publica sem uso e superficie de graca |
+         *     | `connection_ref` | `ref` de aresta e o que deixa DESFAZER, e desfazer mora no perfil -- nao numa lista que se rola com o polegar |
+         *     | qualquer UUID | ADR-0010 item 6 |
+         *     | `contact_channel_verified` | **todo mundo nesta lista e verificado** -- e um dos sete predicados do `WHERE`. Um booleano que vale `true` em cem por cento das linhas nao informa nada e convidaria a tela a desenhar um selo que nao distingue ninguem |
+         */
+        RegionPerson: {
+            /**
+             * @description O apelido. **Nao e anulavel**, como em `PersonSearchResult`: a
+             *     listagem le `handles`, entao quem aparece tem apelido por
+             *     construcao -- e e ele o endereco do perfil e a credencial de
+             *     `requestConnection`.
+             */
+            handle: string;
+            /**
+             * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
+             *     (ADR-0010 item 3). **Anulavel** pela mesma razao da busca: a coluna
+             *     e anulavel em `users`, e omitir a pessoa por falta de nome a faria
+             *     desaparecer por um campo que ela nao preencheu. A tela cai para
+             *     `@handle`.
+             */
+            display_name: string | null;
+            /**
+             * @description **Quantos pets, e nada alem do numero** (emenda 2 do ADR-0010).
+             *     Conta pet nao apagado. Nenhum atributo de pet acompanha o numero.
+             */
+            pets_count: number;
+            /**
+             * @description Quantas conexoes aceitas. **O numero, nunca a lista** (plano 4-B).
+             *     E o "sinal de confianca".
+             */
+            connections_count: number;
+            /**
+             * @description **A relacao entre quem chama e esta pessoa.** Derivada no servidor e
+             *     nunca recebida de quem chama, e a MESMA lista de valores de
+             *     `PersonSearchResult.connection_state`, pelas mesmas razoes --
+             *     inclusive **nunca `declined`**: a projecao e `estadoNoApp`.
+             *
+             *     Escrita em linha e nao por `$ref` pela mesma razao de la: `none` nao
+             *     existe em `ConnectionAppState`, e acrescenta-lo mudaria a caixa de
+             *     pedidos.
+             *
+             *     **Para que ele serve**: o botao. Sem ele a lista desenharia *"Pedir
+             *     conexao"* ao lado de quem ja e conexao aceita, que e o defeito que o
+             *     cliente relatou em 22/10/2026. **Uma consulta para a pagina
+             *     inteira**, e nao uma por item (`LeitorDeConexao.estadosPorApelido`),
+             *     e nenhuma pessoa a mais entra na lista por causa dele.
+             * @enum {string}
+             */
+            connection_state: "none" | "pending_sent" | "pending_received" | "connected";
+        };
+        /**
+         * @description A pagina da listagem da propria regiao. Numerada com total, como as
+         *     outras listagens desta casa.
+         *
+         *     **`items` vazio e `total: 0` sao a resposta para QUATRO situacoes
+         *     diferentes**, e a fusao e deliberada:
+         *
+         *     1. **quem chama nao apareceria na lista** -- perfil publico desligado,
+         *        sem foto pronta, ou sem apelido. A reciprocidade e parte do desenho
+         *        (ver o comentario acima de `listPeopleInMyRegion`, que a registra como
+         *        RECOMENDACAO reversivel, com a pergunta aberta com o cliente);
+         *     2. **quem chama nao tem regiao de referencia** -- `texto_para_busca` e
+         *        `STRICT`, entao cidade nula nao casa nada, sem nenhum `if`;
+         *     3. ninguem mais na regiao apareceria;
+         *     4. os que apareceriam **nao existem para quem chama** (conta
+         *        desabilitada, par bloqueado, perfil que quem chama denunciou).
+         *
+         *     **A fusao nao deixa a tela muda**, e e isso que a torna aceitavel: a
+         *     tela nao descobre o motivo pelo servidor -- ela ja o tem.
+         *     `Me.public_profile_enabled`, `Me.photo.status` e `Me.handle` respondem a
+         *     1 e `Me.reference_area` responde a 2, todos dados do PROPRIO DONO, e e
+         *     com eles que a tela diz qual das quatro coisas falta e oferece a saida
+         *     **sem chegar a chamar esta rota**. As situacoes 3 e 4 e que ficam
+         *     fundidas de verdade, e e a mesma fusao da busca, pela mesma razao:
+         *     distinguir "nao ha ninguem" de "ha, mas nao para voce" seria o oraculo
+         *     que nenhuma destas superficies pode ser.
+         */
+        RegionPeoplePage: {
+            items: components["schemas"]["RegionPerson"][];
+            /**
+             * @description Quantas pessoas da regiao aderiram **e existem para quem chama**.
+             *     Conta o mesmo conjunto que `items` pagina -- os dois saem da MESMA
+             *     consulta, com os mesmos sete predicados, porque duas consultas
+             *     seriam duas chances de a pagina e o total discordarem sem nada
+             *     acusar.
              */
             total: number;
             page: number;
@@ -22265,6 +22502,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonSearchPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listPeopleInMyRegion: {
+        parameters: {
+            query?: {
+                page?: number;
+                /**
+                 * @description O teto de 20 e o mesmo das outras paginas desta frente, e aqui o
+                 *     motivo e mais forte do que na busca: pagina maior e mais gente
+                 *     entregue por requisicao, que e o numero que uma varredura quer
+                 *     maximizar -- e esta lista, ao contrario da busca, entrega os 20
+                 *     cheios toda vez.
+                 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A pagina de usuarios da mesma regiao. **Vazia** quando quem chama
+             *     nao apareceria na lista (perfil publico desligado, sem foto pronta ou
+             *     sem apelido), quando quem chama nao tem regiao de referencia, e
+             *     quando ninguem na regiao apareceria ou existe para quem chama.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionPeoplePage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

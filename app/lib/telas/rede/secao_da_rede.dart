@@ -17,6 +17,7 @@ import '../casca_com_abas.dart';
 import '../perto/lista_do_diretorio.dart';
 import 'agenda_da_rede.dart';
 import 'busca_de_pessoas.dart';
+import 'lista_da_regiao.dart';
 
 /// As TRES abas da secao `Rede` reunida (cliente, 19/10 e 21/10/2026).
 enum AbaDaSecaoRede {
@@ -200,11 +201,26 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
         ];
       case AbaDaSecaoRede.usuarios:
         final escopo = Escopo.of(context);
+        final pessoas = PessoasApi(escopo.api);
         return <Widget>[
           BuscaDePessoas(
-            pessoas: PessoasApi(escopo.api),
+            pessoas: pessoas,
             conexoes: escopo.conexoes,
             logado: logado,
+            // A LISTAGEM DA PROPRIA REGIAO (cliente, 02/11/2026). Ela so e
+            // montada COM sessao: sem conta nao ha regiao com que casar, e a
+            // rota exige `bearerAuth` sem alternativa vazia.
+            listaDaRegiao: !logado
+                ? null
+                : ListaDaRegiao(
+                    pessoas: pessoas,
+                    conexoes: escopo.conexoes,
+                    me: escopo.me,
+                    usuario: escopo.sessao.usuario,
+                    aoAtualizarOUsuario: escopo.sessao.atualizarUsuario,
+                    aoAbrirOPerfil: (apelido) =>
+                        context.push(Rotas.perfilDe(apelido)),
+                  ),
           ),
         ];
     }

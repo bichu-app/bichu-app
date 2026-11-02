@@ -27,6 +27,7 @@ class BuscaDePessoas extends StatefulWidget {
     required this.conexoes,
     required this.logado,
     super.key,
+    this.listaDaRegiao,
   });
 
   /// As duas portas entram por PARAMETRO e nao saem do `Escopo` aqui dentro, e
@@ -39,6 +40,18 @@ class BuscaDePessoas extends StatefulWidget {
 
   /// Há sessão agora. **Entra como DADO, e não como ramo de desenho.**
   final bool logado;
+
+  /// **A LISTAGEM DA PRÓPRIA REGIÃO** (cliente, 02/11/2026), desenhada no lugar
+  /// onde esta aba antes só dizia *"Procure quem você já conhece"*.
+  ///
+  /// **Opcional, e o motivo é de teste e não de produto**: os casos que
+  /// exercitam o campo de busca montam esta aba sem o escopo, e exigir aqui a
+  /// lista obrigaria cada um deles a construir três portas que não medem.
+  ///
+  /// **Ela só aparece na fase `antesDeBuscar`**, e isso é a decisão de desenho:
+  /// quem digitou está procurando alguém que já conhece, e empilhar a vizinhança
+  /// debaixo do resultado competiria com o que a pessoa pediu.
+  final Widget? listaDaRegiao;
 
   /// Quanto a tela espera, depois da última tecla, antes de buscar.
   static const Duration esperaAntesDeBuscar = Duration(milliseconds: 400);
@@ -345,6 +358,8 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
             explicacao:
                 _explicacaoDoVazio() ?? BuscaDePessoas.explicacaoAntesDeBuscar,
           ),
+          // A LISTAGEM DA REGIAO vive aqui e so aqui: este era o vazio da aba.
+          ?widget.listaDaRegiao,
         ];
 
       case _Fase.carregando:

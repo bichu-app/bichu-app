@@ -218,6 +218,9 @@ import { criarPerfilDePessoaRepository } from '../modules/people/adapters/persis
 import { registrarRotasDeBuscaDePessoas } from '../modules/people/adapters/http/people-search-routes.js';
 import { BuscaDePessoas } from '../modules/people/application/busca-de-pessoas.js';
 import { criarBuscaDePessoasRepository } from '../modules/people/adapters/persistence/kysely-busca-de-pessoas.js';
+import { registrarRotasDaListaDaRegiao } from '../modules/people/adapters/http/lista-da-regiao-routes.js';
+import { ListaDaRegiao } from '../modules/people/application/lista-da-regiao.js';
+import { criarListaDaRegiaoRepository } from '../modules/people/adapters/persistence/kysely-lista-da-regiao.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
@@ -864,6 +867,24 @@ export async function main(): Promise<void> {
         clock: systemClock,
       }),
       baseDeMidia: config.mediaPublicBaseUrl,
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+    });
+    // A LISTAGEM DA PROPRIA REGIAO, POR ADESAO EXPLICITA (cliente, 02/11/2026).
+    //
+    // **A MESMA porta de conexao da busca** (`criarLeitorDeConexao`), e nao uma
+    // segunda leitura de estado: o estado do par sai de uma consulta para a
+    // pagina inteira, e nenhuma pessoa a mais entra na lista por causa dele.
+    //
+    // **Sem `baseDeMidia`**, ao contrario da busca, e a ausencia e o desenho:
+    // esta resposta nao tem foto, e nao ha de onde montar URL de foto.
+    registrarRotasDaListaDaRegiao(escopo, {
+      lista: new ListaDaRegiao({
+        lista: criarListaDaRegiaoRepository(db),
+        conexoes: criarLeitorDeConexao(conexoesDaComunidade),
+        clock: systemClock,
+      }),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },

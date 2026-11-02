@@ -689,6 +689,14 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
+# PROSA PRESERVADA DO LADO frente/listagem-regiao-adesao (PR #148): a linha dele dizia `ESLint da raiz (864 arquivos)`, e o bloco que ele escreveu vem a seguir, VERBATIM e sem reembrulhar. NENHUM LADO FOI ESCOLHIDO e os deltas NAO FORAM SOMADOS -- os numeros sao de ARVORES DIFERENTES, e o desta integracao e RECONTADO com `eslint . -f json` DEPOIS DA ULTIMA das onze mesclas.
+#
+# 02/11/2026: DOIS lados mexeram nesta linha ao mesmo tempo e o git conflitou --
+# a listagem da regiao trazia 857 e o perfil publico de pessoa trazia 856, os
+# dois saindo de 849. **Somar os deltas seria palpite**, e foi recontado na
+# arvore mesclada: 864. A conta fecha nos dois sentidos -- a base do perfil
+# publico mede 857 (e nao os 856 que a linha dele dizia, que ja estava um atras),
+# e a listagem acrescenta 7 arquivos de raiz.
 verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (860 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 

@@ -57,7 +57,7 @@
 // Ele saiu em 27/10: `telas/conexoes/tela_minhas_conexoes.dart` agora desenha
 // `Buscar usuarios` (`TelaDeMinhasConexoes.buscarUsuarios`).
 //
-// **E [asDuasPortas] NAO mudou, e a razao e o que este portao mede.** Aquele
+// **E [asTresPortas] NAO mudou, e a razao e o que este portao mede.** Aquele
 // botao **so navega** -- `context.go(Rotas.redeNaBuscaDePessoas)` --, e nao
 // chama `pedirPorApelido` nem `pedir`. Ele nao abre aresta, nao tem estado de
 // relacao para ramificar e nao pode mostrar controle errado para quem ja e
@@ -67,7 +67,7 @@
 // **A fronteira esta medida num caso proprio** -- *"um botao que so NAVEGA nao
 // e porta de pedir conexao"* --, e ele existe porque a alternativa era pior nas
 // duas direcoes: sem ele, alguem acrescentaria `tela_minhas_conexoes.dart` a
-// [asDuasPortas] "porque ela tem botao de adicionar" e o portao passaria a
+// [asTresPortas] "porque ela tem botao de adicionar" e o portao passaria a
 // exigir ramos por estado numa tela que nao tem relacao nenhuma para ramificar;
 // ou alguem afrouxaria [_chamaAPorta] para pegar navegacao e as doze
 // superficies que navegam para a busca entrariam todas.
@@ -83,6 +83,19 @@
 // | perfil de pessoa | SIM | **SIM** (`pedirPorApelido`) | **sim** |
 // | `Minhas conexoes` (27/10) | SIM, `Buscar usuarios` | **nao** -- navega | **nao** |
 // | vazio do Mural | SIM, `Buscar usuarios` | **nao** -- navega | **nao** |
+// | lista da regiao (02/11) | SIM | **SIM** (`pedirPorApelido`) | **sim** |
+//
+// ## A EMENDA DE 02/11/2026: DUAS PASSARAM A SER TRES
+//
+// A listagem de usuarios da mesma regiao (`telas/rede/lista_da_regiao.dart`,
+// decisao do cliente de 02/11/2026) abre aresta, entao ela CONTA -- e entrou em
+// [asTresPortas] com a decisao no diff.
+//
+// **Ela nao e um quarto desenho de botao**: ela monta
+// `CartaoDePessoaEncontrada`, o MESMO widget da busca, com os mesmos quatro
+// ramos por estado da relacao. Era este o risco que o cliente cobrou tres
+// vezes, e reusar o cartao e o que o fecha -- nao ha segundo desenho para
+// divergir do primeiro. A prosa de [asTresPortas] tem o resto.
 
 import 'dart:io' as io;
 
@@ -90,15 +103,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../dispositivo/literais_de_abrir_mapa.dart';
 
-/// As DUAS portas de pedir conexao, por caminho relativo a `lib/`.
+/// As TRES portas de pedir conexao, por caminho relativo a `lib/`.
 ///
-/// **Duas, e o numero e o mecanismo**: e a igualdade de conjunto que faz a
-/// TERCEIRA ser vista antes de nascer. Acrescentar um caminho aqui tem de ser
-/// ato deliberado, com a decisao do cliente no diff -- do mesmo jeito que
+/// **O numero e o mecanismo**: e a igualdade de conjunto que faz a PROXIMA ser
+/// vista antes de nascer. Acrescentar um caminho aqui tem de ser ato
+/// deliberado, com a decisao do cliente no diff -- do mesmo jeito que
 /// `_arvoreDasTelas` cobra o seu.
-const List<String> asDuasPortas = <String>[
+///
+/// ## A TERCEIRA ENTROU EM 02/11/2026, E ELA NAO REIMPLEMENTOU RAMO NENHUM
+///
+/// `telas/rede/lista_da_regiao.dart` e a listagem de usuarios da mesma regiao
+/// (decisao do cliente de 02/11/2026: *"trazer a listagem de usuarios que estao
+/// na mesma regiao dele e que as pessoas podem adicionar"*).
+///
+/// **Ela nao escreveu os quatro ramos por estado -- ela REUSA o cartao que ja
+/// os tem.** `CartaoDePessoaEncontrada` e o MESMO widget da busca, com os
+/// mesmos quatro ramos (`connected` sem botao, `pending_sent`,
+/// `pending_received` e `none`), e e por isso que o defeito que o cliente
+/// cobrou tres vezes nao pode nascer de novo aqui: nao ha segundo desenho de
+/// botao para divergir do primeiro.
+///
+/// **O que esta tela faz de proprio e converter o modelo**:
+/// `PessoaDaRegiao.comoPessoaEncontrada()`, com `photoIconUrl: null` -- a
+/// listagem nao tem foto, e aquela conversao e o unico lugar onde alguem seria
+/// tentado a ligar uma.
+///
+/// Os dois casos de widget que este portao exige dela estao em
+/// `app/test/telas/lista_da_regiao_test.dart`: a ausencia do botao para quem JA
+/// e conexao, e o CONTROLE POSITIVO de que quem NAO e conexao continua vendo o
+/// controle.
+const List<String> asTresPortas = <String>[
   'telas/pessoa/tela_perfil_de_pessoa.dart',
   'telas/rede/busca_de_pessoas.dart',
+  'telas/rede/lista_da_regiao.dart',
 ];
 
 /// O que conta como chamar a porta de pedir conexao.
@@ -179,13 +216,13 @@ void main() {
     /// Igualdade de conjunto, e nao `contains`: `contains` deixaria a terceira
     /// porta entrar em silencio, que e exatamente o modo de falha das tres
     /// reclamacoes de 22 e 26/10.
-    test('SAO DUAS as telas que pedem conexao, e sao estas', () {
+    test('SAO TRES as telas que pedem conexao, e sao estas', () {
       expect(
         _quemChamaAPorta(),
-        asDuasPortas,
+        asTresPortas,
         reason: 'REPROVA: o conjunto de telas que chamam a porta de PEDIR '
             'conexao mudou.\n'
-            '  esperado: $asDuasPortas\n'
+            '  esperado: $asTresPortas\n'
             '  achado:   ${_quemChamaAPorta()}\n'
             'Se uma tela NOVA passou a oferecer "adicionar", ela precisa de um '
             'ramo por estado da relacao -- `connected`, `pending_sent`, '
@@ -194,7 +231,7 @@ void main() {
             'de que quem NAO e conexao continua vendo o controle). O cliente '
             'cobrou este mesmo defeito tres vezes; a quarta tela a errar nao '
             'deve ser descoberta no aparelho.\n'
-            'Se a tela SAIU, tire o caminho de `asDuasPortas` no mesmo diff.',
+            'Se a tela SAIU, tire o caminho de `asTresPortas` no mesmo diff.',
       );
     });
 
@@ -208,7 +245,7 @@ void main() {
       ]..sort();
       expect(
         comVazamento,
-        isNot(asDuasPortas),
+        isNot(asTresPortas),
         reason: 'a isca passou: a igualdade de conjunto nao enxerga uma '
             'terceira tela oferecendo adicionar.',
       );
@@ -232,7 +269,7 @@ void main() {
     ///
     /// Sem ele, o caso de cima continuaria verde e ninguem saberia **por que**:
     /// `Minhas conexoes` tem botao de adicionar desde 27/10 e nao esta em
-    /// [asDuasPortas], e isso parece contradicao em vez de decisao. Este caso
+    /// [asTresPortas], e isso parece contradicao em vez de decisao. Este caso
     /// afirma as duas metades -- o botao EXISTE, e ele nao abre aresta.
     test('um botao que so NAVEGA nao e porta de pedir conexao', () {
       final String raiz = raizDoPacoteDoApp();
@@ -269,7 +306,7 @@ void main() {
             'conexao. Ela e uma lista de quem JA e conexao: um pedido partindo '
             'dali seria o controle errado exatamente para quem o cliente '
             'cobrou tres vezes. Se isso e deliberado, ela precisa dos quatro '
-            'ramos por estado e entra em `asDuasPortas` no mesmo diff.',
+            'ramos por estado e entra em `asTresPortas` no mesmo diff.',
       );
     });
 
@@ -296,7 +333,7 @@ void main() {
             'o que distinguir.',
       );
       for (final String caminho in aceitam) {
-        if (asDuasPortas.contains(caminho)) continue;
+        if (asTresPortas.contains(caminho)) continue;
         expect(
           _quemChamaAPorta().contains(caminho),
           isFalse,

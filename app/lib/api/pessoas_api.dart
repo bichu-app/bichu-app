@@ -34,4 +34,20 @@ class PessoasApi {
     );
     return PaginaDeBuscaDePessoas.doJson(json);
   }
+
+  /// `listPeopleInMyRegion` — **a listagem de usuários da mesma região**
+  /// (cliente, 02/11/2026).
+  ///
+  /// **Não recebe termo nenhum, e não há parâmetro por onde um entrar**: o piso
+  /// de três caracteres, o campo vazio que não lista ninguém e o teto por
+  /// consulta continuam sendo da busca, que não mudou em nada (decisão dele).
+  ///
+  /// **Não recebe região tampouco**: ela sai da própria conta, no servidor.
+  Future<PaginaDaRegiao> daMinhaRegiao({int pagina = 1, int limite = 20}) async {
+    final json = await _api.get(
+      '/region/people',
+      query: <String, String>{'page': '$pagina', 'limit': '$limite'},
+    );
+    return PaginaDaRegiao.doJson(json);
+  }
 }

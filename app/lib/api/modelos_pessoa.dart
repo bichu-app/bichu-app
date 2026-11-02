@@ -206,3 +206,114 @@ class PaginaDeBuscaDePessoas {
   final int pagina;
   final int limite;
 }
+
+/// `#/components/schemas/RegionPerson` — uma pessoa **como a LISTAGEM DA
+/// PRÓPRIA REGIÃO a entrega** (cliente, 02/11/2026).
+///
+/// **É [PessoaEncontrada] menos a foto**, e a ausência é estrutural: não há
+/// campo de foto neste modelo porque não há campo de foto naquele schema.
+///
+/// O motivo não é a emenda 5 item 2 — aquela foi emendada pelo próprio cliente
+/// em 21/10/2026, e a busca TEM foto desde então. O motivo é o argumento com
+/// que a foto entrou na busca: os três freios dela garantem que *"quem vê a
+/// foto é alguém que já sabe aproximadamente quem procura, e não alguém
+/// folheando"*. Esta lista é, por construção, folhear — e com foto seria o
+/// catálogo de rostos que o plano 4-B recusou.
+class PessoaDaRegiao {
+  const PessoaDaRegiao({
+    required this.handle,
+    required this.displayName,
+    required this.petsCount,
+    required this.connectionsCount,
+    this.estadoDaConexao,
+  });
+
+  factory PessoaDaRegiao.doJson(Map<String, dynamic> json) {
+    return PessoaDaRegiao(
+      handle: json['handle'] as String,
+      displayName: json['display_name'] as String?,
+      petsCount: json['pets_count'] as int,
+      connectionsCount: json['connections_count'] as int,
+      estadoDaConexao: EstadoDaConexao.porCodigo(
+        json['connection_state'] as String?,
+      ),
+    );
+  }
+
+  /// O apelido. **Não anulável**: a listagem lê a tabela de apelidos, então
+  /// quem aparece tem apelido por construção — e é ele o endereço do perfil e a
+  /// credencial de `requestConnection`.
+  final String handle;
+
+  /// O nome de exibição, **anulável no contrato**.
+  final String? displayName;
+
+  /// **A contagem, e nada além do número** (emenda 2 do ADR-0010).
+  final int petsCount;
+
+  /// Quantas conexões aceitas.
+  final int connectionsCount;
+
+  /// `connection_state`: a relação entre quem olha e esta pessoa, que é o que
+  /// faz o botão não oferecer `Pedir conexão` a quem já é conexão.
+  final EstadoDaConexao? estadoDaConexao;
+
+  /// A pessoa **como o cartão da busca a consome**, para o cartão ser UM só.
+  ///
+  /// **`photoIconUrl: null` é o ponto desta conversão**, e não um detalhe: é
+  /// aqui que alguém seria tentado a ligar a foto, e é aqui que está escrito
+  /// por que não. O cartão cai para a inicial no círculo, que é o recurso da
+  /// emenda 3 — e quem é conexão aceita já vê a foto pelo perfil e pela
+  /// conversa.
+  PessoaEncontrada comoPessoaEncontrada() {
+    return PessoaEncontrada(
+      handle: handle,
+      displayName: displayName,
+      petsCount: petsCount,
+      connectionsCount: connectionsCount,
+      photoIconUrl: null,
+      estadoDaConexao: estadoDaConexao,
+    );
+  }
+}
+
+/// `#/components/schemas/RegionPeoplePage`.
+class PaginaDaRegiao {
+  const PaginaDaRegiao({
+    required this.itens,
+    required this.total,
+    required this.pagina,
+    required this.limite,
+  });
+
+  factory PaginaDaRegiao.doJson(Map<String, dynamic> json) {
+    final itens = (json['items'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(PessoaDaRegiao.doJson)
+        .toList(growable: false);
+    return PaginaDaRegiao(
+      itens: itens,
+      total: json['total'] as int,
+      pagina: json['page'] as int,
+      limite: json['limit'] as int,
+    );
+  }
+
+  /// A página vazia que a tela usa **sem chamar o servidor**: é o que ela mostra
+  /// a quem ainda não aderiu, e ela não pergunta o motivo ao servidor porque já
+  /// o tem em `Usuario.naListaDaRegiao`.
+  static const PaginaDaRegiao semAdesao = PaginaDaRegiao(
+    itens: <PessoaDaRegiao>[],
+    total: 0,
+    pagina: 1,
+    limite: 20,
+  );
+
+  final List<PessoaDaRegiao> itens;
+
+  /// Quantas pessoas da região aderiram **e existem para quem olha**.
+  final int total;
+
+  final int pagina;
+  final int limite;
+}
