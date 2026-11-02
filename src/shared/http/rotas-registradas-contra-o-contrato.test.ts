@@ -36,6 +36,7 @@ import * as conexoes from '../../modules/connections/adapters/http/connection-ro
 import * as convites from '../../modules/connections/adapters/http/invite-routes.js';
 import * as pessoas from '../../modules/people/adapters/http/person-profile-routes.js';
 import * as buscaDePessoas from '../../modules/people/adapters/http/people-search-routes.js';
+import * as listaDaRegiao from '../../modules/people/adapters/http/lista-da-regiao-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.js';
@@ -89,6 +90,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pessoas,
   convites,
   buscaDePessoas,
+  listaDaRegiao,
   mural,
   cep,
   sugestaoDoDiretorio,

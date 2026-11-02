@@ -36,6 +36,13 @@ export interface UsersTable {
   reference_neighborhood: string | null;
   reference_city: string | null;
   reference_state: string | null;
+  /**
+   * QUANDO esta conta ligou a adesão `aparecer na lista da minha região`
+   * (cliente, 02/11/2026). `null` é "nunca ligou", e é o valor de toda linha
+   * que já existia e de toda linha nova — a lista nasce vazia, e foi o custo
+   * que ele aceitou. É a única porta de entrada de `listPeopleInMyRegion`.
+   */
+  region_listing_opted_in_at: Date | null;
   accepted_terms_version: string | null;
   accepted_terms_at: Date | null;
   status: Generated<'active' | 'suspended' | 'deletion_requested'>;

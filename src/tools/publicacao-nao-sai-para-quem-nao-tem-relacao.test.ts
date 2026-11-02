@@ -418,9 +418,18 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
     return total;
   }
 
-  void it('`connections` tem SEIS, `people` tem TRES e `safety` SEIS', () => {
+  void it('`connections` tem SEIS, `people` tem QUATRO e `safety` SEIS', () => {
     assert.equal(contarEtiqueta('connections'), 6, 'a etiqueta `connections` mudou de tamanho');
-    assert.equal(contarEtiqueta('people'), 3, 'a etiqueta `people` mudou de tamanho');
+    assert.equal(
+      contarEtiqueta('people'),
+      4,
+      'a etiqueta `people` mudou de tamanho. Ela passou de TRES para QUATRO em ' +
+        '02/11/2026, com `listPeopleInMyRegion` -- a listagem de usuarios da mesma ' +
+        'regiao, por ADESAO EXPLICITA (decisao do cliente). A lista EXATA das quatro ' +
+        'esta em `perfil-de-terceiro-nao-expoe-pet-nem-timeline.test.ts`, e e la que o ' +
+        'motivo de cada uma mora; aqui o numero existe so para acusar que a etiqueta ' +
+        'cresceu sem ninguem decidir.',
+    );
     assert.equal(contarEtiqueta('safety'), 6, 'a etiqueta `safety` mudou de tamanho');
     assert.equal(
       contarEtiqueta('connection-invites'),

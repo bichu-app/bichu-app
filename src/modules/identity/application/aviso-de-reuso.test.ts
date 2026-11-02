@@ -33,6 +33,7 @@ function contaDaVitima(): Conta {
     referenceNeighborhood: 'Consolação',
     referenceCity: 'São Paulo',
     referenceState: 'SP',
+    regionListingOptedInAt: null,
     pendingEmail: null,
     emailDeliverable: true,
     status: 'active',

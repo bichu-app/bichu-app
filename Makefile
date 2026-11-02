@@ -689,7 +689,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (849 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (857 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

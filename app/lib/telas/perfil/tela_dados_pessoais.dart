@@ -171,6 +171,13 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
 
   String? _uf;
 
+  /// A adesão `aparecer na lista da minha região` (cliente, 02/11/2026).
+  ///
+  /// **O interruptor mora AQUI porque ele é o único lugar que DESLIGA**: a lista
+  /// oferece ligar quando está desligada, e naquela tela o estado "ligada" não
+  /// existe para desligar.
+  bool _naListaDaRegiao = false;
+
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     atualizar: setState,
     montado: () => mounted,
@@ -348,6 +355,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         _bairro.text = dados.bairro ?? '';
         _cidade.text = dados.cidade ?? '';
         _uf = (dados.uf != null && dados.uf!.length == 2) ? dados.uf : null;
+        _naListaDaRegiao = dados.usuario.naListaDaRegiao;
         _cepBloco.naoBuscarDeNovo(dados.cep ?? '');
         _fase = _Fase.formulario;
       });
@@ -467,6 +475,13 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final cidade = _seMudou(_cidade.text.trim(), lido.cidade);
     final uf = _uf == null ? null : _seMudou(_uf!, lido.uf);
 
+    // A ADESAO. **Comparada com `!=` e nao por `_seMudou`**, que e de texto, e
+    // **`false` e um valor a GRAVAR e nao a omitir**: desligar e a metade
+    // revogavel desta decisao, e um `if (ligado)` a tornaria impossivel.
+    final naLista = _naListaDaRegiao == lido.usuario.naListaDaRegiao
+        ? null
+        : _naListaDaRegiao;
+
     final fotoParaGravar = _uploadDaFoto;
 
     if (nome == null &&
@@ -476,6 +491,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         bairro == null &&
         cidade == null &&
         uf == null &&
+        naLista == null &&
         fotoParaGravar == null) {
       setState(() {
         _faixa = null;
@@ -501,6 +517,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             bairro: bairro,
             cidade: cidade,
             uf: uf,
+            naListaDaRegiao: naLista,
             fotoUpload: fotoParaGravar,
           );
       if (!mounted) return;
@@ -717,6 +734,13 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
               _uf = escolhido;
               _erros.remove(_CamposDosDados.uf);
             }),
+          ),
+          const SizedBox(height: BichuEspaco.e6),
+          _BlocoDaListaDaRegiao(
+            ligado: _naListaDaRegiao,
+            habilitado: !_salvando,
+            temRegiao: _cidade.text.trim().isNotEmpty && _uf != null,
+            aoTrocar: (valor) => setState(() => _naListaDaRegiao = valor),
           ),
           if (_confirmacao != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e6),
@@ -1656,6 +1680,100 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
           aoTocar: () => unawaited(_desativar(credencial)),
         ),
       ],
+    );
+  }
+}
+
+/// **O INTERRUPTOR DA ADESÃO `aparecer na lista da minha região`** (cliente,
+/// 02/11/2026).
+///
+/// Ele está no grupo `Sua região de referência` porque é o mesmo dado: a lista
+/// casa por CIDADE e ESTADO, e é o endereço de referência que define os dois —
+/// o mesmo que define o alcance do alerta de pet perdido.
+///
+/// **Ele é a única porta de DESLIGAR**, e é por isso que ele mora aqui e não só
+/// na lista: lá o estado desligado é o que oferece ligar, e o estado ligado não
+/// tem onde oferecer o contrário.
+class _BlocoDaListaDaRegiao extends StatelessWidget {
+  const _BlocoDaListaDaRegiao({
+    required this.ligado,
+    required this.habilitado,
+    required this.temRegiao,
+    required this.aoTrocar,
+  });
+
+  final bool ligado;
+  final bool habilitado;
+
+  /// Há cidade e estado preenchidos **no formulário agora**.
+  ///
+  /// **Não desabilita o interruptor**, e isso é deliberado: ligar sem região é
+  /// aceito pelo servidor, e a pessoa simplesmente não aparece ainda. O que o
+  /// bloco faz é DIZER isso, em vez de bloquear quem acabou de escolher
+  /// aparecer e ainda vai preencher a cidade logo abaixo.
+  final bool temRegiao;
+
+  final ValueChanged<bool> aoTrocar;
+
+  static const String rotulo = 'Aparecer na lista da minha região';
+
+  static const String explicacao =
+      'Outros usuários da sua cidade veem o seu nome, o seu apelido e quantos '
+      'pets e conexões você tem, e podem pedir conexão. A sua foto não aparece '
+      'nesta lista. Desligue quando quiser.';
+
+  static const String faltaRegiao =
+      'Preencha a cidade e o estado acima: sem eles a gente não sabe qual é a '
+      'sua região, e você ainda não vai aparecer.';
+
+  @override
+  Widget build(BuildContext context) {
+    final textos = Theme.of(context).textTheme;
+    final cores = BichuColors.of(context).cores;
+
+    return Container(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.lg),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(rotulo, style: textos.labelLarge),
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      explicacao,
+                      style: textos.bodySmall?.copyWith(
+                        color: cores.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: BichuEspaco.e3),
+              Switch(
+                value: ligado,
+                onChanged: habilitado ? aoTrocar : null,
+              ),
+            ],
+          ),
+          if (ligado && !temRegiao) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e3),
+            Text(
+              faltaRegiao,
+              style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

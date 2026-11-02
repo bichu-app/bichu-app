@@ -419,6 +419,8 @@ export function registrarRotasDeIdentidade(
           city?: string;
           state?: string;
         };
+        /** A adesão `aparecer na lista da minha região` (cliente, 02/11/2026). */
+        region_listing_opt_in?: boolean;
       };
 
       if (corpo.photo_upload_id !== undefined) {
@@ -437,6 +439,9 @@ export function registrarRotasDeIdentidade(
           ...(area?.neighborhood === undefined ? {} : { referenceNeighborhood: area.neighborhood }),
           ...(area?.city === undefined ? {} : { referenceCity: area.city }),
           ...(area?.state === undefined ? {} : { referenceState: area.state }),
+          ...(corpo.region_listing_opt_in === undefined
+            ? {}
+            : { regionListingOptIn: corpo.region_listing_opt_in }),
         },
         contextoDe(request),
       );
