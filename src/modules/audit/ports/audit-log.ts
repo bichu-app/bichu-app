@@ -43,6 +43,13 @@ export type AuditAction =
   | 'auth.email_change_requested'
   /** A troca foi confirmada no endereço novo e `users.email` mudou. */
   | 'auth.email_changed'
+  /**
+   * Alguém que JÁ tinha conta registrou o aceite dos termos
+   * (`PUT /v1/me/terms-acceptance`, 01/11/2026). A linha fica em
+   * `terms_acceptances` com `source = 'recollection'`; esta ação é o que
+   * responde **quando e de que requisição** o aceite veio.
+   */
+  | 'auth.terms_accepted'
   | 'authz.denied'
   /** ADR-0027 item 20.3 (D51). */
   | 'admin.account.created'

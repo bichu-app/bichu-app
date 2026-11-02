@@ -359,6 +359,17 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto: 'as sessões da própria pessoa.',
   },
+  'public.terms_acceptances.terms_acceptances_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a trilha do aceite dos termos da própria pessoa (migração `20261101000001`). Da ' +
+      'própria pessoa, e o oposto do `CASCADE` aqui seria guardar o consentimento de quem ' +
+      'pediu exclusão depois de a conta sair — e a trilha existe para provar consentimento, ' +
+      'não para sobreviver a quem a deu. As colunas `users.accepted_terms_version`/`_at` ' +
+      'saem na mesma linha da conta.',
+  },
   'public.user_devices.user_devices_user_id_fkey': {
     colunas: ['user_id'],
     referencia: 'public.users',

@@ -82,6 +82,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // e desativada (`account_disabled`). Espelha `MotivoDeRevogacaoAdministrativa`
   // em `src/modules/admin-access/ports/sessao-administrativa-repository.ts` e o
   // tipo da coluna em `src/shared/db/schema.ts`. Os tres andam juntos.
+  // A RECOLETA DO ACEITE DOS TERMOS (migracao `20261101000001`). As DUAS
+  // origens de um aceite: `signup`, do cadastro (e da carga inicial daquela
+  // migracao), e `recollection`, da recoleta pedida a quem ja tinha conta.
+  //
+  // Enumerado e nao texto livre porque "quantos aceites vieram da recoleta?" e
+  // a medicao do mecanismo, e texto livre a responde errado em silencio.
+  // Espelha o tipo da coluna em `src/shared/db/schema.ts`
+  // (`TermsAcceptancesTable.source`) e o valor que
+  // `kysely-identity-repository.ts` grava nos dois caminhos.
+  'public.terms_acceptances.terms_acceptances_origem_conhecida': {
+    coluna: 'source',
+    valores: ['signup', 'recollection'],
+  },
   'public.admin_sessions.admin_sessions_revoked_reason_check': {
     coluna: 'revoked_reason',
     valores: [
@@ -1251,6 +1264,17 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // nao pode ser espaco em branco nem carregar `<` ou `>`. O segundo nao e
   // sanitizacao: e a recusa que sobra quando alguem escrever na tabela por
   // outro caminho que nao a borda.
+  // O CONSERTO DOS 36 NULOS, em forma de restricao (migracao `20261101000001`).
+  // `version` ja e `NOT NULL`; este `CHECK` cobre o que `NOT NULL` nao cobre --
+  // `''` e `'   '` passariam por ele e nao identificam texto legal nenhum.
+  //
+  // E ele que torna o caminho novo INCAPAZ de gravar o defeito que a entrega
+  // conserta: o aceite sem versao e recusado pelo Postgres, e nao pela
+  // disciplina de quem escreve o repositorio. Em `users` a coluna continua
+  // anulavel, porque as 36 linhas medidas em 01/11/2026 ja estao assim e dar
+  // valor a elas seria arbitrar data.
+  'public.terms_acceptances.terms_acceptances_versao_nao_vazia':
+    "CHECK ((btrim(version) <> ''::text))",
   'public.professional_reviews.professional_reviews_body_nao_vazio':
     "CHECK (((body IS NULL) OR (btrim(body) <> ''::text)))",
   'public.professional_reviews.professional_reviews_body_sem_html':

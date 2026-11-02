@@ -57,6 +57,7 @@ function contaAtiva(sessionsInvalidBefore: Instant): Conta {
     referenceCity: null,
     referenceState: null,
     pendingEmail: null,
+    acceptedTermsVersion: null,
     emailDeliverable: true,
     status: 'active',
     sessionsInvalidBefore,

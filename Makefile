@@ -689,7 +689,18 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (849 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+#
+# 849 -> 851 EM 01-02/11/2026 (recoleta do aceite dos termos), e a aritmetica NAO
+# fecha por +1 de proposito: a entrega acrescenta UM arquivo lintavel na raiz
+# (`tests/integration/recoleta-do-aceite-dos-termos.test.ts`), e a base media
+# 850 e nao os 849 escritos aqui. MEDIDO, e nao deduzido: `eslint . -f json` na
+# arvore de trabalho devolve 851 arquivos e zero mensagens, e dos 851 caminhos
+# EXATAMENTE UM nao existe em `git ls-tree -r --name-only 92ca2342` -- o do
+# arquivo novo. Ou seja: 849 ja estava velho de um antes desta entrega, pelo
+# mesmo motivo do paragrafo acima, e quem o travou nao recontou depois da
+# mescla seguinte. As outras duas contagens NAO mudaram: painel 145, site 47,
+# as tres com zero mensagens.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (851 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

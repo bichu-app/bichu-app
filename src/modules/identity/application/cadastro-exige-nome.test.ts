@@ -56,6 +56,7 @@ function contaRecemCriada(displayName: string | null): Conta {
     referenceCity: null,
     referenceState: null,
     pendingEmail: null,
+    acceptedTermsVersion: null,
     emailDeliverable: true,
     status: 'active',
     sessionsInvalidBefore: INSTANTE_FIXO,

@@ -24,6 +24,7 @@ function conta(mudanca: Partial<Conta> = {}): Conta {
     referenceCity: null,
     referenceState: null,
     pendingEmail: null,
+    acceptedTermsVersion: null,
     emailDeliverable: true,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,

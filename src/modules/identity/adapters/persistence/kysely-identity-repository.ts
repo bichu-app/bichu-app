@@ -71,6 +71,7 @@ type LinhaDeConta = Pick<
   | 'reference_city'
   | 'reference_state'
   | 'pending_email'
+  | 'accepted_terms_version'
   | 'deleted_at'
 >;
 
@@ -88,6 +89,7 @@ const COLUNAS_DA_CONTA = [
   'reference_state',
   'pending_email',
   'email_deliverable',
+  'accepted_terms_version',
   'status',
   'sessions_invalid_before',
   'created_at',
@@ -115,6 +117,7 @@ function paraConta(linha: LinhaSelecionada): Conta {
     referenceState: linha.reference_state,
     pendingEmail: linha.pending_email,
     emailDeliverable: linha.email_deliverable,
+    acceptedTermsVersion: linha.accepted_terms_version,
     status: linha.status,
     sessionsInvalidBefore: linha.sessions_invalid_before.getTime() as Instant,
     createdAt: linha.created_at,
@@ -171,6 +174,14 @@ export function construtorDaInvalidacaoDeTokensPendentes(
     .where('user_id', '=', userId)
     .where('consumed_at', 'is', null);
 }
+
+/**
+ * O sinal interno que faz a transação do aceite DESFAZER.
+ *
+ * Existe porque Kysely só desfaz ao lançar: sem ela, descobrir que a conta não
+ * existe e devolver `false` comitaria a linha de trilha já inserida.
+ */
+class ContaSemAceiteAGravar extends Error {}
 
 export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepository {
   return {
@@ -242,10 +253,84 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
 
           await trx.insertInto('user_roles').values({ user_id: userId, role: 'tutor' }).execute();
 
+          // A TRILHA NASCE NO CADASTRO, e não só na recoleta: se ela começasse
+          // a existir no dia da recoleta, o primeiro aceite de cada conta
+          // ficaria de fora dela e a prova de consentimento teria um buraco
+          // exatamente no começo. Mesma transação do `INSERT` da conta, porque
+          // conta criada sem o aceite registrado é o estado que não existe.
+          //
+          // SÓ COM VERSÃO. `version` é `NOT NULL` por desenho (ver a migração
+          // `20261101000001`): cadastro sem versão — o APK que não recebeu
+          // `--dart-define=TERMS_VERSION`, que é a causa dos 36 nulos medidos —
+          // não ganha linha de trilha, e o mecanismo de recoleta trata conta
+          // sem linha como conta que nunca aceitou.
+          const versaoDoCadastro = nova.acceptedTermsVersion?.trim();
+          if (versaoDoCadastro !== undefined && versaoDoCadastro !== '') {
+            await trx
+              .insertInto('terms_acceptances')
+              .values({
+                id: ids.uuidv7(),
+                user_id: userId,
+                version: versaoDoCadastro,
+                accepted_at: agora,
+                source: 'signup',
+              })
+              .execute();
+          }
+
           return paraConta(conta as LinhaSelecionada);
         });
       } catch (erro) {
         if (ehViolacaoDeUnicidade(erro)) return undefined;
+        throw erro;
+      }
+    },
+
+    async registrarAceiteDosTermos(
+      userId: UserId,
+      versao: string,
+      agora: Instant,
+    ): Promise<boolean> {
+      const quando = new Date(Number(agora));
+      // UMA TRANSAÇÃO, E A ORDEM IMPORTA. O `UPDATE` do valor corrente vem
+      // DEPOIS do `INSERT` da trilha e com `WHERE deleted_at IS NULL`: conta
+      // apagada não ganha aceite, e o `INSERT` de uma linha cuja conta não
+      // existe esbarra na chave estrangeira em vez de criar trilha órfã.
+      //
+      // Se o `UPDATE` não encontrar linha, LANÇA — e o `INSERT` desfaz. Kysely
+      // só desfaz ao lançar; um `return false` aqui comitaria a linha da trilha
+      // de uma conta que não a recebeu no valor corrente, e o aceite ficaria
+      // registrado em metade dos dois lugares.
+      try {
+        await db.transaction().execute(async (trx) => {
+          await trx
+            .insertInto('terms_acceptances')
+            .values({
+              id: ids.uuidv7(),
+              user_id: userId,
+              version: versao,
+              accepted_at: quando,
+              source: 'recollection',
+            })
+            .execute();
+
+          const atualizada = await trx
+            .updateTable('users')
+            .set({
+              accepted_terms_version: versao,
+              accepted_terms_at: quando,
+              updated_at: quando,
+            })
+            .where('id', '=', userId)
+            .where('deleted_at', 'is', null)
+            .returning('id')
+            .executeTakeFirst();
+
+          if (atualizada === undefined) throw new ContaSemAceiteAGravar();
+        });
+        return true;
+      } catch (erro) {
+        if (erro instanceof ContaSemAceiteAGravar) return false;
         throw erro;
       }
     },

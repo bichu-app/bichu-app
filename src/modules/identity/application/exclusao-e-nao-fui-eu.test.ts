@@ -58,6 +58,7 @@ function contaViva(): Conta {
     referenceCity: null,
     referenceState: null,
     pendingEmail: null,
+    acceptedTermsVersion: null,
     emailDeliverable: true,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,

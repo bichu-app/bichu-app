@@ -142,6 +142,25 @@ export const rotaDeEdicaoDoPerfil = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A RECOLETA DO ACEITE (01/11/2026). Teto de CONTA, 20 por 24 h, espelhando
+ * `api/openapi.yaml`: é folgado porque a chamada é idempotente em efeito (cada
+ * uma apenda uma linha com o mesmo valor) e apertado o bastante para que um
+ * laço de aplicativo não escreva trilha sem fim.
+ *
+ * `effects: []` de propósito: ela não notifica, não verifica segredo e não
+ * escreve nada irreversível — **apenda**. `irreversible_write` é do que não dá
+ * para desfazer por outra operação; aqui o desfazer não existe porque não deve
+ * existir, e o que guarda isso é a migração, não o efeito declarado.
+ */
+export const rotaDeAceiteDosTermos = defineRoute({
+  operationId: 'recordTermsAcceptance',
+  method: 'put',
+  path: '/me/terms-acceptance',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '24h', onExceed: 'deny_429' }],
+});
+
 /** O teto é de CONTA, 5 por 24 horas, e espelha `api/openapi.yaml`. */
 export const rotaDeTrocaDeEmail = defineRoute({
   operationId: 'requestEmailChange',
@@ -461,6 +480,27 @@ export function registrarRotasDeIdentidade(
       await deps.auth.solicitarTrocaDeEmail(conta.id, new_email, contextoDe(request));
 
       return reply.status(202).send();
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeAceiteDosTermos,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeAceiteDosTermos.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { conta } = await autenticado(request, deps);
+      const { accepted_terms_version } = request.body as { accepted_terms_version: string };
+
+      await deps.auth.registrarAceiteDosTermos(
+        conta.id,
+        accepted_terms_version,
+        contextoDe(request),
+      );
+
+      return reply.status(204).send();
     },
   );
 

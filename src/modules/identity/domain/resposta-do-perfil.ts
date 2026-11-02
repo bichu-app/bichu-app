@@ -55,6 +55,7 @@ export function projetarMeuPerfil(
       : null,
     pending_profile_fields: camposPendentesDoPerfil(conta),
     can_open_lost_case: podeAbrirCasoDePerdido(conta),
+    accepted_terms_version: conta.acceptedTermsVersion,
     contact_channel_verified: canalDeContatoConfirmado(conta),
     created_at: conta.createdAt.toISOString(),
   };
