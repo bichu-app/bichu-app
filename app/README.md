@@ -32,11 +32,17 @@ flutter run --dart-define=API_BASE_URL=http://SEU_IP:3000
 Build para instalar no aparelho:
 
 ```bash
+# A versão dos termos sai da FONTE ÚNICA, e não da sua memória: ela é a
+# identidade do texto que o site publica, e é o que o cadastro grava em
+# `accepted_terms_version`. Em 01/11/2026 este README trazia o literal
+# `2026-09-17` enquanto o site publicava `23/09/2026`.
+TERMS_VERSION=$(python3 -c 'import json; print(json.load(open("../web/src/conteudo/versao-legal.json"))["publicadaEm"])')
+
 flutter build apk --debug \
   --build-name=1.0.0 \
   --dart-define=APP_VERSION=1.0.0 \
   --dart-define=API_BASE_URL=http://SEU_IP:3000 \
-  --dart-define=TERMS_VERSION=2026-09-17 \
+  --dart-define=TERMS_VERSION="$TERMS_VERSION" \
   --dart-define-from-file=config/mapa.json
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
@@ -123,9 +129,15 @@ corpo enviado e não o widget — um caso que confirmasse "existe um `Checkbox`"
 ficaria verde com o aceite não sendo gravado.
 
 ```bash
+# A versão dos termos sai da FONTE ÚNICA, e não da sua memória: ela é a
+# identidade do texto que o site publica, e é o que o cadastro grava em
+# `accepted_terms_version`. Em 01/11/2026 este README trazia o literal
+# `2026-09-17` enquanto o site publicava `23/09/2026`.
+TERMS_VERSION=$(python3 -c 'import json; print(json.load(open("../web/src/conteudo/versao-legal.json"))["publicadaEm"])')
+
 flutter run \
   --dart-define=API_BASE_URL=http://localhost:3000 \
-  --dart-define=TERMS_VERSION=2026-09-17 \
+  --dart-define=TERMS_VERSION="$TERMS_VERSION" \
   --dart-define=TERMS_URL=https://exemplo.com.br/termos \
   --dart-define=PRIVACY_URL=https://exemplo.com.br/privacidade \
   --build-name=1.0.0 --dart-define=APP_VERSION=1.0.0

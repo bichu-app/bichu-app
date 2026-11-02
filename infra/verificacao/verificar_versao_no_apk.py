@@ -168,9 +168,21 @@ def _valores_do_mapa(caminho: str) -> dict[str, str]:
 
 
 def conferir(
-    apk: str, versao: str, controle: str, mapa: str, chaves: tuple[str, ...] = ()
+    apk: str,
+    versao: str,
+    controle: str,
+    mapa: str,
+    chaves: tuple[str, ...] = (),
+    valor_dos_termos: str = "",
 ) -> list[str]:
     """Mede os valores DENTRO do pacote. Devolve as linhas do laudo, ou levanta [Reprova]."""
+    if not valor_dos_termos:
+        raise Reprova(
+            "o valor de `TERMS_VERSION` chegou vazio. O portao procuraria a "
+            "cadeia vazia, que esta em qualquer binario, e aprovaria sempre -- "
+            "e o que esta em jogo nesta cadeia e o `accepted_terms_version` "
+            "que o cadastro grava no banco"
+        )
     if not versao:
         raise Reprova(
             "a versao esperada chegou vazia. O portao procuraria a cadeia "
@@ -197,6 +209,7 @@ def conferir(
 
     alvo_versao = versao.encode("utf-8")
     alvo_controle = controle.encode("utf-8")
+    alvo_termos = valor_dos_termos.encode("utf-8")
 
     for nome in sorted(libapps):
         corpo = libapps[nome]
@@ -303,6 +316,47 @@ def conferir(
                 )
             laudo.append(f"  {nome}: {chave} {quantas}x")
 
+        # O VALOR DA VERSAO DOS TERMOS (01/11/2026).
+        #
+        # POR QUE ELE ENTROU NA LISTA: `TERMS_VERSION` ja era passada no comando
+        # de build, mas so o NOME dela era cobrado (na conferencia de bandeira
+        # engolida, acima). O valor nao era medido por ninguem -- e esse valor
+        # vai para `users.accepted_terms_version` no cadastro, ou seja, e o que
+        # identifica QUAL texto a pessoa aceitou. Aceite que aponta para versao
+        # errada nao prova o que precisa provar.
+        #
+        # MEDIDO em 01/11/2026 no APK de homologacao
+        # `bichu-hml-d03d1a6c-31-10.apk`, antes do conserto: `2026-09-17`
+        # aparecia 1x em cada um dos tres `lib/<abi>/libapp.so`, com o controle
+        # `hml.bichu.app` presente (1x) e o NOME `TERMS_VERSION` ausente (0x).
+        # Ou seja: a cadeia E mensuravel pelo mesmo mecanismo da versao do app,
+        # e a medicao nao e teorica. O site publicava 23/09/2026.
+        #
+        # Esta conferencia pega o binario; quem pega a DECLARACAO (o script
+        # resolvendo um valor que o site nao publica) e
+        # `verificar-versao-dos-termos.mjs`. As duas sao necessarias: um valor
+        # esperado errado faz esta aprovar com folga.
+        quantas_termos = corpo.count(alvo_termos)
+        if quantas_termos == 0:
+            raise Reprova(
+                f"a VERSAO DOS TERMOS {valor_dos_termos!r} nao esta em {nome} "
+                f"({len(corpo)} bytes), e a string de controle {controle!r} "
+                f"esta ({quantas_controle}x) -- entao a busca funciona e o "
+                "valor REALMENTE nao entrou. O cadastro deste APK gravaria "
+                "`accepted_terms_version` sem a versao que o site publica, e a "
+                "tela de criar conta RECUSA criar conta quando "
+                "`TERMS_VERSION` nao chega "
+                "(`app/lib/telas/conta/tela_criar_conta.dart`). Confira o "
+                "`--dart-define=TERMS_VERSION` do comando de build e a fonte "
+                "unica `web/src/conteudo/versao-legal.json`. Nao procure o NOME "
+                "`TERMS_VERSION` no binario: ele nao esta la nem quando o "
+                "define e passado (medido 0x), porque `String.fromEnvironment` "
+                "e dobrado em constante"
+            )
+        laudo.append(
+            f"  {nome}: TERMS_VERSION {valor_dos_termos!r} {quantas_termos}x"
+        )
+
     # O MANIFESTO. XML binario, reserva de strings em UTF-16LE.
     quantas_manifesto = manifesto.count(versao.encode("utf-16-le"))
     if quantas_manifesto == 0:
@@ -335,6 +389,12 @@ _CONTROLE = "hml.bichu.app"
 _MAPA = {"MAP_TILES_URL": "https://exemplo/{z}.png", "MAP_USER_AGENT": "Isca/9.9"}
 _CHAVES = ("APP_VERSION", "API_BASE_URL", "ENVIRONMENT")
 
+# A versao dos termos das iscas. Os NUMEROS sao os do defeito medido em
+# 01/11/2026 de proposito: `_TERMOS` e o que o site publicava e `_TERMOS_VELHA`
+# e o que o aplicativo gravava.
+_TERMOS = "2026-09-23"
+_TERMOS_VELHA = "2026-09-17"
+
 # O amontoado, copiado da FORMA exata que foi medida no `libapp.so` de
 # 19/10/2026 com `flutter build apk "$DEFINES"`: a versao, e colado nela o resto
 # das bandeiras como texto.
@@ -354,6 +414,7 @@ def _montar_apk(
     abis: tuple[str, ...] = ("arm64-v8a",),
     sem_libapp: bool = False,
     sem_manifesto: bool = False,
+    termos: str | None = _TERMOS,
 ) -> str:
     with zipfile.ZipFile(destino, "w") as z:
         if not sem_libapp:
@@ -366,6 +427,8 @@ def _montar_apk(
                 if do_mapa:
                     for v in _MAPA.values():
                         corpo += b"\x00" + v.encode()
+                if termos:
+                    corpo += b"\x00" + termos.encode()
                 z.writestr(f"lib/{abi}/libapp.so", corpo)
         if not sem_manifesto:
             corpo = b"\x03\x00\x08\x00"
@@ -384,10 +447,12 @@ def autoteste() -> int:
     with open(mapa, "w", encoding="utf-8") as f:
         json.dump(_MAPA, f)
 
-    def esperar_reprova(motivo: str, apk: str, versao: str = _VERSAO) -> None:
+    def esperar_reprova(
+        motivo: str, apk: str, versao: str = _VERSAO, termos: str = _TERMOS
+    ) -> None:
         nonlocal falhou
         try:
-            conferir(apk, versao, _CONTROLE, mapa, _CHAVES)
+            conferir(apk, versao, _CONTROLE, mapa, _CHAVES, termos)
         except Reprova as erro:
             print(f"isca reprovada como deveria: {motivo}")
             print(f"    motivo dado: {str(erro)[:120]}...")
@@ -480,6 +545,7 @@ def autoteste() -> int:
         corpo = b"\x7fELF" + b"\x00" + _AMONTOADO.encode()
         for v in _MAPA.values():
             corpo += b"\x00" + v.encode()
+        corpo += b"\x00" + _TERMOS.encode()
         z.writestr("lib/arm64-v8a/libapp.so", corpo)
         z.writestr(MANIFESTO, _VERSAO.encode("utf-16-le"))
     esperar_reprova(
@@ -509,7 +575,7 @@ def autoteste() -> int:
         versao_no_manifesto=_VERSAO,
     )
     try:
-        conferir(sem_controle, _VERSAO, _CONTROLE, mapa, _CHAVES)
+        conferir(sem_controle, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS)
         print(
             "REPROVA: a isca 'string de controle ausente' PASSOU. Sem controle "
             "a medicao nao vale e o portao tem de dizer isso",
@@ -546,20 +612,75 @@ def autoteste() -> int:
         bom = b"\x7fELF" + _CONTROLE.encode() + _VERSAO.encode()
         for v in _MAPA.values():
             bom += b"\x00" + v.encode()
+        bom += b"\x00" + _TERMOS.encode()
         z.writestr("lib/arm64-v8a/libapp.so", bom)
         ruim = b"\x7fELF" + _CONTROLE.encode()
         for v in _MAPA.values():
             ruim += b"\x00" + v.encode()
+        ruim += b"\x00" + _TERMOS.encode()
         z.writestr("lib/armeabi-v7a/libapp.so", ruim)
         z.writestr(MANIFESTO, _VERSAO.encode("utf-16-le"))
     esperar_reprova("so UMA das ABIs tem a versao", uma_abi_sem)
+
+    # --- iscas da VERSAO DOS TERMOS (01/11/2026) ---------------------------
+    # Nos dois sentidos, e com os numeros do defeito de verdade: o aplicativo
+    # gravava `2026-09-17` e o site publicava `2026-09-23`.
+
+    esperar_reprova(
+        "VERSAO DOS TERMOS ausente no Dart (aceite gravado sem identificar o texto)",
+        _montar_apk(
+            os.path.join(tmp, "sem-termos.apk"),
+            versao_no_dart=_VERSAO,
+            controle=True,
+            do_mapa=True,
+            versao_no_manifesto=_VERSAO,
+            termos=None,
+        ),
+    )
+
+    # A ISCA CENTRAL DESTA FAMILIA: o pacote carrega uma versao de termos, mas
+    # NAO a que o site publica. Foi o estado medido em
+    # `bichu-hml-d03d1a6c-31-10.apk`.
+    esperar_reprova(
+        "VERSAO DOS TERMOS divergente: o binario traz 2026-09-17 e o site publica 2026-09-23",
+        _montar_apk(
+            os.path.join(tmp, "termos-divergente.apk"),
+            versao_no_dart=_VERSAO,
+            controle=True,
+            do_mapa=True,
+            versao_no_manifesto=_VERSAO,
+            termos=_TERMOS_VELHA,
+        ),
+    )
+
+    esperar_reprova(
+        "VERSAO DOS TERMOS esperada VAZIA (procuraria a cadeia vazia e aprovaria sempre)",
+        completo,
+        termos="",
+    )
+
+    # Uma ABI com a versao dos termos e a outra sem: o aparelho A gravaria
+    # aceite e o aparelho B recusaria criar conta, com o MESMO pacote.
+    termos_uma_abi = os.path.join(tmp, "termos-uma-abi.apk")
+    with zipfile.ZipFile(termos_uma_abi, "w") as z:
+        bom = b"\x7fELF" + _CONTROLE.encode() + _VERSAO.encode()
+        for v in _MAPA.values():
+            bom += b"\x00" + v.encode()
+        bom += b"\x00" + _TERMOS.encode()
+        z.writestr("lib/arm64-v8a/libapp.so", bom)
+        ruim = b"\x7fELF" + _CONTROLE.encode() + _VERSAO.encode()
+        for v in _MAPA.values():
+            ruim += b"\x00" + v.encode()
+        z.writestr("lib/armeabi-v7a/libapp.so", ruim)
+        z.writestr(MANIFESTO, _VERSAO.encode("utf-16-le"))
+    esperar_reprova("so UMA das ABIs tem a versao dos termos", termos_uma_abi)
 
     # --- isca que PRECISA ser aprovada -------------------------------------
     # Sem esta, uma conferencia que reprovasse tudo passaria no autoteste
     # inteiro e derrubaria a esteira para sempre, com as linhas acima dizendo
     # que estava tudo certo.
     try:
-        laudo = conferir(completo, _VERSAO, _CONTROLE, mapa, _CHAVES)
+        laudo = conferir(completo, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS)
         if len(laudo) < 3:
             print(
                 f"REPROVA: o pacote completo passou com laudo de {len(laudo)} "
@@ -600,6 +721,14 @@ def main(argv: list[str]) -> int:
         "repetivel. O portao cobra que nenhuma delas apareca como BANDEIRA "
         "dentro do binario, que e a marca do amontoado por variavel de shell.",
     )
+    p.add_argument(
+        "--valor-dos-termos",
+        dest="valor_dos_termos",
+        help="o valor de `--dart-define=TERMS_VERSION` que o comando de build "
+        "passa. OBRIGATORIO: e a cadeia que o cadastro grava em "
+        "`users.accepted_terms_version`, e ela sai da fonte unica "
+        "`web/src/conteudo/versao-legal.json`.",
+    )
     args = p.parse_args(argv)
 
     if args.autoteste:
@@ -607,12 +736,14 @@ def main(argv: list[str]) -> int:
 
     faltando = [
         nome
-        for nome in ("apk", "versao", "controle", "mapa")
+        for nome in ("apk", "versao", "controle", "mapa", "valor_dos_termos")
         if not getattr(args, nome)
     ]
     if faltando:
         print(
-            "REPROVA: faltou " + ", ".join("--" + n for n in faltando) + ". "
+            "REPROVA: faltou "
+            + ", ".join("--" + n.replace("_", "-") for n in faltando)
+            + ". "
             "Portao chamado pela metade conferiria menos do que anuncia",
             file=sys.stderr,
         )
@@ -620,14 +751,20 @@ def main(argv: list[str]) -> int:
 
     try:
         laudo = conferir(
-            args.apk, args.versao, args.controle, args.mapa, tuple(args.chave)
+            args.apk,
+            args.versao,
+            args.controle,
+            args.mapa,
+            tuple(args.chave),
+            args.valor_dos_termos,
         )
     except Reprova as erro:
         print(f"REPROVA: {erro}", file=sys.stderr)
         return 1
     print(
-        f"APROVA: {args.apk} carrega a versao {args.versao!r} DENTRO do Dart "
-        "compilado e no manifesto"
+        f"APROVA: {args.apk} carrega a versao {args.versao!r} e a versao dos "
+        f"termos {args.valor_dos_termos!r} DENTRO do Dart compilado, e a "
+        "versao tambem no manifesto"
     )
     for linha in laudo:
         print(linha)
