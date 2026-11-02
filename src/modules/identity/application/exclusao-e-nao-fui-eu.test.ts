@@ -59,6 +59,7 @@ function contaViva(): Conta {
     referenceState: null,
     pendingEmail: null,
     emailDeliverable: true,
+    publicProfileEnabled: false,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,
     createdAt: dataFixa(),

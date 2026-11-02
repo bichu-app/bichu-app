@@ -8969,6 +8969,38 @@ export interface components {
             pending_profile_fields: ("email_verification" | "phone" | "display_name" | "reference_area")[];
             /** @description Falso quando nenhum canal de contato esta verificado. */
             can_open_lost_case: boolean;
+            /**
+             * @description **O PERFIL PUBLICO DESTA CONTA ESTA LIGADO?** (cliente, 02/11/2026:
+             *     *"desligado por padrao e o usuario habilita"*.)
+             *
+             *     **E VISIBILIDADE, E NAO PERMISSAO**, e ele foi explicito: *"nao tem
+             *     relacao com permissoes dentro do sistema, apenas de visibilidade"*.
+             *     Ligar isto nao verifica a conta, nao a promove de nivel e nao libera
+             *     nada -- nem cadastrar evento, nem recomendar profissional, nem nada
+             *     que dependa de canal de contato confirmado. Quem decide o que a
+             *     conta PODE FAZER e a matriz de capacidades
+             *     (`src/shared/autorizacao/matriz-de-capacidades.ts`), e este campo
+             *     **nao entra nela**. O que ele faz e deixar o perfil e os posts da
+             *     pessoa aparecerem para outras pessoas.
+             *
+             *     **Sai apenas para o DONO**, aqui e em `SessionResponse.user`: nenhum
+             *     schema de terceiro o declara. Para terceiro a visibilidade nao e um
+             *     campo a ser lido, e a consequencia de uma consulta que ja a
+             *     respeitou.
+             *
+             *     **Ligar exige apelido**: `GET /v1/people/{handle}` e a unica rota
+             *     que serve o perfil de uma pessoa, e perfil publico sem apelido e um
+             *     perfil sem endereco. `updateMe` com `public_profile_enabled: true`
+             *     numa conta sem `handle` e `400`
+             *     (`code: public_profile_requires_handle`), e o banco impede o estado
+             *     de todo modo (`users_perfil_publico_exige_apelido`).
+             *
+             *     **NAO e o que decide sozinho quem aparece em listagem de pessoas.**
+             *     A regra que o cliente refinou em 02/11/2026 e **foto + perfil
+             *     publico**, e este campo e metade dela.
+             * @default false
+             */
+            public_profile_enabled: boolean;
             /** Format: date-time */
             created_at?: string;
         };
@@ -8989,6 +9021,7 @@ export interface components {
             photo_upload_id?: string | null;
             handle?: components["schemas"]["Handle"];
             phone_e164?: string;
+            public_profile_enabled?: boolean;
             reference_area?: {
                 postal_code?: string;
                 neighborhood?: string;

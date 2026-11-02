@@ -40,6 +40,7 @@ import { projetarSessao, type ParDeTokens, type SessionView } from './session-vi
 import { projetarFotoDoPerfil, type FotoProjetada } from '../domain/resposta-do-perfil.js';
 import type { Mensagem } from '../ports/mailer.js';
 import { comoIso } from '../../../shared/time/clock.js';
+import { ligarPerfilPublicoExigeApelido } from '../../../shared/perfil-publico/perfil-publico-de-pessoa.js';
 
 type MotivoDeRevogacaoEmMassa = Extract<
   MotivoDeRevogacao,
@@ -427,6 +428,40 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
+  /**
+   * **Ligar o perfil publico exige apelido**, e esta conferencia existe para a
+   * MENSAGEM e nao para a garantia.
+   *
+   * A garantia e do banco (`users_perfil_publico_exige_apelido`, migracao
+   * `20261102000002`), e o motivo esta escrito la: `GET /v1/people/{handle}` e a
+   * unica rota que serve o perfil de uma pessoa, entao perfil publico sem apelido
+   * e um perfil sem endereco. Sem esta funcao a pessoa receberia a violacao de
+   * restricao como erro de servidor, em vez de um erro de campo que diz o que
+   * fazer.
+   *
+   * **O apelido escolhido NESTE MESMO `PATCH` vale**: `atualizarPerfil` grava o
+   * apelido na mesma transacao, antes do `UPDATE` de `users`, e por isso o corpo
+   * que liga o perfil e escolhe o apelido de uma vez e legitimo. So quando o
+   * corpo NAO traz apelido e que a conta precisa ja ter um.
+   */
+  async function exigirApelidoParaPerfilPublico(
+    userId: UserId,
+    campos: CamposDoPerfil,
+  ): Promise<void> {
+    if (campos.publicProfileEnabled !== true) return;
+    if (campos.handle !== undefined) return;
+    const antes = await deps.repositorio.buscarContaPorId(userId);
+    if (antes === undefined) throw problemas.naoAutenticado();
+    if (!ligarPerfilPublicoExigeApelido(antes)) return;
+    throw problemas.validacao([
+      {
+        field: 'public_profile_enabled',
+        code: 'public_profile_requires_handle',
+        message: 'Escolha um apelido (@) antes de deixar seu perfil público.',
+      },
+    ]);
+  }
+
   return {
     async cadastrar(
       entrada: EntradaDeCadastro,
@@ -767,6 +802,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       };
 
       await exigirNomeJaCadastrado(userId, campaNome);
+      await exigirApelidoParaPerfilPublico(userId, camposParaGravar);
 
       const conta = await deps.repositorio.atualizarPerfil(userId, camposParaGravar, agora);
       if (conta === undefined) throw problemas.naoAutenticado();

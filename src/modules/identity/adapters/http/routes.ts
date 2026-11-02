@@ -413,6 +413,7 @@ export function registrarRotasDeIdentidade(
         handle?: unknown;
         phone_e164?: string;
         photo_upload_id?: string | null;
+        public_profile_enabled?: boolean;
         reference_area?: {
           postal_code?: string;
           neighborhood?: string;
@@ -433,6 +434,17 @@ export function registrarRotasDeIdentidade(
           ...(corpo.display_name === undefined ? {} : { displayName: corpo.display_name }),
           ...(corpo.handle === undefined ? {} : { handle: corpo.handle as string }),
           ...(corpo.phone_e164 === undefined ? {} : { phoneE164: corpo.phone_e164 }),
+          /**
+           * **O PERFIL PUBLICO** (cliente, 02/11/2026). Sem esta linha o campo
+           * seria aceito pelo esquema e DESCARTADO aqui -- o contrato
+           * prometeria um interruptor que nao liga nada, que e exatamente a
+           * classe de defeito que `ImageCrop` e `x-audit` ja produziram neste
+           * repositorio. O caso que a prova esta em
+           * `perfil-publico-atravessa-a-rota.test.ts`.
+           */
+          ...(corpo.public_profile_enabled === undefined
+            ? {}
+            : { publicProfileEnabled: corpo.public_profile_enabled }),
           ...(area?.postal_code === undefined ? {} : { referencePostalCode: area.postal_code }),
           ...(area?.neighborhood === undefined ? {} : { referenceNeighborhood: area.neighborhood }),
           ...(area?.city === undefined ? {} : { referenceCity: area.city }),

@@ -44,6 +44,12 @@ export interface UsersTable {
   sessions_invalid_before: ColumnType<Date, Date | string | undefined, Date | string>;
   pending_email: string | null;
   email_deliverable: Generated<boolean>;
+  /**
+   * O PERFIL PUBLICO DA PESSOA (migracao `20261102000002`, decisao do cliente de
+   * 02/11/2026). **Visibilidade, e nao permissao** -- ver o `COMMENT ON COLUMN`.
+   * `CHECK (NOT public_profile_enabled OR handle IS NOT NULL)`.
+   */
+  public_profile_enabled: Generated<boolean>;
   pet_limit: Generated<number>;
   account_kind: Generated<'person' | 'organization'>;
   created_at: CriadoEm;

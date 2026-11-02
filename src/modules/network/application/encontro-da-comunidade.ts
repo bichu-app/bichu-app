@@ -134,7 +134,7 @@ export class EncontroDaComunidade {
     const agora = this.deps.clock.now();
     const estado = await this.deps.rede.estadoParaCriarEncontro(autor.userId, agora);
     if (atingiuTetoDeEncontros(estado)) throw problemas.tetoDeEncontrosDaComunidade();
-    if (bloqueiosParaCriarEncontro(estado).length > 0) {
+    if (bloqueiosParaCriarEncontro(estado, agora).length > 0) {
       throw problemas.canalDeContatoNaoVerificadoParaEncontro();
     }
 

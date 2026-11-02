@@ -15667,6 +15667,38 @@ components:
         can_open_lost_case:
           type: boolean
           description: Falso quando nenhum canal de contato esta verificado.
+        public_profile_enabled:
+          type: boolean
+          default: false
+          description: |
+            **O PERFIL PUBLICO DESTA CONTA ESTA LIGADO?** (cliente, 02/11/2026:
+            *"desligado por padrao e o usuario habilita"*.)
+
+            **E VISIBILIDADE, E NAO PERMISSAO**, e ele foi explicito: *"nao tem
+            relacao com permissoes dentro do sistema, apenas de visibilidade"*.
+            Ligar isto nao verifica a conta, nao a promove de nivel e nao libera
+            nada -- nem cadastrar evento, nem recomendar profissional, nem nada
+            que dependa de canal de contato confirmado. Quem decide o que a
+            conta PODE FAZER e a matriz de capacidades
+            (`src/shared/autorizacao/matriz-de-capacidades.ts`), e este campo
+            **nao entra nela**. O que ele faz e deixar o perfil e os posts da
+            pessoa aparecerem para outras pessoas.
+
+            **Sai apenas para o DONO**, aqui e em `SessionResponse.user`: nenhum
+            schema de terceiro o declara. Para terceiro a visibilidade nao e um
+            campo a ser lido, e a consequencia de uma consulta que ja a
+            respeitou.
+
+            **Ligar exige apelido**: `GET /v1/people/{handle}` e a unica rota
+            que serve o perfil de uma pessoa, e perfil publico sem apelido e um
+            perfil sem endereco. `updateMe` com `public_profile_enabled: true`
+            numa conta sem `handle` e `400`
+            (`code: public_profile_requires_handle`), e o banco impede o estado
+            de todo modo (`users_perfil_publico_exige_apelido`).
+
+            **NAO e o que decide sozinho quem aparece em listagem de pessoas.**
+            A regra que o cliente refinou em 02/11/2026 e **foto + perfil
+            publico**, e este campo e metade dela.
         created_at: { type: string, format: date-time }
 
     MeUpdate:
@@ -15714,6 +15746,23 @@ components:
         handle:
           $ref: '#/components/schemas/Handle'
         phone_e164: { type: string, pattern: '^\+55\d{10,11}$' }
+        # **O PERFIL PUBLICO, LIGADO PELA PROPRIA PESSOA** (cliente,
+        # 02/11/2026: *"desligado por padrao e o usuario habilita"*).
+        #
+        # Opcional como todo campo de `PATCH`: ausente significa "nao mexer".
+        # **`nullable: false`** -- o estado tem dois valores e nao tres, e um
+        # `null` aqui seria um terceiro sem significado decidido.
+        #
+        # **E VISIBILIDADE e nao permissao** (*"nao tem relacao com permissoes
+        # dentro do sistema, apenas de visibilidade"*): ligar nao libera
+        # capacidade nenhuma. Ver `Me.public_profile_enabled`.
+        #
+        # `true` numa conta SEM `handle` e `400`
+        # (`code: public_profile_requires_handle`), porque
+        # `GET /v1/people/{handle}` e a unica forma de alcancar o perfil.
+        # **No MESMO PATCH que escolhe o apelido, passa**: o apelido e gravado
+        # antes, e a conferencia le o estado depois da escrita.
+        public_profile_enabled: { type: boolean }
         reference_area:
           type: object
           properties:
