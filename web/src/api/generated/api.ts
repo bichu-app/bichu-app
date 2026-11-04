@@ -8528,12 +8528,41 @@ export interface components {
          */
         ConnectedPerson: {
             /**
-             * @description O apelido. **Nao e anulavel aqui**, como em `PersonSearchResult` e ao
-             *     contrario de `ConnectionPerson.handle`: a consulta le `handles`, e e
-             *     o apelido o endereco do perfil que cada linha abre. Conexao de quem
-             *     nao tem apelido nao tem para onde levar, e nao entra na lista.
+             * @description O apelido. **ANULAVEL desde 03/11/2026**, como em
+             *     `ConnectionPerson.handle` e ao contrario de `PersonSearchResult` --
+             *     e a troca e o conserto de um defeito RELATADO PELO CLIENTE e medido
+             *     no banco de homologacao.
+             *
+             *     **O que estava escrito aqui antes, e por que estava errado.** A
+             *     versao anterior dizia que o apelido nao era anulavel porque "conexao
+             *     de quem nao tem apelido nao tem para onde levar, e nao entra na
+             *     lista", e a consulta carregava um `IS NOT NULL` para cumprir isso. O
+             *     efeito medido: uma conexao **aceita** desaparecia da lista de uma
+             *     pessoa porque a OUTRA conta nao tinha escolhido apelido. Eram **22
+             *     das 61 contas**, porque `handle` nao esta em `required` de
+             *     `RegisterRequest` e nenhum fluxo obriga a escolher depois. O
+             *     argumento confundiu duas coisas: **nao poder abrir o perfil** e
+             *     **nao existir na lista**. A primeira e verdade e continua valendo; a
+             *     segunda apaga uma relacao que as duas pessoas confirmaram.
+             *
+             *     O filtro tambem fazia esta lista **discordar do resumo**: o `total`
+             *     daqui e o `connected_count` de `getMyConnectionSummary` saem de
+             *     consultas diferentes, e so esta olhava apelido -- os dois numeros
+             *     divergiam por exatamente as conexoes sem apelido.
+             *
+             *     **O QUE A TELA FAZ COM O NULO.** Escreve o nome de exibicao (ou
+             *     `Usuario sem nome`, quando ele tambem e nulo) e **nao oferece a
+             *     porta do perfil**: nenhum toque, nenhuma seta. E o MESMO desenho que
+             *     a caixa de pedidos (`ConnectionPerson.handle`, anulavel desde que
+             *     ela nasceu) e a lista de bloqueados (`BlockedPerson.handle`) ja usavam, e
+             *     nao ha rotulo novo na linha -- "perfil incompleto" ou equivalente
+             *     seria decisao de produto, e nao foi tomada.
+             *
+             *     **O endereco do perfil continua sendo o apelido**: `getPersonProfile`
+             *     segue com `handle` NAO anulavel, e quem nao tem apelido continua sem
+             *     pagina de perfil. Esta anulabilidade nao abre aquela.
              */
-            handle: string;
+            handle: string | null;
             /**
              * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
              *     (ADR-0010 item 3). **Anulavel**, pela mesma razao de

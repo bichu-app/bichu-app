@@ -12,8 +12,16 @@ export interface PaginaDePedidos {
 
 /** **Uma pessoa na lista das PRÓPRIAS conexões** (cliente, 22/10/2026). */
 export interface PessoaConectada {
-  /** O apelido. **Não anulável**: conexão sem apelido não tem perfil a abrir. */
-  readonly apelido: string;
+  /**
+   * O apelido. **ANULÁVEL desde 03/11/2026**, e a troca é o conserto de um
+   * defeito que o cliente relatou: enquanto ele não era anulável, a lista
+   * filtrava a pessoa sem apelido e uma conexão **aceita** desaparecia por um
+   * campo da OUTRA conta — 22 das 61 contas de homologação estavam assim, porque
+   * o apelido não é exigido no cadastro. Com nulo, a linha existe e é a tela que
+   * cai para o nome de exibição **sem** a porta do perfil, como a caixa de
+   * pedidos (`ConnectionPerson.handle`) e a lista de bloqueados já faziam.
+   */
+  readonly apelido: string | null;
   /** O nome de exibição, **anulável** — a coluna é anulável em `users`. */
   readonly nomeDeExibicao: string | null;
   /** Quantos pets, **e nada além do número** (emenda 2 do ADR-0010). */
