@@ -258,6 +258,23 @@ class _BotaoDestrutivo extends StatelessWidget {
 
     final VoidCallback? acao = carregando ? null : aoTocar;
 
+    // A TINTA DO ROTULO RESOLVIDA AQUI, pela MESMA regra que o `ButtonStyle`
+    // deste botao resolve o `foregroundColor`.
+    //
+    // POR QUE ELA NAO PODE SER HERDADA: `textos.labelLarge` NAO e um estilo sem
+    // cor. `BichuTheme` o constroi com `BichuTipografia.textTheme(c.textPrimary)`,
+    // entao ele CARREGA `text-primary`, e cor escrita no `TextStyle` do `Text`
+    // VENCE o `foregroundColor` do `ButtonStyle` -- o botao declarava a tinta
+    // certa e o rotulo a ignorava. Medido em 03/11/2026: o rotulo saiu `text-primary`
+    // sobre `urgency` -- 2.35:1 no tema claro, abaixo do piso de 4.5. Com
+    // `on-urgency`: 7.31:1 no claro e 9.96:1 no escuro. No escuro o par errado
+    // dava 9.92:1 e passava POR ACIDENTE, porque la `urgency` e escuro.
+    //
+    // Mesmo mecanismo e mesmo conserto de `widgets/botao_primario.dart`
+    // (03/11/2026). Achado pelo portao de contraste de widget real, nao pelo
+    // relato: o cliente viu a pastilha de filtro, nao este botao.
+    final Color tinta = acao == null ? cores.onDisabled : cores.onUrgency;
+
     return Semantics(
       button: true,
       enabled: acao != null,
@@ -297,7 +314,7 @@ class _BotaoDestrutivo extends StatelessWidget {
               Flexible(
                 child: Text(
                   rotulo,
-                  style: textos.labelLarge,
+                  style: textos.labelLarge?.copyWith(color: tinta),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

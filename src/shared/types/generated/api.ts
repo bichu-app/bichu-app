@@ -2629,7 +2629,9 @@ export interface paths {
          *     nunca pode mostrar zero quando o que houve foi falha.
          *
          *     Devolve tambem os bloqueios que impedem a abertura, para que a folha de
-         *     bloqueio tenha o texto certo sem uma segunda chamada.
+         *     bloqueio tenha o texto certo sem uma segunda chamada -- e, desde
+         *     03/11/2026, os `warnings`, que a tela mostra como aviso e que **nao**
+         *     desabilitam a abertura.
          */
         get: operations["previewLostCaseReach"];
         put?: never;
@@ -2653,9 +2655,13 @@ export interface paths {
         put?: never;
         /**
          * Marca o pet como perdido e dispara o alerta
-         * @description Dois bloqueios, e so dois: **canal de contato verificado** e **pet com
-         *     foto pronta**. Ambos respondem 409 com `type` proprio, porque a folha
-         *     de bloqueio tem texto diferente para cada um.
+         * @description Dois bloqueios, e so dois: **canal de contato verificado** e **pet que
+         *     ainda nao tem caso aberto**. Ambos respondem 409 com `type` proprio,
+         *     porque a folha de bloqueio tem texto diferente para cada um.
+         *
+         *     **Foto deixou de bloquear em 03/11/2026**, por decisao do cliente: um
+         *     caso sem foto abre, e a falta aparece em `warnings` na previa. Esta
+         *     operacao nao emite mais `pet-photo-missing`.
          *
          *     Abrir o caso com alcance zero e permitido e desejado: o caso continua
          *     util pela tag e pela lista de perdidos.
@@ -10179,10 +10185,34 @@ export interface components {
             radius_m: number;
             area_label?: string | null;
             /**
-             * @description O que impede abrir o caso. **Falta de coordenada nao e bloqueio**:
-             *     ela reduz o alcance, nao a existencia do caso.
+             * @description O que IMPEDE abrir o caso. Quem consome DESABILITA a abertura
+             *     enquanto esta lista nao estiver vazia. **Falta de coordenada nao e
+             *     bloqueio**: ela reduz o alcance, nao a existencia do caso.
+             *
+             *     **`pet_photo_missing` SAIU desta lista em 03/11/2026**, por decisao
+             *     do cliente: pet perdido e questao de horas, e a trava mandava o
+             *     tutor resolver foto antes de avisar a vizinhanca. O fato nao
+             *     desapareceu -- ele passou para `warnings`, abaixo. Quem consome nao
+             *     deve voltar a tratar falta de foto como bloqueio.
              */
-            blockers: ("contact_channel_unverified" | "pet_photo_missing" | "pet_already_lost")[];
+            blockers: ("contact_channel_unverified" | "pet_already_lost")[];
+            /**
+             * @description O que o tutor precisa SABER e que **nao impede** abrir o caso. A
+             *     interface mostra isto como aviso, nunca como erro, e **nunca**
+             *     desabilita a abertura por causa de um item daqui.
+             *
+             *     Lista separada de `blockers` de proposito: `blockers` significa "nao
+             *     da para abrir", e um valor nao-bloqueante dentro dela faria todo
+             *     consumidor que decide por `blockers.length > 0` continuar travando
+             *     em silencio -- que e exatamente o defeito de 03/11/2026.
+             *
+             *     `pet_photo_missing`: o pet nao tem foto em `ready`. O alerta sai com
+             *     a descricao, e o cartaz publico nasce sem a imagem que faz um
+             *     vizinho reconhecer o animal. **Nao distingue "nunca teve foto" de
+             *     "foto em `processing`"**: quem desenha tela ja tem o estado das
+             *     fotos do pet em `GET /pets/{petId}` e escolhe o texto por ali.
+             */
+            warnings: "pet_photo_missing"[];
         };
         MatchCandidate: {
             /** Format: uuid */
@@ -17517,7 +17547,9 @@ export interface components {
         };
         /**
          * @description Bloqueio de abertura de caso. Dois tipos possiveis, e a interface tem
-         *     texto diferente para cada um.
+         *     texto diferente para cada um. `pet-photo-missing` SAIU desta lista em
+         *     03/11/2026: falta de foto deixou de bloquear a abertura e passou a sair
+         *     como `warnings` na previa de alcance.
          */
         LostCaseBlocked: {
             headers: {
