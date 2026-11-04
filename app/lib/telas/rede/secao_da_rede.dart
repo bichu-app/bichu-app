@@ -62,7 +62,9 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _marcarVista(_aba);
+      if (!mounted) return;
+      _marcarVista(_aba);
+      _apagarOPedidoDoEndereco();
     });
   }
 
@@ -71,9 +73,48 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
   void didUpdateWidget(SecaoDaRede anterior) {
     super.didUpdateWidget(anterior);
     final pedida = widget.abaInicial;
-    if (pedida == null || pedida == _aba) return;
-    _abas.index = pedida.index;
-    _trocarAba(pedida);
+    if (pedida == null) return;
+    if (pedida != _aba) {
+      _abas.index = pedida.index;
+      _trocarAba(pedida);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _apagarOPedidoDoEndereco();
+    });
+  }
+
+  /// Tira o `?aba=` do endereco **depois de ele ter sido atendido**.
+  ///
+  /// ## O DEFEITO QUE ISTO CONSERTA (cliente, 03/11/2026)
+  ///
+  /// Ele relatou duas telas com o mesmo sintoma: *"o botao filtrar encerrado
+  /// na pagina de eventos esta levando o usuario para a pagina de usuarios
+  /// quando o filtro e aplicado e acaba nao listando nada por isso"*, e
+  /// depois *"nos filtros dos profissionais recomendados acontece o mesmo
+  /// problema"*.
+  ///
+  /// A aba tinha DUAS fontes da verdade: o estado [_aba], que o dedo move na
+  /// `TabBar`, e o `?aba=` do endereco, que [AbaRede.abaPedidaPor] lia a CADA
+  /// construcao. Trocar de aba com o dedo nao reescreve o endereco, entao um
+  /// `?aba=usuarios` ficava PENDURADO -- e `didUpdateWidget` o reimpunha na
+  /// reconstrucao seguinte, por cima da escolha da pessoa.
+  ///
+  /// **Por que `Usuarios` e nao outra aba:** `?aba=usuarios` e o unico valor
+  /// que alguem escreve no endereco ([Rotas.redeNaBuscaDePessoas], usada por
+  /// `tela_do_mural.dart` e por `tela_minhas_conexoes.dart`). Quem chegou a
+  /// `Rede` por uma dessas portas carregava o pedido consigo pelo resto da
+  /// visita.
+  ///
+  /// **O `?aba=` e um PEDIDO DE NAVEGACAO, e nao o estado da aba.** Atendido,
+  /// ele sai do endereco -- e sair e o que faz a porta do Mural continuar
+  /// funcionando quando tocada de novo: o endereco volta a MUDAR, e a secao
+  /// volta a atender.
+  void _apagarOPedidoDoEndereco() {
+    final pedido = GoRouterState.of(
+      context,
+    ).uri.queryParameters[Rotas.parametroDaAbaDaRede];
+    if (pedido == null) return;
+    context.go(Rotas.rede);
   }
 
   final ValueNotifier<BuscaFixaDaSecao?> _buscaDoTopo =
