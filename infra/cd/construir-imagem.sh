@@ -6,7 +6,7 @@
 #   ex.: construir-imagem.sh bichu-app . prod
 #        construir-imagem.sh bichu-migrador . migrador
 #        construir-imagem.sh bichu-web web
-#        construir-imagem.sh bichu-admin-web admin   # exige VITE_CAPTCHA_SITE_KEY
+#        construir-imagem.sh bichu-admin-web admin   # exige DESTINO + VITE_CAPTCHA_SITE_KEY
 #
 # Saida (em $GITHUB_OUTPUT, ou na tela):
 #   ref=<registro>/<nome>@sha256:...   o digest, que e o que se implanta
@@ -60,7 +60,9 @@
 #   4. o portao final mede o ARTEFATO e nao a invocacao: depois de construir OU
 #      de reaproveitar, o valor que passamos tem de estar DENTRO da imagem.
 #      Este portao pede um ACHADO, nao uma ausencia -- por isso nao precisa de
-#      controle positivo: zero e reprova, nunca "nada a medir".
+#      controle positivo: zero e reprova, nunca "nada a medir". ELE NAO BASTA
+#      SOZINHO, e o paragrafo seguinte (04/11/2026) diz por que: ele prova que a
+#      chave que passamos chegou, nao que era a chave CERTA.
 #
 # A PLATAFORMA E EXPLICITA, E ELA ENTRA NA TAG (02/11/2026). Este script nao
 # tinha `--platform`, e a tag de arvore nao codificava arquitetura. Numa maquina
@@ -84,7 +86,270 @@
 #      indice. O indice e metadado do registro e pode descrever o que quiser; o
 #      blob de configuracao e o que o runtime le para escolher o executavel, e e
 #      o unico que nao se engana sob emulacao.
+# O PORTAO DO ARTEFATO CONFERIA QUE *ALGUMA* CHAVE CHEGOU, NAO *QUAL* (04/11/2026).
+# O item 4 acima diz "o valor que passamos tem de estar DENTRO da imagem", e era
+# literalmente isso: `conferir_artefato` tirava o esperado da MESMA variavel de
+# ambiente que o build acabara de usar. Controle positivo que sai do valor medido
+# compara o valor com ele mesmo, e aprova QUALQUER valor -- a familia que o #161
+# fechou no `API_BASE_URL` do APK, aqui por outra porta.
+#
+# O QUE ISSO CUSTAVA, medido na subida de homologacao de 04/11/2026:
+#
+#   - o `.env` DESTE repositorio nao tem `VITE_CAPTCHA_SITE_KEY` nenhuma, e a
+#     `CAPTCHA_SITE_KEY` dele tem impressao `-ke7e002d715e9`, que e a chave de
+#     display name `bichu-app` -- a de PRODUCAO;
+#   - a API de homologacao de pe valida contra `-k7f62b3562293`, que e a chave
+#     `bichu-app-hml`, e e ela que o pacote servido em `admin-hml.bichu.app`
+#     carrega; as seis tags de `bichu-admin-web` no registro sao todas essa;
+#   - o servidor manda `siteKey` dentro da avaliacao
+#     (`src/modules/admin-access/adapters/external/recaptcha-enterprise.ts`),
+#     entao painel com a chave do outro ambiente tem o token recusado na origem:
+#     o captcha do painel PARA.
+#
+# Quem seguisse o roteiro ao pe da letra (`set -a; . .env; set +a`) publicaria o
+# painel de homologacao com a chave de producao, e o portao aprovaria. Nao foi ao
+# ar porque alguem notou -- e notar nao e portao.
+#
+# O CONSERTO: O ANCORA SAI DO AMBIENTE E VAI PARA UMA DECLARACAO RASTREADA.
+# `infra/cd/chaves-de-site-por-destino.txt` declara, por DESTINO, a impressao
+# digital que aquele destino deve assar. O portao compara o valor do ambiente com
+# a DECLARACAO antes de construir (`veredito_da_chave`), e so depois cobra que
+# ele esteja na imagem (`conferir_artefato`). A cadeia fecha nos tres pontos:
+# declarado == ambiente == assado, e nenhum deles e o controle positivo do outro.
+#
+# SO IMPRESSAO DIGITAL, NUNCA O VALOR: a declaracao guarda 12 digitos hex do
+# sha256, que ja sao publicos nas tags (`-k<12>`). A chave secreta nao entra
+# neste repositorio em forma nenhuma.
+#
+# AUSENCIA TEM DESFECHO PROPRIO E NOMEADO, nunca `exit 0` com aviso: destino nao
+# passado (`DESTINO_AUSENTE`), destino sem linha (`DESTINO_NAO_DECLARADO`),
+# exigencia sem linha para o destino (`EXIGENCIA_NAO_DECLARADA`), duas linhas
+# para o mesmo par (`DECLARACAO_AMBIGUA`), impressao fora da forma
+# (`DECLARACAO_MAL_FORMADA`), tabela ilegivel ou sem nenhuma declaracao
+# (`TABELA_ILEGIVEL`/`TABELA_SEM_DECLARACAO`). A esteira ja teve "base nao
+# existe" e "arquivo nao existe na base" colapsados no mesmo `exit 0` no portao
+# de contrato; aqui cada um sai com o nome dele.
+#
+#   ACAO=autoteste bash infra/cd/construir-imagem.sh   # as iscas, sem docker e
+#                                                      # sem registro
 set -euo pipefail
+
+sha256_hex() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
+impressao_de() { printf '%s' "$1" | sha256_hex | cut -c1-12; }
+
+TABELA_DE_CHAVES="${TABELA_DE_CHAVES:-$(dirname "$0")/chaves-de-site-por-destino.txt}"
+
+# ---------------------------------------------------------------------------
+# A FUNCAO PURA DA DECISAO. Sem docker, sem rede, sem git: so a tabela, o
+# destino, o nome da variavel e o valor. Imprime nada e sai 0 quando aprova;
+# imprime `MOTIVO: <frase>` e sai 1 quando reprova.
+#
+# UMA funcao, e nao uma por desfecho, porque e ela que o autoteste exercita: se
+# as iscas batessem numa copia simplificada, elas provariam a copia. O MOTIVO sai
+# em maiuscula no comeco da linha para o autoteste poder afirmar QUAL desfecho
+# aconteceu -- reprovar pelo motivo errado e o defeito que a isca
+# `com-mapa-de-fonte` do `verificar-backoffice.sh` pegou em 28/09.
+#
+# A linha de declaracao e a que tem `CHAVE` como PRIMEIRO campo. O resto do
+# arquivo e prosa de proposito, e sem o marcador qualquer paragrafo de quatro
+# palavras seria lido como declaracao.
+# ---------------------------------------------------------------------------
+veredito_da_chave() { # tabela, destino, variavel, valor
+  local tabela="$1" destino="$2" variavel="$3" valor="$4" linhas n declarada
+
+  [[ -n "$destino" ]] || { echo "DESTINO_AUSENTE: o contexto exige $variavel e nenhum DESTINO foi passado. Sem destino nao ha declaracao para comparar, e nao ter o que comparar nao e aprovacao. Passe DESTINO=<hml|prod>."; return 1; }
+  [[ -f "$tabela" && -r "$tabela" ]] || { echo "TABELA_ILEGIVEL: nao consegui ler a declaracao em '$tabela'. Nao conseguir perguntar nao e resposta."; return 1; }
+
+  # CONTROLE POSITIVO DA LEITURA. Tabela legivel mas sem nenhuma linha de
+  # declaracao daria zero casamentos para QUALQUER destino, e zero casamentos
+  # sem controle vira "nao declarado" quando a verdade e "nao li nada".
+  n="$(awk '$1 == "CHAVE"' "$tabela" | grep -c . || true)"
+  [[ "$n" -gt 0 ]] || { echo "TABELA_SEM_DECLARACAO: '$tabela' nao tem nenhuma linha comecando por \`CHAVE\`. Tabela sem declaracao nenhuma reprova tudo por outro motivo que nao o do destino, e aprovar seria pior."; return 1; }
+
+  # O destino tem de aparecer em ALGUMA declaracao. Separado da busca do par
+  # para que "destino que ninguem declarou" e "destino declarado sem ESTA
+  # exigencia" sejam dois desfechos, e nao um.
+  if [[ -z "$(awk -v d="$destino" '$1 == "CHAVE" && $2 == d' "$tabela")" ]]; then
+    echo "DESTINO_NAO_DECLARADO: o destino '$destino' nao tem nenhuma linha em '$tabela'. Destinos declarados: $(awk '$1 == "CHAVE" { print $2 }' "$tabela" | sort -u | tr '\n' ' ')."
+    return 1
+  fi
+
+  linhas="$(awk -v d="$destino" -v v="$variavel" '$1 == "CHAVE" && $2 == d && $3 == v { print $4 }' "$tabela")"
+  n="$(printf '%s' "$linhas" | grep -c . || true)"
+  if [[ "$n" -eq 0 ]]; then
+    echo "EXIGENCIA_NAO_DECLARADA: o destino '$destino' existe em '$tabela', mas nao declara $variavel. O contexto EXIGE essa variavel, e exigencia sem declaracao para o destino reprova -- declare a impressao digital dela na tabela."
+    return 1
+  fi
+  if [[ "$n" -gt 1 ]]; then
+    echo "DECLARACAO_AMBIGUA: '$tabela' declara $variavel para '$destino' $n vezes ($(printf '%s' "$linhas" | tr '\n' ' ')). Declaracao ambigua nao e declaracao: deixe uma linha."
+    return 1
+  fi
+
+  declarada="$linhas"
+  if [[ ! "$declarada" =~ ^[0-9a-f]{12}$ ]]; then
+    echo "DECLARACAO_MAL_FORMADA: a impressao declarada para $variavel em '$destino' e '$declarada', e a forma e 12 digitos hexadecimais minusculos (os 12 primeiros do sha256). Impressao que nao tem forma de impressao nao compara com nada."
+    return 1
+  fi
+
+  # SO AQUI O VALOR ENTRA, e ele entra como MEDIDO, nunca como esperado. Esta
+  # ordem e o conserto inteiro: o esperado ja estava decidido pela tabela antes
+  # de este script olhar o ambiente.
+  [[ -n "$valor" ]] || { echo "VALOR_AUSENTE: $variavel esta ausente ou vazia no ambiente deste build (vazio nao e valor), e o destino '$destino' declara a impressao $declarada."; return 1; }
+
+  local medida; medida="$(impressao_de "$valor")"
+  if [[ "$medida" != "$declarada" ]]; then
+    echo "IMPRESSAO_DIVERGENTE: $variavel do ambiente tem impressao $medida, e o destino '$destino' declara $declarada. E chave de OUTRO ambiente: assada na imagem, o painel de '$destino' colhe token que a API daquele ambiente nao valida (o servidor manda \`siteKey\` na avaliacao), e o captcha do painel para. Nao corrija a tabela para calar o portao -- pegue a chave do destino no provedor, pelo nome, como o passo 7.2 de \`infra/roteiro-provisionamento.md\` manda."
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# AS ISCAS, NOS DOIS SENTIDOS. A chave declarada APROVA e a chave do outro
+# ambiente REPROVA -- as duas provadas aqui, porque portao que so reprova e
+# portao que ninguem deixa ligado, e portao que so aprova nao e portao.
+#
+# As iscas usam valores INVENTADOS e as impressoes deles, calculadas na hora:
+# nenhuma chave de verdade entra no autoteste, e ele roda sem rede, sem docker e
+# sem a tabela de producao. O par "declarada aprova / do outro ambiente reprova"
+# e montado com DOIS valores distintos cujas impressoes vao para dois destinos
+# distintos da tabela de mentira -- e ai a troca de destino e a unica diferenca.
+# ---------------------------------------------------------------------------
+autoteste() {
+  local erros=0 m tmp
+  # GLOBAL, e nao `local`, por causa do `trap`: o trap roda no EXIT do script,
+  # quando a funcao ja voltou e um `local` nao existe mais -- sob `set -u` isso
+  # vira "tmp: unbound variable" e um `exit 1` DEPOIS do veredito impresso, que
+  # e a pior forma de errar (o autoteste dizia APROVADO e saia 1).
+  TMP_DO_AUTOTESTE="$(mktemp -d "${TMPDIR:-/tmp}/autoteste-chave-de-site.XXXXXX")"
+  trap 'rm -rf "${TMP_DO_AUTOTESTE:-}"' EXIT
+  tmp="$TMP_DO_AUTOTESTE"
+
+  # DE PROPOSITO SEM A FORMA DE UMA CHAVE DE VERDADE (sem o prefixo `6L`, sem
+  # 40 caracteres): o portao compara IMPRESSOES, entao a forma do valor nao
+  # importa para a medicao -- e valor com cara de chave numa isca e o que faz
+  # varredura de segredo reprovar um PR que nao tem segredo nenhum.
+  local chave_hml='isca-de-homologacao-nao-e-chave'
+  local chave_prod='isca-de-producao-nao-e-chave'
+  local imp_hml imp_prod
+  imp_hml="$(impressao_de "$chave_hml")"; imp_prod="$(impressao_de "$chave_prod")"
+
+  # CONTROLE DO PROPRIO AUTOTESTE: duas iscas com a MESMA impressao nao provariam
+  # divergencia nenhuma, e o caso "do outro ambiente reprova" passaria vazio.
+  if [[ "$imp_hml" == "$imp_prod" ]]; then
+    echo "REPROVA: as duas iscas tem a MESMA impressao ($imp_hml). O autoteste nao prova divergencia e vale nada" >&2
+    return 1
+  fi
+
+  cat > "$tmp/tabela.txt" <<'PROSA'
+Prosa antes da tabela, de proposito: ela tem quatro palavras por linha e nao
+pode ser lida como declaracao. hml VITE_CAPTCHA_SITE_KEY aaaaaaaaaaaa mentira
+PROSA
+  printf 'CHAVE hml  VITE_CAPTCHA_SITE_KEY %s isca-hml\n'  "$imp_hml"  >> "$tmp/tabela.txt"
+  printf 'CHAVE prod VITE_CAPTCHA_SITE_KEY %s isca-prod\n' "$imp_prod" >> "$tmp/tabela.txt"
+
+  # O CODIGO DE SAIDA E A MENSAGEM SAO CONFERIDOS JUNTOS. So a mensagem nao
+  # bastaria: uma funcao que imprimisse o motivo e saisse 0 passaria em todas as
+  # iscas negativas e aprovaria tudo na vida real.
+  isca() { # motivo-esperado, descricao, destino, variavel, valor, [tabela]
+    local esperado="$1" desc="$2" destino="$3" variavel="$4" valor="$5" tabela="${6:-$tmp/tabela.txt}" rc=0
+    m="$(veredito_da_chave "$tabela" "$destino" "$variavel" "$valor")" || rc=$?
+    if [[ "$esperado" == APROVA ]]; then
+      if [[ "$rc" -eq 0 && -z "$m" ]]; then
+        printf '  [ok] %s\n' "$desc"
+      else
+        printf '  [REPROVA] %s -- devia APROVAR e saiu %s: %s\n' "$desc" "$rc" "${m:-<sem mensagem>}" >&2; erros=$((erros+1))
+      fi
+      return
+    fi
+    if [[ "$rc" -ne 0 && "$m" == "$esperado"* ]]; then
+      printf '  [ok] %s -> %s\n' "$desc" "$esperado"
+    elif [[ "$rc" -eq 0 ]]; then
+      printf '  [REPROVA] %s -- esperava %s e APROVOU\n' "$desc" "$esperado" >&2; erros=$((erros+1))
+    else
+      printf '  [REPROVA] %s -- esperava %s e saiu: %s\n' "$desc" "$esperado" "$m" >&2; erros=$((erros+1))
+    fi
+  }
+
+  echo "--- iscas da declaracao da chave de site ---"
+
+  # OS DOIS SENTIDOS, que e o que o portao existe para fazer.
+  isca APROVA "a chave DECLARADA para hml aprova em hml" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml"
+  isca IMPRESSAO_DIVERGENTE "a chave de PRODUCAO reprova quando o destino e hml (o defeito de 04/11/2026)" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_prod"
+  # E a simetria: nao e "prod e errada", e "a do outro ambiente e errada".
+  isca APROVA "controle da simetria: a chave declarada para prod aprova em prod" \
+    prod VITE_CAPTCHA_SITE_KEY "$chave_prod"
+  isca IMPRESSAO_DIVERGENTE "a chave de HOMOLOGACAO reprova quando o destino e prod" \
+    prod VITE_CAPTCHA_SITE_KEY "$chave_hml"
+
+  # AUSENCIA, CADA UMA COM O NOME DELA. Sem estas, os quatro casos de "nao sei"
+  # colapsariam num desfecho so -- ou, pior, num aviso e `exit 0`.
+  isca DESTINO_AUSENTE "destino vazio reprova com desfecho proprio" \
+    "" VITE_CAPTCHA_SITE_KEY "$chave_hml"
+  isca DESTINO_NAO_DECLARADO "destino que a tabela nao conhece reprova com desfecho proprio" \
+    qa VITE_CAPTCHA_SITE_KEY "$chave_hml"
+  isca EXIGENCIA_NAO_DECLARADA "destino conhecido SEM a exigencia declarada reprova com desfecho proprio" \
+    hml VITE_OUTRA_COISA "$chave_hml"
+  isca VALOR_AUSENTE "valor vazio reprova com desfecho proprio, e nao como divergencia" \
+    hml VITE_CAPTCHA_SITE_KEY ""
+  isca TABELA_ILEGIVEL "tabela inexistente reprova como 'nao consegui perguntar'" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/nao-existe.txt"
+
+  : > "$tmp/vazia.txt"
+  isca TABELA_SEM_DECLARACAO "tabela legivel e VAZIA reprova com desfecho proprio, nao como destino ausente" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/vazia.txt"
+
+  # Tabela que e SO prosa: legivel, com conteudo, e nenhuma linha `CHAVE`. E o
+  # caso que separa "nao li nada" de "li e nao achei".
+  printf 'hml VITE_CAPTCHA_SITE_KEY %s sem-o-marcador\n' "$imp_hml" > "$tmp/so-prosa.txt"
+  isca TABELA_SEM_DECLARACAO "linha sem o marcador \`CHAVE\` nao conta como declaracao" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/so-prosa.txt"
+
+  printf 'CHAVE hml VITE_CAPTCHA_SITE_KEY %s a\nCHAVE hml VITE_CAPTCHA_SITE_KEY %s b\n' \
+    "$imp_hml" "$imp_hml" > "$tmp/duplicada.txt"
+  isca DECLARACAO_AMBIGUA "duas linhas para o mesmo par reprovam mesmo sendo IGUAIS" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/duplicada.txt"
+
+  printf 'CHAVE hml VITE_CAPTCHA_SITE_KEY NAO-E-IMPRESSAO x\n' > "$tmp/mal-formada.txt"
+  isca DECLARACAO_MAL_FORMADA "impressao fora da forma reprova antes de comparar" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/mal-formada.txt"
+
+  # A impressao TRUNCADA nao vale como igual: 12 digitos e a forma, e prefixo de
+  # 11 nao e impressao de nada. Mesmo espirito do caso do #161 em que a arvore
+  # com prefixo de 7 nao conta como igual.
+  printf 'CHAVE hml VITE_CAPTCHA_SITE_KEY %s truncada\n' "${imp_hml:0:11}" > "$tmp/truncada.txt"
+  isca DECLARACAO_MAL_FORMADA "impressao truncada em 11 digitos nao conta como igual" \
+    hml VITE_CAPTCHA_SITE_KEY "$chave_hml" "$tmp/truncada.txt"
+
+  # --- A TABELA DE VERDADE, conferida pela forma e nao pelo valor ----------
+  # Ela nao entra nos casos acima de proposito: o autoteste nao deve depender de
+  # qual chave esta declarada hoje. O que ele cobra e que o arquivo que o portao
+  # vai ler EXISTA e seja legivel pela mesma regra -- sem isto, uma tabela
+  # renomeada deixaria o portao reprovando tudo e ninguem saberia por que.
+  echo "--- a tabela de verdade ---"
+  if [[ -f "$TABELA_DE_CHAVES" ]]; then
+    local reais; reais="$(awk '$1 == "CHAVE" { print $2 "/" $3 "/" $4 }' "$TABELA_DE_CHAVES" | sort)"
+    if [[ -z "$reais" ]]; then
+      printf '  [REPROVA] %s existe mas nao tem nenhuma linha de declaracao (primeiro campo CHAVE)\n' "$TABELA_DE_CHAVES" >&2; erros=$((erros+1))
+    else
+      printf '  [ok] %s declara: %s\n' "$TABELA_DE_CHAVES" "$(tr '\n' ' ' <<<"$reais")"
+      local mal; mal="$(awk '$1 == "CHAVE" && $4 !~ /^[0-9a-f]{12}$/ { print $2 "/" $3 "/" $4 }' "$TABELA_DE_CHAVES")"
+      [[ -z "$mal" ]] || { printf '  [REPROVA] impressao fora da forma na tabela de verdade: %s\n' "$(tr '\n' ' ' <<<"$mal")" >&2; erros=$((erros+1)); }
+      local dup; dup="$(awk '$1 == "CHAVE" { print $2, $3 }' "$TABELA_DE_CHAVES" | sort | uniq -d)"
+      [[ -z "$dup" ]] || { printf '  [REPROVA] par destino/variavel declarado duas vezes na tabela de verdade: %s\n' "$(tr '\n' ' ' <<<"$dup")" >&2; erros=$((erros+1)); }
+    fi
+  else
+    printf '  [REPROVA] a tabela que o portao le NAO existe em %s\n' "$TABELA_DE_CHAVES" >&2; erros=$((erros+1))
+  fi
+
+  (( erros == 0 )) || { printf '\nO PORTAO ESTA CEGO: %s isca(s) com resultado errado\n' "$erros" >&2; return 1; }
+  printf '\nAUTOTESTE DA CHAVE DE SITE APROVADO\n'
+  return 0
+}
+
+if [[ "${ACAO:-}" == autoteste ]]; then autoteste; exit $?; fi
 
 nome="${1:?nome da imagem}"; contexto="${2:?contexto}"; alvo="${3:-}"
 : "${REGISTRO:?defina REGISTRO, ex.: southamerica-east1-docker.pkg.dev/<projeto>/bichu}"
@@ -114,24 +379,33 @@ repo="$REGISTRO/$nome"
 # O que cada contexto exige do ambiente do build. Contexto fora desta tabela
 # nao exige nada e segue como antes -- `.` (prod/migrador) e `web` nao tem
 # captcha e nao podem passar a exigir variavel nova.
+#
+# `DESTINO` so e cobrado quando esta lista NAO esta vazia, e por isso as outras
+# quatro imagens continuam sendo construidas sem ele: elas nao assam nada que
+# dependa de ambiente, entao exigir destino delas seria cerimonia, e cerimonia e
+# o que faz operador decorar um valor qualquer para o portao calar.
 ctx="${contexto#./}"; ctx="${ctx%/}"
 exigidas=()
 case "$ctx" in
   admin) exigidas=(VITE_CAPTCHA_SITE_KEY) ;;
 esac
 
-sha256_hex() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
-
 build_args=(--build-arg "BUILD_COMMIT=$commit" --build-arg "BUILD_TREE=$arvore")
 sufixo_chave=""
 for var in ${exigidas[@]+"${exigidas[@]}"}; do
   eval "valor=\${$var:-}"
-  if [[ -z "$valor" ]]; then
-    echo "::error::o contexto '$ctx' exige a variavel de ambiente $var, e ela esta AUSENTE ou VAZIA neste build (vazio nao e valor). Ela mora no \`.env\` do host -- declarada em \`.env.example\` e no passo do \`admin/\` em \`infra/roteiro-provisionamento.md\`; exporte-a antes de chamar este script (\`set -a; . .env; set +a\`) ou injete-a no ambiente do job. Sem ela o build do painel sairia 0 e o login recusaria com 'captcha indisponivel': construir e o que reprova aqui, nao o login do operador." >&2
+  # A DECLARACAO VEM ANTES DO VALOR, e e ela que decide. `veredito_da_chave` ja
+  # cobre "ausente ou vazia" (`VALOR_AUSENTE`), entao nao ha um `if` separado
+  # para isso aqui: dois lugares decidindo a mesma coisa e um lugar que fica
+  # atras do outro. A mensagem de como conseguir a chave desceu para o desfecho,
+  # que e onde quem le o erro esta olhando.
+  if ! motivo="$(veredito_da_chave "$TABELA_DE_CHAVES" "${DESTINO:-}" "$var" "$valor")"; then
+    echo "::error::o contexto '$ctx' nao pode ser construido para o destino '${DESTINO:-<nenhum>}': $motivo" >&2
+    echo "  A chave de SITE do destino sai do PROVEDOR, pelo nome, e nunca do \`.env\` deste repositorio (medido em 04/11/2026: o \`.env\` local nao tem \`VITE_CAPTCHA_SITE_KEY\` e a \`CAPTCHA_SITE_KEY\` dele e a de PRODUCAO). O comando esta no passo 7.2 de \`infra/roteiro-provisionamento.md\`; a declaracao por destino, em \`infra/cd/chaves-de-site-por-destino.txt\`." >&2
     exit 1
   fi
   build_args+=(--build-arg "$var")
-  sufixo_chave+="-k$(printf '%s' "$valor" | sha256_hex | cut -c1-12)"
+  sufixo_chave+="-k$(impressao_de "$valor")"
 done
 # A ARQUITETURA ENTRA NA TAG. Sem ela, a tag de arvore e a mesma para amd64 e
 # arm64, e a primeira publicada ganha a chave para sempre.

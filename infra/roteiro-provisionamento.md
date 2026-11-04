@@ -449,12 +449,39 @@ test -z "$(git status --porcelain)" || echo "REPROVA: arvore suja, nao publique 
 
 #### 7.2 — Construir e publicar
 
+> **Este passo mandava carregar o `.env` deste repositório, e isso estava
+> errado.** Corrigido em 04/11/2026; a medição que sustenta a correção está
+> logo abaixo, em 7.2.1.
+
 ```bash
 export REGISTRO=southamerica-east1-docker.pkg.dev/bichu-app-508914/bichu
-# A chave de SITE do reCAPTCHA entra por NOME, lida do ambiente: o valor nunca
-# aparece em argv, em log nem em historico. O script RECUSA construir `admin/`
-# sem ela, porque o painel sairia com o login recusando "captcha indisponivel".
-set -a; . .env; set +a
+# O DESTINO É EXPLÍCITO. `infra/cd/chaves-de-site-por-destino.txt` declara, por
+# destino, a impressão digital da chave de site que aquele destino deve assar, e
+# o portão compara o ambiente com a DECLARAÇÃO antes de construir. Sem
+# `DESTINO`, o build do painel reprova com `DESTINO_AUSENTE` -- de propósito:
+# "nao sei para onde isto vai" não pode virar aprovação.
+export DESTINO=hml   # em producao: prod
+
+# A CHAVE DE SITE SAI DO PROVEDOR, PELO NOME, E NUNCA DO `.env` DESTE
+# REPOSITÓRIO. Ela entra no script por NOME (`--build-arg VAR`), então o valor
+# não aparece em argv, em log nem em histórico. O `| wc -l` não é zelo: filtro
+# que não casa devolve vazio, e vazio seguiria como "não tenho a chave" em vez
+# de "não consegui perguntar".
+chave_do_destino() { # <display name no provedor>
+  local n; n="$(gcloud recaptcha keys list --project=bichu-app-508914 \
+    --filter="displayName=$1" --format='value(name)')"
+  [ "$(printf '%s\n' "$n" | grep -c .)" = 1 ] || {
+    echo "REPROVA: o provedor devolveu $(printf '%s\n' "$n" | grep -c .) chave(s) para displayName=$1, e o esperado e exatamente 1" >&2
+    return 1
+  }
+  printf '%s' "$n"
+}
+export VITE_CAPTCHA_SITE_KEY="$(chave_do_destino bichu-app-hml)"   # em producao: bichu-app
+# Confirme a impressão digital contra a declaração ANTES de gastar um build.
+# Isto é conferência, não configuração: quem reprova de verdade é o portão.
+printf '%s' "$VITE_CAPTCHA_SITE_KEY" | shasum -a 256 | cut -c1-12
+grep "^CHAVE $DESTINO " infra/cd/chaves-de-site-por-destino.txt
+# as duas linhas acima tem de mostrar a MESMA impressao
 
 bash infra/cd/construir-imagem.sh bichu-app       .            prod
 bash infra/cd/construir-imagem.sh bichu-migrador  .            migrador
@@ -462,6 +489,43 @@ bash infra/cd/construir-imagem.sh bichu-web       web
 bash infra/cd/construir-imagem.sh bichu-admin-web admin
 bash infra/cd/construir-imagem.sh bichu-edge      infra/caddy
 ```
+
+#### 7.2.1 — Por que o `.env` deste repositório não serve (medido em 04/11/2026)
+
+O passo acima mandava `set -a; . .env; set +a` antes de construir o `admin/`,
+como se o `.env` do repositório fosse a fonte da chave de homologação. **Não é**,
+e o portão aprovava de qualquer jeito porque conferia que *alguma* chave chegou
+na imagem, nunca **qual** — o esperado saía da mesma variável que o build usara.
+É a família que o #161 fechou no `API_BASE_URL` do APK.
+
+O que foi medido, na subida de homologação de 04/11/2026:
+
+| medição | resultado |
+| --- | --- |
+| `CAPTCHA_SITE_KEY` do `.env` deste repositório | impressão `e7e002d715e9` |
+| `VITE_CAPTCHA_SITE_KEY` do `.env` deste repositório | **não existe** — o `set -a; . .env` nunca produziria a variável que o `admin/` exige |
+| as duas chaves do projeto no provedor | `bichu-app-hml` → `7f62b3562293`; `bichu-app` → `e7e002d715e9` |
+| `CAPTCHA_SITE_KEY` no ambiente da API de homologação **de pé** | impressão `7f62b3562293` |
+| chave no pacote servido em `admin-hml.bichu.app/assets/` | `7f62b3562293` |
+| as 6 tags de `bichu-admin-web` publicadas no registro | todas `-k7f62b3562293`, nenhuma `-ke7e002d715e9` |
+
+**Conclusão: `7f62b3562293` (`bichu-app-hml`) é a chave de homologação, e a do
+`.env` é a de PRODUÇÃO (`bichu-app`).** O que decide não é "está no ar em
+homologação": é que o servidor manda `siteKey` **dentro** da avaliação
+(`src/modules/admin-access/adapters/external/recaptcha-enterprise.ts`), então a
+chave assada no painel tem de ser a mesma que a API daquele ambiente valida.
+Painel de homologação com a chave de produção colhe token que a API de
+homologação não valida, e o captcha do painel **para**.
+
+**As duas chaves são legítimas** — nenhuma está obsoleta e nenhuma é chave de
+teste do provedor: são duas chaves Enterprise `SCORE` vivas no mesmo projeto,
+uma por ambiente. Por isso o conserto foi tornar o destino **explícito**, e não
+escolher uma.
+
+**O que NÃO distingue os dois destinos:** as duas chaves permitem o mesmo
+domínio (`bichu.app`, que no reCAPTCHA cobre os subdomínios). O domínio não
+separa `hml` de `prod`, e um portão que decidisse por ele aprovaria as duas em
+qualquer lugar.
 
 Cada chamada imprime quatro linhas. **Guarde `ref=` e `arvore=` de cada uma: é
 o plano.** `commit=` é informativo (ele alimenta a sonda de `/v1/health` e o
@@ -905,11 +969,28 @@ sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
 
    ```bash
    ADMIN_HOSTS=https://admin-hml.bichu.app   # em producao: https://admin.bichu.app
-   # A chave de SITE do reCAPTCHA Enterprise, publica, e build arg do admin-web
-   # (sem ela o login do painel recusa). O mesmo valor de CAPTCHA_SITE_KEY.
-   VITE_CAPTCHA_SITE_KEY=<chave de site do reCAPTCHA>
    # ADMIN_CSP_UPLOAD=<host público de UploadIntent.url>  -- quando decidido;
    # vazio, o envio de imagem pelo painel fica bloqueado pela CSP
+   ```
+
+   **`VITE_CAPTCHA_SITE_KEY` não vai no `.env` do host, e até 04/11/2026 este
+   passo mandava pôr.** Ela é *build arg* da imagem do painel, e a imagem do
+   painel é construída **nesta máquina** (passo 7.2), não na VM — o `.env` do
+   host nunca participa daquele build. Posta aqui ela não faz nada, e dava a
+   impressão de que o painel pegaria a chave do host.
+
+   O que importa no `.env` do host é **`CAPTCHA_SITE_KEY`**, que é a chave com
+   que a **API** valida o token. Ela tem de ser a chave **do mesmo destino** que
+   o painel assou: o servidor manda `siteKey` dentro da avaliação, e as duas
+   divergindo é captcha recusado em toda tentativa de login. Confira sem imprimir
+   o valor, e compare com a declaração de `infra/cd/chaves-de-site-por-destino.txt`:
+
+   ```bash
+   # NA VM. Mede o processo que ESTÁ atendendo, e não o arquivo: processo novo
+   # não refaz a troca de segredos do boot.
+   sudo docker inspect bichu-api-1 --format '{{range .Config.Env}}{{println .}}{{end}}' \
+     | grep '^CAPTCHA_SITE_KEY=' | cut -d= -f2- | tr -d '\n' | sha256sum | cut -c1-12
+   # em homologacao tem de dar 7f62b3562293 (`bichu-app-hml`)
    ```
 
 2. Construir e recriar **só** os dois serviços. Recriar a borda derruba as
@@ -929,8 +1010,11 @@ sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
    pilha que está servindo.
 
    ```bash
-   # AQUI
-   bash infra/cd/construir-imagem.sh bichu-admin-web admin        # exige VITE_CAPTCHA_SITE_KEY
+   # AQUI. `DESTINO` e `VITE_CAPTCHA_SITE_KEY` saem do passo 7.2 -- do PROVEDOR,
+   # pelo nome, nunca do `.env` deste repositorio. Sem `DESTINO` o build do
+   # painel reprova com `DESTINO_AUSENTE`, e com a chave do outro ambiente
+   # reprova com `IMPRESSAO_DIVERGENTE`.
+   bash infra/cd/construir-imagem.sh bichu-admin-web admin        # exige DESTINO + VITE_CAPTCHA_SITE_KEY
    bash infra/cd/construir-imagem.sh bichu-edge      infra/caddy
 
    # NA VM, uma por vez, o painel antes da borda
