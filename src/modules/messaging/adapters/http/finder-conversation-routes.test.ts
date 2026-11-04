@@ -130,6 +130,9 @@ function bancada(cenario: Cenario = {}): Bancada {
   ];
 
   const repositorio: ConversationRepository = {
+    divulgarContatoSobConsentimento: () => {
+      throw new Error('a divulgacao do contato e de `enrichFinderFoundReport`, nao destas rotas');
+    },
     contarParaOSino: () => {
       throw new Error('as rotas do achador nao contam o sino de ninguem');
     },

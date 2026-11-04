@@ -84,6 +84,19 @@ export type AuditAction =
   /** FATIA E: denuncia de perfil, de foto ou de publicacao. */
   | 'content_report.created'
   | 'conversation.blocked'
+  /**
+   * Quem achou o pet, e NÃO TEM CONTA, consentiu em o contato dele chegar ao
+   * tutor, e ele chegou (decisão do cliente, 03/11/2026;
+   * `PATCH /v1/finder/found-report`). Ator `anonymous`, pelo mesmo motivo dos
+   * outros eventos do achador: não há conta.
+   *
+   * **O metadata registra o ATO, e nunca o dado.** Nem telefone, nem e-mail, nem
+   * nome: só a finalidade, a versão do texto consentido e QUAIS campos saíram. Os
+   * valores vivem na mensagem da conversa e em `finder_contact_consents`, que é
+   * onde a finalidade declarada os justifica — a trilha não é um segundo lugar
+   * onde dado pessoal de terceiro passa a existir.
+   */
+  | 'found_report.finder_contact_shared'
   | 'moderation.decided'
   /**
    * ADR-0025 emenda 3. Uma conta do app criou, editou ou cancelou um encontro da
