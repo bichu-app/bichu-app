@@ -1141,7 +1141,67 @@ verificar-app: verificar-tokens-gerados-autoteste verificar-conformidade-do-app-
 # fluxo de tela roda `make e2e` a mais, e o README diz isso.
 RECIBO_DE_FECHAMENTO := fechamento.local.txt
 
-fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK
+# ---------------------------------------------------------------------------
+# POR QUE ESTE ALVO EXIGE `API_BASE_URL_DO_APK=` NA LINHA DE COMANDO (03/11/2026)
+#
+# Ele chama `$(MAKE) apk`, e ate 03/11/2026 esse APK saia apontado para a
+# PROPRIA MAQUINA sem nada acusar: o `API_BASE_URL` do alto deste arquivo e
+# `http://localhost:$(PORTA)`, atribuido com `:=`, entao o ambiente nao
+# sobrepoe -- so a LINHA DE COMANDO vence. Pior: o portao do APK montava a
+# cadeia de controle positivo a partir dessa MESMA variavel, entao ele achava
+# `localhost` no `libapp.so` e APROVAVA.
+#
+# E ai este alvo seguia para `carimbar-fechamento`. O resultado nao era um
+# fechamento que falhava: era um RECIBO CERTIFICANDO um APK que aponta para a
+# maquina local. Recibo que mente e pior que receita que recusa, porque o
+# gancho de `pre-push` passa a aprovar em vez de calar.
+#
+# POR QUE UM NOME PROPRIO, E NAO `API_BASE_URL=` DIRETO
+#
+# Porque `API_BASE_URL` na linha de comando sobrepoe para os SETE sub-makes, e
+# nao so para o do APK -- e os outros seis precisam da URL LOCAL. MEDIDO em
+# 03/11/2026: `verificar-portas` (dentro de `make verificar`, que e o passo 1
+# daqui) le a config renderizada e compara a porta publicada pela borda com a
+# porta da URL; `urlsplit('https://hml.bichu.app').port` e vazio e o esquema da
+# o padrao **443**, contra a **$(PORTA)** publicada -- e o grupo `aplicacao`
+# ainda exige que `PUBLIC_BASE_URL`, `TAG_BASE_URL`, `WEB_BASE_URL` e
+# `API_BASE_URL` concordem entre si, o que um override de uma so quebra. O
+# `compose.yaml` tambem le `API_BASE_URL`, entao a pilha efemera subiria
+# configurada para hml.
+#
+# Com nome proprio, o valor chega SO ao sub-make do APK, por
+# `$(MAKE) apk API_BASE_URL=...` -- que naquele sub-make tem origem
+# `command line` (medido numa sonda de make), que e justamente o que o portao
+# do APK exige. Os outros seis continuam com a URL local, origem `file`, byte
+# por byte como antes.
+#
+# RECUSA, E NAO VALOR FORCADO, pelo mesmo motivo do `make ios`: forcar
+# `https://hml.bichu.app` aqui trocaria um padrao silencioso por outro, e no
+# dia em que o fechamento fosse de um build de producao ele carimbaria um
+# recibo de hml saindo 0.
+#
+# NAO CONTORNE ESTA RECUSA passando um valor qualquer para calar o `make`: o
+# valor vai PARA DENTRO do binario e o portao do APK o mede la. Um valor errado
+# aqui nao fica num log -- fica no aparelho de quem instalar o pacote.
+# ---------------------------------------------------------------------------
+fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK (EXIGE API_BASE_URL_DO_APK= na linha de comando)
+	@test '$(origin API_BASE_URL_DO_APK)' = 'command line' || { \
+	  echo 'REPROVA: `make fechar-integracao` EXIGE `API_BASE_URL_DO_APK=` na LINHA DE COMANDO, e nao recebeu.' >&2; \
+	  echo '' >&2; \
+	  echo '  RODE ISTO:' >&2; \
+	  echo '      make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app' >&2; \
+	  echo '' >&2; \
+	  echo '  POR QUE a recusa existe, e ela e DELIBERADA: este alvo chama `$$(MAKE) apk`, e o `API_BASE_URL` padrao deste Makefile e `http://localhost:$(PORTA)`, atribuido com `:=` -- o ambiente NAO sobrepoe, so a linha de comando vence. Sem o valor aqui, o APK sai apontado para a PROPRIA MAQUINA.' >&2; \
+	  echo '  E ate 03/11/2026 o portao do APK APROVAVA esse pacote, porque montava a cadeia de controle positivo a partir da MESMA variavel que o build usou -- autoaprovacao. O fechamento seguia para `carimbar-fechamento` e produzia um RECIBO CERTIFICANDO um APK de `localhost`. Recibo que mente e pior que receita que recusa.' >&2; \
+	  echo '' >&2; \
+	  echo '  O NOME E PROPRIO de proposito: `API_BASE_URL=` na linha de comando sobreporia para os SETE sub-makes, e os outros seis precisam da URL LOCAL (`verificar-portas` compararia a porta publicada $(PORTA) com os 443 do padrao de `https://`, e o `compose.yaml` subiria a pilha efemera apontada para hml). Com este nome, o valor chega so ao sub-make do APK.' >&2; \
+	  echo '' >&2; \
+	  echo '  Para fechar com outro destino, passe-o aqui: o valor vai PARA DENTRO do binario e o portao do APK o mede la.' >&2; \
+	  exit 1; }
+	@test -n '$(API_BASE_URL_DO_APK)' || { \
+	  echo 'REPROVA: `API_BASE_URL_DO_APK=` veio VAZIO. Isto nao e o mesmo que ausente, e e pior: o valor vazio chegaria ao sub-make do APK, `verificar-apk.sh` cairia no padrao dele por `$${API_BASE_URL:-...}` e o fechamento compilaria para um destino que NINGUEM declarou -- saindo 0.' >&2; \
+	  echo '  Rode:  make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app' >&2; \
+	  exit 1; }
 	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-migracao-em-banco-com-dado -> verificar-app -> apk."
 	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade"
 	@echo "  e sobe a API numa pilha efemera."
@@ -1154,7 +1214,7 @@ fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da
 	@$(MAKE) --no-print-directory verificar-boot-do-alvo-prod
 	@$(MAKE) --no-print-directory verificar-migracao-em-banco-com-dado
 	@$(MAKE) --no-print-directory verificar-app
-	@$(MAKE) --no-print-directory apk
+	@$(MAKE) --no-print-directory apk API_BASE_URL='$(API_BASE_URL_DO_APK)'
 	@$(MAKE) --no-print-directory carimbar-fechamento
 
 # O carimbo mora num alvo PROPRIO para poder ser exercitado sem compilar um APK
