@@ -719,7 +719,19 @@ jobs:
       - name: a matriz de rastreabilidade concorda com o contrato
         run: node dist/tools/portao-rastreabilidade.js
 
-      - name: compatibilidade contra main
+      # 04/11/2026: ESTE PASSO SE CHAMAVA `compatibilidade contra main`, e o
+      # nome afirmava um mecanismo que nao existe. A base que ele mede e
+      # `origin/` + `github.base_ref` -- a branch de DESTINO do PR, que neste
+      # repositorio e a `development`, e nunca a `main`. Ver a linha `ref=`
+      # abaixo, que e de onde sai o veredito.
+      #
+      # O nome ERRADO JA ENSINOU A COISA ERRADA: uma frente foi instruida a
+      # medir quebra de contrato contra a `main`. E a mesma familia de defeito
+      # dos dois comentarios que este PR corrige -- prosa que afirma mecanismo
+      # ausente --, e por isso ela entra aqui junto.
+      #
+      # NENHUMA LINHA DE LOGICA MUDOU: so o nome do passo.
+      - name: compatibilidade contra a base do PR
         if: github.event_name == 'pull_request'
         run: |
           # ESTE TRECHO TINHA A MESMA FORMA DO DEFEITO DO SONARCLOUD, e por
