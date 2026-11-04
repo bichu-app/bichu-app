@@ -43,13 +43,19 @@ RUN xcaddy build "$CADDY_VERSAO" --with "github.com/mholt/caddy-ratelimit@$RATEL
 # que constroi, e a borda passou a ser um deles.
 FROM caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 AS commit
 ARG BUILD_COMMIT
+# A ARVORE de que a imagem saiu (02/11/2026). Vazio NAO reprova aqui: o build
+# pelo compose nao sabe a arvore do contexto, e so o CD exige o carimbo --
+# `infra/cd/construir-imagem.sh` sempre o passa e confere o artefato, e
+# `infra/cd/implantar.sh` recusa implantar imagem com a arvore vazia.
+ARG BUILD_TREE
 RUN set -eu; \
     if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
       echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
       echo "  Via compose: BUILD_COMMIT=\$(git rev-parse HEAD) docker compose build edge" >&2; \
       exit 1; \
     fi; \
-    printf '%s' "$BUILD_COMMIT" > /commit
+    printf '%s' "$BUILD_COMMIT" > /commit; \
+    printf '%s' "${BUILD_TREE:-}" > /arvore
 
 # --------------------------------------------------------------------------
 # ESTAGIO final: a MESMA base de antes, com o binario trocado
@@ -66,6 +72,7 @@ LABEL org.opencontainers.image.title="bichu-edge" \
       org.opencontainers.image.revision="${BUILD_COMMIT}"
 COPY --from=construcao /usr/bin/caddy /usr/bin/caddy
 COPY --from=commit /commit /etc/bichu/commit
+COPY --from=commit /arvore /etc/bichu/arvore
 # A imagem de prateleira DECLARA `cap_net_bind_service` no binario dela; o
 # binario novo nasce sem. Como a borda roda como root, isso nao muda nada hoje,
 # e fica escrito para quem for tirar o root: vai precisar do `setcap` de volta.
