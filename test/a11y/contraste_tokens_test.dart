@@ -49,12 +49,12 @@ void main() {
     pares = jsonDecode(arquivo.readAsStringSync()) as Map<String, dynamic>;
   });
 
-  test('a lista tem os 86 pares que o paragrafo 7 declara', () {
+  test('a lista tem os 92 pares que o paragrafo 7 declara', () {
     expect(
       (pares['pares'] as List).length,
-      86,
+      92,
       reason:
-          'o paragrafo 7 mede 86 pares. Se o numero mudou, a tabela do '
+          'o paragrafo 7 mede 92 pares. Se o numero mudou, a tabela do '
           'documento e este arquivo sairam de sincronia, e o portao passa a '
           'cobrir menos do que anuncia.',
     );
@@ -207,6 +207,146 @@ void main() {
           '$comPreenchimentoNaFrente. Manteiga, Verde suave e Goiaba suave '
           'sao so preenchimento (paragrafo 6.3). Par de texto assim nao e um '
           'valor a ajustar: e o erro que a trava A existe para impedir.',
+    );
+  });
+  test('tinta de alerta proibida nao aparece como FRENTE em par nenhum', () {
+    // O MESMO MECANISMO do teste acima, para a TERCEIRA categoria de
+    // preenchimento -- e ela existe porque passou pelas duas redes que ja
+    // havia.
+    //
+    // Em 04/11/2026 o coracao de "curtido" do Mural pintava `urgency` sobre
+    // `surface`: 1.62:1 no tema escuro, contra o piso de 3.0 do SC 1.4.11 para
+    // icone. Nenhum portao alcancava:
+    //
+    //   - `nunca-texto` nao o cobre, e o teste acima explica por que: ele
+    //     exige que o papel meca MENOS de 3:1 sobre a superficie CLARA, e
+    //     `urgency` mede 6.99:1 la. Ele e ilegivel num tema SO;
+    //   - a lista de pares nao o cobria porque `urgency` nao aparecia como
+    //     frente em par nenhum, e lista a mao nao reprova o par que ninguem
+    //     escreveu. A AUSENCIA era a fresta, e e ela que este teste fecha:
+    //     daqui em diante a ausencia e COBRADA.
+    //
+    // Por que nao basta o portao de widget real: ele mede o que esta montado,
+    // e as ~98 telas de `app/lib/telas` nao estao (BICHUS-322). Este teste nao
+    // depende de montagem nenhuma -- ele proibe o par na TABELA, que e a fonte
+    // de onde o desenho sai.
+    final declarados = pares[r'$nunca_frente'] as Map<String, dynamic>?;
+    expect(
+      declarados,
+      isNotNull,
+      reason:
+          r'REPROVA: $nunca_frente desapareceu de design/contrast-pairs.json. '
+          'Sem a declaracao este teste nao tem o que cobrar e vira verde por '
+          'nao estar olhando -- que e exatamente como o defeito de 04/11/2026 '
+          'chegou ao cliente.',
+    );
+
+    final papeis = (declarados!['papeis'] as Map<String, dynamic>).keys.toSet();
+    expect(
+      papeis,
+      unorderedEquals(<String>['urgency', 'urgency-container']),
+      reason:
+          'a lista de tintas proibidas como frente mudou. Ela nao e um detalhe '
+          'de implementacao: cada papel ali e um preenchimento que tem tinta '
+          'propria (`on-urgency`), e tirar um de lista libera a cor de 1.62:1 '
+          'de volta.',
+    );
+
+    // CONTROLE POSITIVO DA MEDICAO, antes de a proibicao valer: todo papel
+    // declarado precisa MESMO ser ilegivel sobre a superficie de ALGUM tema.
+    // Papel que passa nos dois temas nao pertence a esta lista, e proibicao
+    // com papel legitimo dentro e proibicao que a proxima pessoa contorna com
+    // razao. O limite e por tema de proposito -- e justamente ser legivel em
+    // UM tema que define esta categoria.
+    for (final papel in papeis) {
+      final claro = razaoWcag(
+        tokens.cor('cor.claro.$papel'),
+        tokens.cor('cor.claro.surface'),
+      );
+      final escuro = razaoWcag(
+        tokens.cor('cor.escuro.$papel'),
+        tokens.cor('cor.escuro.surface'),
+      );
+      expect(
+        claro < 3.0 || escuro < 3.0,
+        isTrue,
+        reason:
+            '"$papel" esta declarado como nunca-frente e mede '
+            '${claro.toStringAsFixed(2)}:1 no claro e '
+            '${escuro.toStringAsFixed(2)}:1 no escuro, acima de 3:1 nos DOIS. '
+            'Ou a cor mudou, ou o papel nao deveria estar nesta lista.',
+      );
+    }
+
+    // E O CASAMENTO E PELO ULTIMO SEGMENTO, nunca por substring: `on-urgency`
+    // CONTEM `urgency`, e a versao por substring acusaria `banner-perdido` e
+    // `selo-perdido` -- os dois pares CORRETOS, em que a tinta cai sobre o
+    // preenchimento a que ela pertence. Esse erro ja foi cometido uma vez no
+    // teste acima e a licao esta escrita la.
+    final lista = (pares['pares'] as List).cast<Map<String, dynamic>>();
+    final comAlertaNaFrente = lista
+        .where((p) {
+          final ref = (p['frente'] as String).replaceAll(RegExp(r'[{}]'), '');
+          return papeis.contains(ref.split('.').last);
+        })
+        .map((p) => p['id'])
+        .toList();
+    expect(
+      comAlertaNaFrente,
+      isEmpty,
+      reason:
+          'tinta de alerta aparece como cor de FRENTE em: $comAlertaNaFrente. '
+          '`urgency` e `urgency-container` sao PREENCHIMENTO: a tinta deles e '
+          '`on-urgency` e `on-urgency-container`, e ela vale SOBRE eles. Par '
+          'assim nao e um valor a ajustar -- e o defeito de 04/11/2026 '
+          'voltando.',
+    );
+
+    // CONTROLE NEGATIVO DO PROPRIO FILTRO: ele tem de casar quando o par
+    // proibido existe. Sem isto um erro de caminho ou de chave deixaria
+    // `comAlertaNaFrente` vazio para sempre, e a lista vazia acima seria
+    // cegueira em vez de conformidade -- o modo de falha mais provavel deste
+    // teste, e o mais silencioso.
+    final plantado = <Map<String, dynamic>>[
+      ...lista,
+      <String, dynamic>{
+        'id': 'controle/par-plantado',
+        'frente': '{cor.escuro.urgency}',
+        'fundo': '{cor.escuro.surface}',
+      },
+    ];
+    final pegou = plantado
+        .where((p) {
+          final ref = (p['frente'] as String).replaceAll(RegExp(r'[{}]'), '');
+          return papeis.contains(ref.split('.').last);
+        })
+        .map((p) => p['id'])
+        .toList();
+    expect(
+      pegou,
+      <String>['controle/par-plantado'],
+      reason:
+          'REPROVA: o filtro nao pegou um par proibido PLANTADO. Ele esta '
+          'olhando para o lugar errado, e a lista vazia do cheque acima nao '
+          'significa nada.',
+    );
+
+    // E O CONTRARIO TAMBEM: a tinta que PERTENCE ao preenchimento continua
+    // sendo medida sobre ele. Se estes dois pares sairem da tabela, a
+    // proibicao acima passa a ser a unica coisa dita sobre `urgency` e o
+    // banner de pet perdido fica sem medicao nenhuma.
+    final ids = lista.map((p) => p['id']).toSet();
+    expect(
+      ids,
+      containsAll(<String>[
+        'claro/banner-perdido',
+        'escuro/banner-perdido',
+        'claro/selo-perdido',
+        'escuro/selo-perdido',
+      ]),
+      reason:
+          'os pares em que `urgency` e FUNDO sairam da tabela. A proibicao de '
+          'frente nao substitui a medicao do uso correto.',
     );
   });
 }

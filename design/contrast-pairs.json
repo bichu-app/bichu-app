@@ -1,5 +1,5 @@
 {
-  "$description": "Os 86 pares de contraste do paragrafo 7 de docs/06-design-system.md. Os 16 ultimos entraram em 21/09/2026 com o conjunto `Icone de pet` (BICHUS-144): duas tintas e so duas, `text-secondary` no estado padrao e `primary` no selecionado, medidas contra as tres superficies e o primary-container de cada tema. Eram 70. Medidos em 17/09/2026 sobre a Framboesa e REMEDIDOS em 21/09/2026 sobre o Carmim #9E0B3A, a semente que o cliente escolheu na secao 21. Dezenove dos 70 mudaram de valor; nenhum mudou de veredito, e os tres pares criticos da tinta sobre superficie subiram (7,06 -> 7,39 no pior deles). A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
+  "$description": "Os 92 pares de contraste do paragrafo 7 de docs/06-design-system.md. Os 6 ultimos entraram em 04/11/2026: a tinta de SUCESSO medida contra as tres superficies de cada tema. Ela ja era pintada como tinta de icone e de texto de estado em `widgets/selo_de_validado.dart`, `widgets/trilha_de_convites.dart` e mais quatro sitios, e nao tinha par nenhum sobre superficie -- so sobre o container dela. Na mesma data entrou $nunca_frente, que faz a AUSENCIA de um papel na frente ser cobrada em vez de so acontecer. Eram 86, e os 16 anteriores entraram em 21/09/2026 com o conjunto `Icone de pet` (BICHUS-144): duas tintas e so duas, `text-secondary` no estado padrao e `primary` no selecionado, medidas contra as tres superficies e o primary-container de cada tema. Eram 70. Medidos em 17/09/2026 sobre a Framboesa e REMEDIDOS em 21/09/2026 sobre o Carmim #9E0B3A, a semente que o cliente escolheu na secao 21. Dezenove dos 70 mudaram de valor; nenhum mudou de veredito, e os tres pares criticos da tinta sobre superficie subiram (7,06 -> 7,39 no pior deles). A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
   "$contrato": {
     "formula": "WCAG 2.1 luminancia relativa, (L1 + 0.05) / (L2 + 0.05), com linearizacao sRGB. L = 0.2126*R + 0.7152*G + 0.0722*B sobre os canais linearizados.",
     "frente_e_fundo": "Referencia DTCG a um token de design/tokens.json, entre chaves. Cor com alfa nao entra nesta lista: contraste se mede sobre a cor composta, e o scrim nao carrega texto.",
@@ -242,6 +242,36 @@
       "razao_esperada": 6.54,
       "veredito": "passa",
       "nota": "Sem papel semantico \"on-success-container\" no paragrafo 6.3; referencia o primitivo que o paragrafo 7 mede."
+    },
+    {
+      "id": "claro/success-sobre-surface",
+      "tema": "claro",
+      "uso": "Tinta de sucesso / superficie",
+      "frente": "{cor.claro.success}",
+      "fundo": "{cor.claro.surface}",
+      "piso": 4.5,
+      "razao_esperada": 5.11,
+      "veredito": "passa"
+    },
+    {
+      "id": "claro/success-sobre-surface-alt",
+      "tema": "claro",
+      "uso": "Tinta de sucesso / superficie alternativa",
+      "frente": "{cor.claro.success}",
+      "fundo": "{cor.claro.surface-alt}",
+      "piso": 4.5,
+      "razao_esperada": 4.94,
+      "veredito": "passa"
+    },
+    {
+      "id": "claro/success-sobre-surface-sunken",
+      "tema": "claro",
+      "uso": "Tinta de sucesso / superficie afundada",
+      "frente": "{cor.claro.success}",
+      "fundo": "{cor.claro.surface-sunken}",
+      "piso": 4.5,
+      "razao_esperada": 4.82,
+      "veredito": "passa"
     },
     {
       "id": "claro/warning-sobre-surface",
@@ -718,6 +748,36 @@
       "veredito": "passa"
     },
     {
+      "id": "escuro/success-sobre-surface",
+      "tema": "escuro",
+      "uso": "Tinta de sucesso / superficie",
+      "frente": "{cor.escuro.success}",
+      "fundo": "{cor.escuro.surface}",
+      "piso": 4.5,
+      "razao_esperada": 10.72,
+      "veredito": "passa"
+    },
+    {
+      "id": "escuro/success-sobre-surface-alt",
+      "tema": "escuro",
+      "uso": "Tinta de sucesso / superficie alternativa",
+      "frente": "{cor.escuro.success}",
+      "fundo": "{cor.escuro.surface-alt}",
+      "piso": 4.5,
+      "razao_esperada": 9.88,
+      "veredito": "passa"
+    },
+    {
+      "id": "escuro/success-sobre-surface-sunken",
+      "tema": "escuro",
+      "uso": "Tinta de sucesso / superficie afundada",
+      "frente": "{cor.escuro.success}",
+      "fundo": "{cor.escuro.surface-sunken}",
+      "piso": 4.5,
+      "razao_esperada": 8.75,
+      "veredito": "passa"
+    },
+    {
       "id": "escuro/warning-sobre-surface",
       "tema": "escuro",
       "uso": "Aviso (neutro): texto / superficie",
@@ -979,5 +1039,14 @@
       "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
       "norma": "1.4.11"
     }
-  ]
+  ],
+  "$nunca_frente": {
+    "$description": "PAPEIS QUE NUNCA PODEM SER COR DE FRENTE, e a ausencia deles na lista de pares passa a ser COBRADA em vez de so acontecer. Entrou em 04/11/2026 com o coracao de 'curtido' do Mural, que pintava `urgency` sobre `surface`: 1.62:1 no tema escuro (ember.800 #6B220A sobre bark.900 #17150F), contra o piso de 3.0 do SC 1.4.11 para icone. Nenhum portao alcancava, e a razao e estrutural: `urgency` nao aparecia como FRENTE em nenhum dos 86 pares, e lista a mao nao reprova o par que ninguem escreveu. Quem cobra: test/a11y/contraste_tokens_test.dart.",
+    "$por_que_nao_entra_em_nunca_texto": "`$extensions.bichu.nunca-texto` em design/tokens.json e a lista VIZINHA e NAO serve para estes papeis, por duas razoes medidas. Primeira: aquele teste exige que todo papel declarado meca MENOS de 3:1 sobre a superficie clara, porque e a medicao que sustenta a proibicao -- e `urgency` mede 6.99:1 no claro, legivel. Papel legivel naquela lista e ruido, e o proprio teste diz isso. Segunda: aquela lista e o contrato do NOME FEIO no gerador Dart (`actionFillRawDoNotUseAsText`), e `urgency` e um FUNDO legitimo e muito usado (banner e selo de pet perdido) -- renomear o campo quebraria os usos corretos para consertar o incorreto. Estes papeis sao uma TERCEIRA categoria: preenchimento que e ilegivel em UM tema so, e por isso passa pelas duas redes.",
+    "$contrato": "Nenhum par desta tabela pode ter um destes papeis como `frente`. A proibicao e sobre a FRENTE e so sobre ela: os mesmos papeis continuam sendo FUNDO em pares vigentes (`banner-perdido`, `selo-perdido`), e e sobre eles que a tinta `on-urgency` e medida. O casamento e pelo ULTIMO SEGMENTO do caminho, nunca por substring: `on-urgency` CONTEM `urgency`, e a versao por substring acusaria justamente o par correto.",
+    "papeis": {
+      "urgency": "Preenchimento do banner de pet perdido. 6.99:1 sobre a superficie clara e 1.62:1 sobre a escura: legivel num tema e ilegivel no outro, que e exatamente o acidente que faz esta classe de defeito parecer intencional. A tinta dele e `on-urgency`, sobre `urgency`.",
+      "urgency-container": "Preenchimento do selo de pet perdido. 1.09:1 sobre a superficie clara e 1.62:1 sobre a escura -- ilegivel nos dois. No tema escuro ele tem o MESMO valor de `urgency` (#6B220A), entao o mesmo defeito escrito com o outro nome mediria igual. A tinta dele e `on-urgency-container`."
+    }
+  }
 }

@@ -623,9 +623,28 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
           tooltip: _curti
               ? _AcoesDaPublicacao.descurtir
               : _AcoesDaPublicacao.curtir,
+          // O CORACAO E UM ICONE DE ESTADO SOBRE A SUPERFICIE DO CARTAO, e os
+          // dois ramos sao o par que `design/contrast-pairs.json` ja publica
+          // para exatamente esse objeto -- `icone-pet-selecionado-sobre-
+          // surface` (`primary`, 7.84 claro / 8.59 escuro) e
+          // `icone-pet-sobre-surface` (`text-secondary`, 8.60 / 9.31), piso
+          // 3.0 do SC 1.4.11 nos dois.
+          //
+          // O ramo marcado pintava `cores.urgency`, que e tinta de
+          // PREENCHIMENTO do banner de pet perdido: no tema escuro `urgency` e
+          // `ember.800` (#6B220A) sobre `surface` `bark.900` (#17150F), **1.62:1**
+          // -- ilegivel. No claro o mesmo par dava 6.99:1 e passava, e foi o
+          // acidente de um tema so que fez o defeito parecer intencional.
+          // `urgency` tem a tinta dela (`on-urgency`) e ela vale SOBRE
+          // `urgency`, nunca sobre a superficie do cartao.
+          //
+          // `urgency` tambem e o vocabulario de PET PERDIDO no produto, e o
+          // cartao do perdido divide a timeline com a publicacao do Mural: um
+          // coracao de curtida vestido daquela cor disputa aquele significado
+          // na mesma lista.
           icon: Icon(
             _curti ? Icons.favorite : Icons.favorite_border,
-            color: _curti ? cores.urgency : cores.textSecondary,
+            color: _curti ? cores.primary : cores.textSecondary,
           ),
         ),
         Text(
