@@ -325,6 +325,7 @@ function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
     radius_m: previa.raioEmMetros,
     area_label: previa.rotuloDaArea,
     blockers: previa.bloqueios,
+    warnings: previa.avisos,
   };
 }
 
