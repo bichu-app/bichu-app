@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-versao-dos-termos verificar-versao-dos-termos-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-versao-dos-termos verificar-versao-dos-termos-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste ios verificar-ios-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -558,6 +558,55 @@ apk: verificar-apk-autoteste ## compila o APK de release de hml, confere o pacot
 
 verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor das defines, literalidade do comando) precisam reprovar (nao compila nada)
 	sh infra/verificacao/verificar-apk.sh --autoteste
+
+# ---------------------------------------------------------------------------
+# `make ios` -- E POR QUE ELE EXIGE `API_BASE_URL=` NA LINHA DE COMANDO
+#
+# ATE 03/11/2026 ESTE ALVO NAO EXISTIA, e o roteiro de verificacao do iOS
+# mandava rodar `make ios`. Alvo que o roteiro cita e que nunca foi criado nao
+# e lacuna de documentacao: e um `make: *** No rule to make target` na mao de
+# quem segue o roteiro.
+#
+# A ARMADILHA QUE ELE FECHA, medida no banco de dados do `make` em 03/11/2026:
+#
+#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:3200
+#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:3200
+#   make -pn API_BASE_URL=... | grep '^API_BASE_URL'  -> o valor passado
+#
+# A atribuicao da linha 64 e `:=`, entao o AMBIENTE NAO SOBREPOE -- so a LINHA
+# DE COMANDO vence. Um alvo que herdasse o padrao compilaria o iOS apontado
+# para `http://localhost:3200`, que no aparelho do cliente nao fala com
+# servidor nenhum e nao tem como dizer isso: a tela so nao carrega.
+#
+# ELE RECUSA EM VEZ DE FORCAR O VALOR, e a escolha e deliberada. Forcar
+# `API_BASE_URL=https://hml.bichu.app` dentro do alvo tiraria o `localhost` do
+# caminho, mas trocaria um padrao silencioso por outro: no dia em que o destino
+# certo fosse `prd.bichu.app`, `make ios` compilaria para hml e sairia 0, e o
+# portao de valor aprovaria -- porque o controle positivo tambem viria do valor
+# forcado. Recusar obriga quem compila a DECLARAR o destino, e e esse valor
+# declarado que o portao passa a cobrar dentro do binario. Um build de app de
+# loja e raro e deliberado; exigir uma palavra a mais nele custa menos que um
+# APK entregue para o endereco errado -- e isso ja aconteceu com o `apk`.
+#
+# `$(origin API_BASE_URL)` e o que distingue `command line` de `file`: ele
+# diz DE ONDE o valor veio, que e exatamente a pergunta que o padrao `:=`
+# torna invisivel para um `ifdef` ou um `[ -z ]`.
+#
+# O ALVO `apk` TEM O DEFEITO IDENTICO e NAO foi mexido aqui, por decisao: e
+# alvo que o cliente usa todo dia, e trocar a forma dele de carona num conserto
+# do iOS e mudanca sem pedido. O conserto do PORTAO, esse sim, ja o cobre --
+# ver `infra/verificacao/verificar-ios.sh`.
+# ---------------------------------------------------------------------------
+ios: verificar-ios-autoteste ## compila o iOS de release (--no-codesign), confere as chaves do Generated.xcconfig e o VALOR das dart-define dentro do binario; EXIGE API_BASE_URL= na linha de comando
+	@test '$(origin API_BASE_URL)' = 'command line' || { \
+	  echo 'REPROVA: `make ios` EXIGE `API_BASE_URL=` na LINHA DE COMANDO, e nao recebeu.' >&2; \
+	  echo '  MEDIDO em 03/11/2026: este Makefile atribui `API_BASE_URL := http://localhost:3200` com `:=`, entao o AMBIENTE NAO SOBREPOE e so a linha de comando vence. Herdar o padrao aqui compilaria o iOS apontado para a PROPRIA MAQUINA, e o aparelho do cliente nao tem como dizer isso -- a tela so nao carrega.' >&2; \
+	  echo '  Rode:  make ios API_BASE_URL=https://hml.bichu.app' >&2; \
+	  exit 1; }
+	API_BASE_URL='$(API_BASE_URL)' sh infra/verificacao/verificar-ios.sh
+
+verificar-ios-autoteste: ## as iscas das conferencias do iOS (valor das defines dentro do binario, endereco local proibido, literalidade do comando) precisam reprovar (nao compila nada, nao precisa de Xcode)
+	sh infra/verificacao/verificar-ios.sh --autoteste
 
 # ---------------------------------------------------------------------------
 # OS PORTOES QUE SO EXISTIAM NA ESTEIRA (28/09/2026)
