@@ -253,37 +253,53 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
+  /// **A LINHA, e ela é um controle SÓ QUANDO HÁ APELIDO** (03/11/2026).
+  ///
+  /// O servidor passou a entregar a conexão aceita cuja outra ponta não tem
+  /// apelido — antes ela era filtrada, e uma conexão que as duas pessoas
+  /// confirmaram desaparecia. Quem não tem apelido continua **sem perfil a
+  /// abrir**, porque o endereço do perfil é o apelido: a linha é escrita com o
+  /// nome, e **sem** toque e **sem** a seta, que é a affordance da porta.
+  ///
+  /// É o mesmo desenho de `_nomeDeQuemPediu` na caixa de pedidos. **Nenhum
+  /// rótulo novo entra aqui**: "perfil incompleto" ou equivalente seria decisão
+  /// de produto, e ela não foi tomada.
   Widget _linha(BichuCores cores, TextTheme textos, PessoaConectada pessoa) {
     final nome = pessoa.nomeParaLer;
+    final corpo = Container(
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: FichaDaPessoa(
+              nome: nome,
+              urlDaFoto: pessoa.photoIconUrl,
+              comSelo: false,
+              lado: TelaDeMinhasConexoes.ladoDoCirculo,
+              estiloDoNome: textos.titleMedium?.copyWith(color: cores.textPrimary),
+              abaixoDoNome: Text(
+                '${TelaDeMinhasConexoes.rotuloDePets(pessoa.petsCount)} · '
+                '${TelaDeMinhasConexoes.rotuloDeConexoes(pessoa.connectionsCount)}',
+                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+              ),
+            ),
+          ),
+          if (pessoa.temPorta) Icon(Icons.chevron_right, color: cores.textSecondary),
+        ],
+      ),
+    );
+
+    final apelido = pessoa.handle;
+    if (!pessoa.temPorta || apelido == null) return corpo;
+
     return Semantics(
       button: true,
       label: TelaDeMinhasConexoes.rotuloDoPerfilDe(nome),
       excludeSemantics: true,
       child: InkWell(
-        onTap: () => context.push(Rotas.perfilDe(pessoa.handle)),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 64),
-          padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: FichaDaPessoa(
-                  nome: nome,
-                  urlDaFoto: pessoa.photoIconUrl,
-                  comSelo: false,
-                  lado: TelaDeMinhasConexoes.ladoDoCirculo,
-                  estiloDoNome: textos.titleMedium?.copyWith(color: cores.textPrimary),
-                  abaixoDoNome: Text(
-                    '${TelaDeMinhasConexoes.rotuloDePets(pessoa.petsCount)} · '
-                    '${TelaDeMinhasConexoes.rotuloDeConexoes(pessoa.connectionsCount)}',
-                    style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, color: cores.textSecondary),
-            ],
-          ),
-        ),
+        onTap: () => context.push(Rotas.perfilDe(apelido)),
+        child: corpo,
       ),
     );
   }

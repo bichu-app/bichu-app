@@ -1,0 +1,121 @@
+---
+/**
+ * O contato de quem achou, com o ato explícito de consentir (decisão do cliente,
+ * 03/11/2026).
+ *
+ * ## Onde este bloco mora, e por que
+ *
+ * No CORPO da página, dentro do ramo `estaPerdido` — e **não** na barra de ação,
+ * que é `position: sticky` e existe para o botão. Os campos ficam ligados ao
+ * `<form method="post">` daquela barra pelo atributo `form`, que é HTML puro e
+ * não precisa de JavaScript.
+ *
+ * Fica dentro de `estaPerdido` por construção, e não por condição própria: sem
+ * pet marcado como perdido não há botão de avisar, não há aviso, e não há a quem
+ * mandar contato. Os dois casos de e2e do PR 162 afirmam que `input[type=email]`,
+ * `input[type=tel]` e `textarea` somam ZERO no estado não perdido.
+ *
+ * ## Por que `<details>`
+ *
+ * Ele fecha a seção **sem JavaScript**, e isso preserva o "é um toque" de quem só
+ * quer avisar e ir embora — que é o caminho principal. Quem quer ser chamado
+ * abre, preenche e marca.
+ *
+ * ## A caixinha
+ *
+ * Nasce desmarcada, sempre. O consentimento é a PRESENÇA do campo no corpo, e a
+ * ausência é a recusa — a mesma forma do contrato, onde `accepted` só aceita
+ * `true` e o "não" se diz omitindo o objeto.
+ *
+ * Depois de uma recusa de validação ela volta marcada **se a pessoa a tinha
+ * marcado**: isso é repovoar o formulário com o ato dela, e não pré-marcar. O
+ * texto que ela leu é o mesmo, e o registro só nasce no envio que der certo.
+ */
+import { TAG, CONSENTIMENTO_DO_ACHADOR } from '../conteudo/tag.ts';
+import Icone from './Icone.astro';
+import type { CamposDoContato, ErroDoContato } from '../dominio/contato-do-achador.ts';
+
+interface Props {
+  /** O `id` do `<form>` da barra de ação: os campos moram aqui e enviam lá. */
+  formulario: string;
+  /** O que a pessoa digitou, quando a tela está voltando de uma recusa. */
+  campos: CamposDoContato | null;
+  erros: readonly ErroDoContato[];
+}
+const { formulario, campos, erros } = Astro.props;
+const temErro = (qual: ErroDoContato): boolean => erros.includes(qual);
+// Aberto quando há erro para ler, ou quando a pessoa já estava preenchendo:
+// seção fechada com erro dentro é erro que ninguém vê.
+const aberto = erros.length > 0 || (campos !== null && campos.consentiu);
+---
+<details class="contato" open={aberto}>
+  <summary class="contato__resumo">{TAG.contatoResumo}</summary>
+
+  {/*
+    O corpo é um elemento próprio porque o `grid` vai NELE, e não no `<details>`:
+    `display: grid` no `<details>` faz o navegador perder o esconde-conteúdo do
+    estado fechado, e os campos aparecem com a seta ainda fechada. Medido — a
+    isca de alvo de 48 px acusou a caixinha na página do pet perdido.
+  */}
+  <div class="contato__corpo">
+  <p class="campo__ajuda">{TAG.contatoTexto}</p>
+
+  <div class="campo">
+    <label class="campo__rotulo" for="contato-nome">{TAG.campoNomeDoAchador}</label>
+    <input class="campo__entrada" id="contato-nome" name="nome" type="text" form={formulario}
+      value={campos?.nome ?? ''} maxlength="60" autocomplete="name" />
+  </div>
+
+  <div class={`campo${temErro('contato-vazio') ? ' campo--erro' : ''}`}>
+    <label class="campo__rotulo" for="contato-email">{TAG.campoEmailDoAchador}</label>
+    <input class="campo__entrada" id="contato-email" name="email" type="email" form={formulario}
+      value={campos?.email ?? ''} autocomplete="email" inputmode="email" spellcheck="false" />
+  </div>
+
+  <div class={`campo${temErro('telefone') ? ' campo--erro' : ''}`}>
+    <label class="campo__rotulo" for="contato-telefone">{TAG.campoTelefoneDoAchador}</label>
+    <input class="campo__entrada" id="contato-telefone" name="telefone" type="tel" form={formulario}
+      value={campos?.telefone ?? ''} autocomplete="tel" inputmode="tel"
+      aria-describedby={temErro('telefone') ? 'contato-telefone-erro' : 'contato-telefone-ajuda'} />
+    {temErro('telefone') ? (
+      <p class="campo__erro" id="contato-telefone-erro">
+        <Icone nome="error" />{TAG.erroTelefoneDoAchador}
+      </p>
+    ) : (
+      <p class="campo__ajuda" id="contato-telefone-ajuda">{TAG.ajudaTelefoneDoAchador}</p>
+    )}
+  </div>
+
+  {temErro('contato-vazio') && (
+    <p class="campo__erro"><Icone nome="error" />{TAG.erroContatoVazio}</p>
+  )}
+
+  <div class="campo">
+    <label class="campo__rotulo" for="contato-recado">{TAG.campoRecado}</label>
+    <textarea class="campo__entrada" id="contato-recado" name="recado" form={formulario}
+      rows="3" maxlength="1000" aria-describedby="contato-recado-ajuda">{campos?.recado ?? ''}</textarea>
+    <p class="campo__ajuda" id="contato-recado-ajuda">{TAG.ajudaRecado}</p>
+  </div>
+
+  <div class={`consentimento${temErro('consentimento') ? ' consentimento--erro' : ''}`}>
+    <label class="consentimento__marca" for="contato-consentimento">
+      <input id="contato-consentimento" name="consentimento" type="checkbox" value="1"
+        form={formulario} checked={campos?.consentiu === true}
+        aria-describedby="consentimento-finalidade consentimento-texto" />
+      <span class="consentimento__rotulo">{TAG.consentimentoRotulo}</span>
+    </label>
+    <p class="consentimento__finalidade" id="consentimento-finalidade">{TAG.consentimentoFinalidade}</p>
+    {/*
+      O TEXTO QUE FICA GRAVADO, exibido inteiro e sem recorte.
+      É ele que `finder_contact_consents.consent_text` guarda, e por isso ele não
+      pode ficar atrás de um "leia mais": o registro afirma que a pessoa LEU isto.
+      `make verificar-texto-do-consentimento` prova que é o mesmo texto que o
+      servidor grava.
+    */}
+    <p class="consentimento__texto" id="consentimento-texto">{CONSENTIMENTO_DO_ACHADOR.texto}</p>
+    {temErro('consentimento') && (
+      <p class="campo__erro"><Icone nome="error" />{TAG.erroConsentimento}</p>
+    )}
+  </div>
+  </div>
+</details>

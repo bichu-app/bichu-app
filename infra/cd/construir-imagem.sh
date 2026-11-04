@@ -8,8 +8,11 @@
 #        construir-imagem.sh bichu-web web
 #        construir-imagem.sh bichu-admin-web admin   # exige VITE_CAPTCHA_SITE_KEY
 #
-# Saida (em $GITHUB_OUTPUT, ou na tela): ref=<registro>/<nome>@sha256:... e
-# commit=<commit gravado na imagem>.
+# Saida (em $GITHUB_OUTPUT, ou na tela):
+#   ref=<registro>/<nome>@sha256:...   o digest, que e o que se implanta
+#   commit=<commit gravado na imagem>  informativo (sonda de /v1/health, historico)
+#   arvore=<arvore do contexto>        O QUE O PLANO LEVA AO `implantar.sh`
+#   plataforma=<os/arch>               conferido no blob de configuracao
 #
 # POR QUE A CHAVE E A ARVORE E NAO O COMMIT. `development` e `main` chegam ao
 # mesmo codigo por commits diferentes (o merge cria um commit novo com a mesma
@@ -17,8 +20,24 @@
 # `development` ja construiu e testou em homologacao, e PROMOVE aquele digest
 # para producao em vez de reconstruir -- que e a regra: a mesma imagem nos
 # ambientes, promovida por digest, nunca reconstruida por ambiente. O commit
-# gravado na imagem continua sendo o de quem a construiu, e e ele que a sonda
-# confere.
+# gravado na imagem continua sendo o de quem a construiu.
+#
+# E POR QUE A IMAGEM CARIMBA A ARVORE, E NAO SO O COMMIT (02/11/2026). O commit
+# gravado e o de QUEM CONSTRUIU, que numa imagem reaproveitada nao e o commit
+# de quem implanta. O `implantar.sh` exigia igualdade de COMMIT, e as duas
+# regras juntas significavam que TODA imagem reaproveitada reprovava na
+# implantacao -- a contradicao foi medida no `bichu-edge` em 02/11: o carimbo
+# reprovava contra `fb8e5c2d` e aprovava contra `46d0587c`, e nao bloqueou
+# naquele dia so porque a borda nao precisou subir.
+#
+# A contradicao se resolve escolhendo o invariante certo, e ele e a ARVORE: e a
+# arvore que determina o binario, o commit e um rotulo colado em cima dela. Por
+# isso a imagem passou a carimbar `/etc/bichu/arvore` ao lado de
+# `/etc/bichu/commit`, e o `implantar.sh` confere a ARVORE contra a do plano.
+# Reaproveitar imagem de arvore igual passa; imagem de outra arvore reprova.
+# O commit continua gravado, e continua sendo o que a sonda de `/v1/health`
+# reporta -- ele responde "de que commit saiu isto", que e pergunta legitima;
+# o que ele nao serve e para autorizar o deploy.
 #
 # POR QUE A ARVORE NAO BASTA COMO CHAVE. Ha contexto cujo conteudo depende de
 # algo que NAO esta na arvore: o `admin/` assa a chave de SITE do reCAPTCHA no
@@ -42,10 +61,44 @@
 #      de reaproveitar, o valor que passamos tem de estar DENTRO da imagem.
 #      Este portao pede um ACHADO, nao uma ausencia -- por isso nao precisa de
 #      controle positivo: zero e reprova, nunca "nada a medir".
+#
+# A PLATAFORMA E EXPLICITA, E ELA ENTRA NA TAG (02/11/2026). Este script nao
+# tinha `--platform`, e a tag de arvore nao codificava arquitetura. Numa maquina
+# arm64 -- que e a de quem desenvolve -- sem `DOCKER_DEFAULT_PLATFORM=linux/amd64`
+# no ambiente ele publicava arm64 em silencio, e o portao do artefato APROVAVA,
+# porque le o commit rodando o conteiner sob emulacao (o `docker run` do Desktop
+# emula amd64/arm64 sem reclamar, e `cat /etc/bichu/commit` responde igual nas
+# duas). E, por causa do chaveamento pela arvore, uma imagem arm64 publicada uma
+# vez ficaria gravada sob a tag daquela arvore e seria REAPROVEITADA
+# indefinidamente -- o mesmo envenenamento de cache da chave do captcha, por
+# outra porta. Por isso:
+#
+#   a. a plataforma e PASSADA (`--platform`), nunca herdada do ambiente: variavel
+#      de ambiente ausente e o estado normal, e "esqueci de exportar" nao pode
+#      ser a diferenca entre amd64 e arm64;
+#   b. a arquitetura entra na TAG da arvore (`-linux-amd64`): imagem da
+#      arquitetura errada nao tem como ser reaproveitada como se fosse a certa,
+#      porque ela nem mora na mesma tag;
+#   c. o portao mede a plataforma no BLOB DE CONFIGURACAO da imagem
+#      (`docker image inspect` -> `.Os`/`.Architecture`), e NAO no `platform` do
+#      indice. O indice e metadado do registro e pode descrever o que quiser; o
+#      blob de configuracao e o que o runtime le para escolher o executavel, e e
+#      o unico que nao se engana sob emulacao.
 set -euo pipefail
 
 nome="${1:?nome da imagem}"; contexto="${2:?contexto}"; alvo="${3:-}"
 : "${REGISTRO:?defina REGISTRO, ex.: southamerica-east1-docker.pkg.dev/<projeto>/bichu}"
+
+# A plataforma do artefato. O destino hospedado e uma e2-small linux/amd64
+# (ADR-0029); `PLATAFORMA` existe para o dia em que houver outro destino, e nao
+# para ser esquecida. Nunca se le `DOCKER_DEFAULT_PLATFORM`: o ponto do conserto
+# de 02/11 e justamente nao depender de o ambiente estar posto.
+PLATAFORMA="${PLATAFORMA:-linux/amd64}"
+[[ "$PLATAFORMA" =~ ^[a-z0-9]+/[a-z0-9]+(/v[0-9]+)?$ ]] || {
+  echo "::error::PLATAFORMA='$PLATAFORMA' nao tem a forma <os>/<arch>[/variante], ex.: linux/amd64" >&2
+  exit 1
+}
+plat_os="${PLATAFORMA%%/*}"; plat_resto="${PLATAFORMA#*/}"; plat_arch="${plat_resto%%/*}"
 
 [[ -d "$contexto" && -f "$contexto/Dockerfile" ]] || {
   echo "::error::o contexto '$contexto' nao tem Dockerfile nesta arvore. A imagem $nome nao existe aqui, e o deploy dela reprova em vez de pular." >&2
@@ -69,7 +122,7 @@ esac
 
 sha256_hex() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
 
-build_args=(--build-arg "BUILD_COMMIT=$commit")
+build_args=(--build-arg "BUILD_COMMIT=$commit" --build-arg "BUILD_TREE=$arvore")
 sufixo_chave=""
 for var in ${exigidas[@]+"${exigidas[@]}"}; do
   eval "valor=\${$var:-}"
@@ -80,7 +133,9 @@ for var in ${exigidas[@]+"${exigidas[@]}"}; do
   build_args+=(--build-arg "$var")
   sufixo_chave+="-k$(printf '%s' "$valor" | sha256_hex | cut -c1-12)"
 done
-tag_arvore="arvore-$arvore${alvo:+-$alvo}$sufixo_chave"
+# A ARQUITETURA ENTRA NA TAG. Sem ela, a tag de arvore e a mesma para amd64 e
+# arm64, e a primeira publicada ganha a chave para sempre.
+tag_arvore="arvore-$arvore${alvo:+-$alvo}-$plat_os-$plat_arch$sufixo_chave"
 
 saida() { if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; fi; printf '%s=%s\n' "$1" "$2"; }
 
@@ -97,6 +152,10 @@ conferir_artefato() {
       set -u
       eval "esperado=\"\$$VAR_ALVO\""
       [ -n "$esperado" ] || { echo "a variavel nao chegou ao conteiner" >&2; exit 3; }
+      # `grep -rlF ... | head -3` NAO precisa materializar: este trecho roda no
+      # `sh` DO CONTEINER, que tem `set -u` e nao `pipefail` (medido em 02/11:
+      # `set -o` da imagem lista `pipefail off`, e o pipeline sai 0). Fora daqui,
+      # em bash com pipefail, a mesma forma sai 141.
       achou=""
       for raiz in /*; do
         case "$raiz" in /proc|/sys|/dev) continue ;; esac
@@ -122,6 +181,40 @@ conferir_artefato() {
   done
 }
 
+# Portao da PLATAFORMA, medido no BLOB DE CONFIGURACAO. `docker image inspect`
+# devolve `.Os`/`.Architecture` do config da imagem -- o que o runtime le para
+# escolher o executavel. O `platform` do indice do registro NAO serve aqui: ele
+# e metadado, descreve o que quiser, e e exatamente o que passa batido sob
+# emulacao. Este portao pede um ACHADO (dois campos com valor), entao zero e
+# reprova e nunca "nada a medir".
+conferir_plataforma() {
+  local imagem="$1" lido
+  lido="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$imagem")" \
+    || { echo "::error::nao consegui ler o blob de configuracao de $imagem. Nao conseguir conferir nao e aprovacao." >&2; exit 1; }
+  [[ -n "$lido" && "$lido" == */* ]] \
+    || { echo "::error::o blob de configuracao de $imagem nao declara os/arquitetura (veio '$lido')" >&2; exit 1; }
+  if [[ "$lido" != "$plat_os/$plat_arch" ]]; then
+    echo "::error::PLATAFORMA ERRADA: a imagem $imagem e '$lido' no blob de configuracao, e este build e de '$plat_os/$plat_arch'. Nao e erro de rede nem de memoria: na maquina de quem desenvolve (arm64) o \`docker build\` sem \`--platform\` constroi arm64, e o portao do commit aprova porque le o conteiner sob emulacao. Reprovando antes do push: uma imagem de arquitetura errada gravada sob a tag da arvore seria reaproveitada indefinidamente." >&2
+    exit 1
+  fi
+  echo "portao da plataforma: $imagem e $lido no blob de configuracao"
+}
+
+# Portao da ARVORE. A imagem tem de carimbar a arvore de que ela saiu, e esse
+# carimbo e o que o `implantar.sh` confere contra o plano. Imagem construida
+# fora deste script (um `make up` local, por exemplo) nasce com o carimbo VAZIO:
+# ela nao reprova no build, mas reprova na implantacao -- e e a resposta certa,
+# porque ninguem sabe de que arvore ela saiu.
+conferir_arvore() {
+  local imagem="$1" lido
+  lido="$(docker run --rm --entrypoint cat "$imagem" /etc/bichu/arvore 2>/dev/null || true)"
+  [[ "$lido" == "$arvore" ]] || {
+    echo "::error::ARVORE ERRADA: a imagem $imagem carimba a arvore '${lido:-<vazio>}' e este build e da arvore '$arvore'. Vazio significa imagem construida fora de \`infra/cd/construir-imagem.sh\` (ou anterior ao carimbo de 02/11): o CD nao implanta imagem cuja arvore ninguem sabe." >&2
+    exit 1
+  }
+  echo "portao da arvore: $imagem carimba a arvore $lido"
+}
+
 # "Nao existe" e resposta; "nao consegui perguntar" NAO e. So o NOT_FOUND vira
 # construcao nova; qualquer outro erro do registro reprova.
 if digest="$(gcloud artifacts docker images describe "$repo:$tag_arvore" --format='value(image_summary.digest)' 2>"${TMPDIR:-/tmp}/describe.err")"; then
@@ -134,19 +227,30 @@ fi
 if [[ -n "$digest" ]]; then
   ref="$repo@$digest"
   echo "reaproveitada: $repo:$tag_arvore ja existe ($digest), nada a construir"
-  docker pull -q "$ref" >/dev/null
+  # `--platform` tambem no pull: se o que esta no registro for um INDICE, o
+  # docker escolheria a arquitetura do host sem avisar.
+  docker pull -q --platform "$PLATAFORMA" "$ref" >/dev/null
   conferir_artefato "$ref"
+  conferir_plataforma "$ref"
+  conferir_arvore "$ref"
   gravado="$(docker run --rm --entrypoint cat "$ref" /etc/bichu/commit)"
 else
-  docker build ${alvo:+--target "$alvo"} "${build_args[@]}" \
-    -t "$repo:$tag_arvore" -t "$repo:commit-$commit${alvo:+-$alvo}$sufixo_chave" "$contexto"
+  docker build --platform "$PLATAFORMA" ${alvo:+--target "$alvo"} "${build_args[@]}" \
+    -t "$repo:$tag_arvore" -t "$repo:commit-$commit${alvo:+-$alvo}-$plat_os-$plat_arch$sufixo_chave" "$contexto"
   # Antes do push: uma imagem reprovada aqui NAO pode ficar gravada sob a tag
   # da arvore, que e exatamente o envenenamento que este portao existe para
   # impedir. O conteudo e o mesmo que o push publica.
   conferir_artefato "$repo:$tag_arvore"
+  conferir_plataforma "$repo:$tag_arvore"
+  conferir_arvore "$repo:$tag_arvore"
   docker push -q "$repo:$tag_arvore" >/dev/null
-  docker push -q "$repo:commit-$commit${alvo:+-$alvo}$sufixo_chave" >/dev/null
-  ref="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$repo:$tag_arvore" | grep "^$repo@" | head -1)"
+  docker push -q "$repo:commit-$commit${alvo:+-$alvo}-$plat_os-$plat_arch$sufixo_chave" >/dev/null
+  # MATERIALIZADO ANTES: `inspect | grep | head -1` punha o `grep` diante de um
+  # consumidor que sai no primeiro casamento, e sob `pipefail` o EPIPE do grep
+  # virava falha do pipeline -- a mesma familia de defeito do passo que dizia
+  # "o compose nao declara o servico admin-web" com o servico declarado.
+  repo_digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$repo:$tag_arvore")"
+  ref="$(grep "^$repo@" <<<"$repo_digests" | sed -n '1p')"
   gravado="$(docker run --rm --entrypoint cat "$ref" /etc/bichu/commit)"
 fi
 
@@ -154,3 +258,8 @@ fi
 [[ "$gravado" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::$ref nao tem commit gravado em /etc/bichu/commit (veio '$gravado')" >&2; exit 1; }
 saida ref "$ref"
 saida commit "$gravado"
+# A ARVORE sai junto do digest, e e ela que o plano leva ao `implantar.sh`
+# (`ARVORE=`/`ARVORE_APP=`/`ARVORE_MIGRADOR=`). O commit sai para a sonda de
+# `/v1/health` e para o historico, nao para autorizar o deploy.
+saida arvore "$arvore"
+saida plataforma "$plat_os/$plat_arch"

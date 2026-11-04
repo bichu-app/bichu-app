@@ -94,6 +94,9 @@ function bancada(estado: Estado = {}) {
       : estado.lista.map((parcial) => conversaAberta(parcial));
 
   const repositorio: ConversationRepository = {
+    divulgarContatoSobConsentimento: () => {
+      throw new Error('a divulgacao do contato do achador nao passa pelo servico com conta');
+    },
     abrirPorAviso: (abertura) => {
       aberturas.push(abertura);
       return Promise.resolve();

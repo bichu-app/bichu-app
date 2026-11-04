@@ -3,6 +3,11 @@ import type { CasoDaConversa } from '../domain/acesso-do-achador.js';
 import type { Papel } from '../domain/conversa-mediada.js';
 import type { MotivoDeRetencao } from '../domain/retencao-para-revisao.js';
 import type {
+  ConsentimentoGravado,
+  ContatoDivulgado,
+  FinalidadeDaDivulgacao,
+} from '../domain/divulgacao-de-contato.js';
+import type {
   CaseId,
   ConversationId,
   FoundReportId,
@@ -86,8 +91,30 @@ export interface NovaMensagem {
   readonly photoObjectKey?: string | null;
 }
 
-/** As três espécies de mensagem do Bichu (BICHUS-278). */
-export type EspecieDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
+/**
+ * As espécies de mensagem do Bichu (BICHUS-278, e `finder_contact` em 03/11/2026).
+ *
+ * Espelha o `CHECK` `conversation_messages_system_kind_conhecido` e
+ * `EspecieDaMensagemDoSistema` em `shared/db/schema.ts`.
+ */
+export type EspecieDoSistema =
+  | 'scan_notice'
+  | 'found_notice'
+  | 'redaction_warning'
+  | 'finder_contact';
+
+/** O consentimento e o contato a divulgar, como o módulo `found` os entrega. */
+export interface DivulgacaoDeContatoPedida {
+  readonly id: string;
+  readonly mensagemId: string;
+  readonly foundReportId: FoundReportId;
+  readonly finalidade: FinalidadeDaDivulgacao;
+  readonly versaoDoConsentimento: string;
+  /** O texto que o SERVIDOR publica para aquela versão. */
+  readonly textoDoConsentimento: string;
+  readonly contato: ContatoDivulgado;
+  readonly nomeDoPet: string | null;
+}
 
 /** A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41). */
 export interface ConversaDoAchador {
@@ -172,6 +199,23 @@ export interface ConversationRepository {
       readonly especie: EspecieDoSistema;
     },
   ): Promise<MensagemGravada>;
+
+  /**
+   * **NUMA TRANSAÇÃO SÓ:** grava o consentimento e entrega o contato do achador
+   * na conversa, e devolve a prova como ela ficou gravada.
+   *
+   * As duas escritas são uma operação de propósito. O estado perigoso é a
+   * mensagem existir sem a linha de consentimento — contato divulgado sem prova
+   * de que foi autorizado —, e transação é o que o torna impossível. O recado é
+   * montado AQUI DENTRO, a partir da linha lida de volta, e não pelo chamador:
+   * assim não existe caminho em que o recado seja montado sem a prova.
+   *
+   * `undefined` quando o resumo não resolve para conversa nenhuma.
+   */
+  divulgarContatoSobConsentimento(
+    resumo: Uint8Array,
+    pedido: DivulgacaoDeContatoPedida,
+  ): Promise<{ readonly consentimento: ConsentimentoGravado; readonly conversa: ConversationId } | undefined>;
 
   /** Quantas mensagens este papel mandou nesta conversa desde o instante dado. */
   contarMensagensDoParticipante(

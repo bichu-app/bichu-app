@@ -114,7 +114,7 @@ class PessoaConectada {
 
   factory PessoaConectada.doJson(Map<String, dynamic> json) {
     return PessoaConectada(
-      handle: json['handle'] as String,
+      handle: json['handle'] as String?,
       displayName: json['display_name'] as String?,
       petsCount: json['pets_count'] as int,
       connectionsCount: json['connections_count'] as int,
@@ -122,9 +122,15 @@ class PessoaConectada {
     );
   }
 
-  /// O apelido. **Não anulável**: cada linha é uma porta para o perfil, e o
-  /// perfil é endereçado pelo apelido.
-  final String handle;
+  /// O apelido. **ANULÁVEL desde 03/11/2026**, e a troca é o conserto de um
+  /// defeito que o cliente relatou: enquanto ele não era anulável, o servidor
+  /// filtrava a conexão sem apelido e uma conexão **aceita** desaparecia da
+  /// lista por um campo da OUTRA conta.
+  ///
+  /// **Quem não tem apelido não tem perfil a abrir** — isso continua valendo, e
+  /// é por isso que [temPorta] existe: a linha é escrita, mas não é um
+  /// controle. O mesmo desenho de [PessoaDaConexao] na caixa de pedidos.
+  final String? handle;
 
   /// O nome de exibição, **anulável no contrato**.
   final String? displayName;
@@ -138,11 +144,23 @@ class PessoaConectada {
   /// A derivada **`thumb`** da foto, ou nulo quando não há foto pronta.
   final String? photoIconUrl;
 
-  /// Como a pessoa é escrita na linha.
+  /// Como a pessoa é escrita na linha, **na ordem em que ela se reconhece** —
+  /// a mesma de `PessoaBloqueada.nomeParaLer`.
   String get nomeParaLer {
-    final nome = displayName;
-    if (nome != null && nome.trim().isNotEmpty) return nome;
-    return '@$handle';
+    final nome = displayName?.trim();
+    if (nome != null && nome.isNotEmpty) return nome;
+    final apelido = handle?.trim();
+    if (apelido != null && apelido.isNotEmpty) return '@$apelido';
+    return semNome;
+  }
+
+  /// **A LINHA É UMA PORTA PARA O PERFIL?** Só quando há apelido: o endereço do
+  /// perfil é o apelido (`getPersonProfile` o tem como NÃO anulável), e sem ele
+  /// não há rota a empurrar. Sem porta não há toque nem seta — e **nenhum
+  /// rótulo novo**: "perfil incompleto" seria decisão de produto.
+  bool get temPorta {
+    final apelido = handle?.trim();
+    return apelido != null && apelido.isNotEmpty;
   }
 
   /// A letra do círculo, que é o que substitui a foto quando não há.
@@ -151,6 +169,10 @@ class PessoaConectada {
     if (texto.isEmpty) return '?';
     return texto.substring(0, 1).toUpperCase();
   }
+
+  /// O que a linha escreve quando não há nome de exibição NEM apelido. É o
+  /// mesmo texto de `PessoaBloqueada.semNome` e da caixa de pedidos.
+  static const String semNome = 'Usuário sem nome';
 }
 
 /// `#/components/schemas/ConnectedPersonPage`.

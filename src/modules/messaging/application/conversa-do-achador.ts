@@ -7,9 +7,14 @@ import type { Instant } from '../../../shared/types/brands.js';
 import type {
   ConversaDoAchador,
   ConversationRepository,
+  DivulgacaoDeContatoPedida,
   MensagemGravada,
   MotivoDaDenuncia,
 } from '../ports/conversation-repository.js';
+import {
+  FINALIDADE_DO_CONTATO_DO_ACHADOR,
+  type ConsentimentoGravado,
+} from '../domain/divulgacao-de-contato.js';
 import {
   aceitaMensagem,
   estadoDaConversa,
@@ -215,6 +220,59 @@ export class ConversaDoAchadorService {
   async entregarRecado(token: string, recado: string, origem: OrigemDoPedido): Promise<string> {
     const mensagem = await this.enviar(token, recado, origem);
     return mensagem.body;
+  }
+
+  /**
+   * Para o módulo `found`: grava o consentimento e entrega o contato do achador na
+   * conversa do tutor, **numa transação só** (decisão do cliente, 03/11/2026).
+   *
+   * Não passa por [enviar] de propósito: `enviar` redige o corpo, e aqui o
+   * telefone e o e-mail têm de atravessar — foi para isso que a pessoa consentiu.
+   *
+   * A conversa precisa ACEITAR mensagem: num aviso encerrado ou bloqueado o
+   * contato não sai, e o consentimento não é gravado. Isso não é zelo extra — é a
+   * mesma porta de [enviar], e abrir uma exceção aqui daria ao consentimento o
+   * poder de furar o bloqueio que o tutor pediu.
+   */
+  async divulgarContatoComConsentimento(
+    token: string,
+    /** A finalidade e os ids NÃO vêm de fora: são desta casa. */
+    pedido: Omit<DivulgacaoDeContatoPedida, 'id' | 'mensagemId' | 'finalidade'>,
+    origem: OrigemDoPedido,
+  ): Promise<ConsentimentoGravado> {
+    const { conversa, resumo } = await this.resolverValida(token);
+    if (!aceitaMensagem(estadoDe(conversa))) throw problemas.conversaEncerrada();
+
+    const gravado = await this.deps.repositorio.divulgarContatoSobConsentimento(resumo, {
+      ...pedido,
+      finalidade: FINALIDADE_DO_CONTATO_DO_ACHADOR,
+      id: this.deps.ids.uuidv7(),
+      mensagemId: this.deps.ids.uuidv7(),
+    });
+    if (gravado === undefined) throw problemas.linkDoAchadorInvalido();
+
+    /*
+     * A trilha registra o ATO, e **nunca o dado**: nem telefone, nem e-mail, nem
+     * o nome. O que ela precisa responder é "houve consentimento, de qual aviso,
+     * sob qual texto, e quais campos saíram" — e os valores em si já estão na
+     * mensagem e no registro, que é onde a finalidade os justifica.
+     */
+    await this.deps.trilha.record({
+      actorKind: 'anonymous',
+      ...comoOrigem(origem),
+      action: 'found_report.finder_contact_shared',
+      resourceKind: 'found_report',
+      resourceId: pedido.foundReportId,
+      metadata: {
+        purpose: gravado.consentimento.finalidade,
+        consent_version: gravado.consentimento.versao,
+        shared_name: pedido.contato.nome !== undefined,
+        shared_email: pedido.contato.email !== undefined,
+        shared_phone: pedido.contato.telefone !== undefined,
+      },
+    });
+
+    return gravado.consentimento;
   }
 
   /** Passos 1 a 3 do cabeçalho. */

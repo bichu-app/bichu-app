@@ -370,6 +370,19 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'não para sobreviver a quem a deu. As colunas `users.accepted_terms_version`/`_at` ' +
       'saem na mesma linha da conta.',
   },
+  'public.finder_contact_consents.finder_contact_consents_found_report_id_fkey': {
+    colunas: ['found_report_id'],
+    referencia: 'public.found_reports',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o consentimento de divulgar o contato DAQUELE aviso (migração `20261103000001`). ' +
+      '`CASCADE` porque a finalidade declarada é "o tutor entrar em contato para recuperar ' +
+      'este pet": sem o aviso a finalidade deixou de existir, e guardar o consentimento ' +
+      'depois dela seria guarda sem finalidade — o oposto do que ADR-0010 emenda 6 decidiu. ' +
+      'Note que NÃO há `CASCADE` a partir de `users`, e é essa a diferença entre esta tabela ' +
+      'e `terms_acceptances`: o achador não tem conta, e é justamente por isso que esta ' +
+      'linha é a única evidência do consentimento dele.',
+  },
   'public.user_devices.user_devices_user_id_fkey': {
     colunas: ['user_id'],
     referencia: 'public.users',
