@@ -1,0 +1,8 @@
+{
+  "versionCode": 2002,
+  "apk": "bichu-hml-72372d32-vc2002.apk",
+  "commitDoRegistro": "72372d32aeb68ef39ea558f03220b8ef003fd4c6",
+  "medidoEm": "2026-11-04",
+  "comoFoiMedido": "aapt2 dump badging (infra/verificacao/verificar-apk.sh --registrar-entrega)",
+  "porque": "Este numero e a linha de base da conferencia de regressao de versionCode. Ele sai MEDIDO de dentro do APK entregue, e nunca do pubspec: numero passado em --build-number nao aparece no pubspec, e foi por isso que a regressao de 04/11/2026 (pacote com 1, aparelho do cliente com 2001) ficou invisivel."
+}

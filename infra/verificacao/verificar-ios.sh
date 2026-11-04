@@ -151,6 +151,57 @@ if [ -z "$BUILD_NAME" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# O NUMERO DO BUILD (`CFBundleVersion` no iOS, `versionCode` no Android).
+#
+# POR QUE ELE ENTROU AQUI, no mesmo dia em que entrou no irmao: Android e iOS
+# TEM DE SAIR NA MESMA VERSAO -- ja saiu iOS 189 commits atras do Android neste
+# repositorio -- e o numero e parte da versao. Se o `--build-number` existisse
+# so de um lado, as duas plataformas voltariam a divergir pelo lado de fora.
+#
+# A regressao que gerou isto foi MEDIDA no Android em 04/11/2026: APKs de 28 e
+# 29/10 entregues com `versionCode=2001` (numero passado A MAO, por fora dos
+# portoes) e o artefato de 04/11, compilado sem numero, com `1`. Leia o
+# cabecalho de `verificar-apk.sh` para a tabela inteira.
+#
+# SAO DUAS VARIAVEIS, pela MESMA razao que `API_BASE_URL` tem duas desde
+# 03/11/2026 (PR #161): `BUILD_NUMBER_ESPERADO` e o numero que se ESPERA dentro
+# do que o build produziu, e e com ele que o valor LIDO do `Info.plist` do
+# `Runner.app` e comparado; `BUILD_NUMBER` e o que o build vai usar. Tirar a
+# expectativa da MESMA variavel que o build consumiu e comparar o valor com ele
+# mesmo, e isso aprova qualquer coisa.
+#
+#   make ios API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+#
+# O PADRAO sai do `+N` de `app/pubspec.yaml`, a mesma fonte do `versionName`.
+#
+# O QUE ESTE PORTAO NAO FAZ: a conferencia de REGRESSAO (o numero novo tem de
+# passar do ultimo ENTREGUE) mora em `verificar-apk.sh`, porque e o APK que o
+# cliente instala por cima hoje -- o iOS esta dormente por decisao de 23/09
+# (a conta Apple nao anda), e nao ha ultimo entregue de iOS para comparar.
+# Quando houver, a linha de base e o registro, e o lugar e aqui.
+# ---------------------------------------------------------------------------
+BUILD_NUMBER_ESPERADO="${BUILD_NUMBER_ESPERADO:-$(sed -n 's/^version:[[:space:]]*[^+[:space:]]\{1,\}+\([0-9]\{1,\}\)[[:space:]]*$/\1/p' "$PUBSPEC" | head -1)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$BUILD_NUMBER_ESPERADO}"
+for par in "BUILD_NUMBER_ESPERADO=$BUILD_NUMBER_ESPERADO" "BUILD_NUMBER=$BUILD_NUMBER"; do
+  nome=${par%%=*}
+  valor=${par#*=}
+  if [ -z "$valor" ]; then
+    echo "REPROVA: \`$nome\` ficou VAZIO. Nao achei \`version: <nome>+<numero>\` em $PUBSPEC e ninguem declarou o numero. Build sem numero sai com o que a ferramenta inventar, e e assim que as duas plataformas divergem" >&2
+    exit 1
+  fi
+  case "$valor" in
+    *[!0-9]*)
+      echo "REPROVA: \`$nome=$valor\` nao e um inteiro. O numero do build e inteiro nas duas plataformas" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$valor" -le 0 ]; then
+    echo "REPROVA: \`$nome=$valor\` nao e positivo. O numero do build comeca em 1" >&2
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------
 # O COMMIT SAI DO `HEAD` NA HORA, e nunca de um literal.
 #
 # E A RAZAO E O DEFEITO QUE ESTE SCRIPT CONSERTA: um SHA cravado aqui estaria
@@ -235,6 +286,101 @@ conferir_destino_do_build() {
   echo "  Se isto veio de \`make\` sem \`API_BASE_URL=\` na LINHA DE COMANDO, o valor e o \`http://localhost:<porta>\` do proprio Makefile: ele atribui com \`:=\`, e o ambiente NAO sobrepoe. Rode \`make ios API_BASE_URL=https://hml.bichu.app\`." >&2
   echo "  Se o desvio for DELIBERADO, declare os dois: \`API_BASE_URL_ESPERADO=<destino> API_BASE_URL=<destino>\`. Duas declaracoes para um desvio e de proposito -- o desvio fica escrito." >&2
   return 1
+}
+
+# ---------------------------------------------------------------------------
+# O NUMERO PEDIDO, ANTES DE GASTAR UM BUILD (conferencia de TEXTO).
+# ---------------------------------------------------------------------------
+conferir_numero_do_build() {
+  if [ "$BUILD_NUMBER" = "$BUILD_NUMBER_ESPERADO" ]; then
+    echo "APROVA: o build vai pedir numero $BUILD_NUMBER, que e o ESPERADO declarado"
+    return 0
+  fi
+  echo "REPROVA [numero-divergente]: o build ia pedir BUILD_NUMBER=$BUILD_NUMBER, e o ESPERADO declarado e BUILD_NUMBER_ESPERADO=$BUILD_NUMBER_ESPERADO." >&2
+  echo "  A expectativa e o que este portao vai COBRAR dentro do que o build produziu, e ela nao pode sair da mesma variavel que o build usou -- tirada de la, a conferencia compara o valor com ele mesmo (o defeito do \`API_BASE_URL\`, fechado no PR #161)." >&2
+  echo "  Se o desvio for DELIBERADO, declare os dois: \`BUILD_NUMBER_ESPERADO=<n> BUILD_NUMBER=<n>\`." >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# O NUMERO DENTRO DO QUE O BUILD PRODUZIU.
+#
+# Onde ele mora no iOS: `CFBundleVersion`, no `Info.plist` do `Runner.app`. O
+# `project.pbxproj` declara `CURRENT_PROJECT_VERSION = $(FLUTTER_BUILD_NUMBER)`,
+# e quem escreve `FLUTTER_BUILD_NUMBER` e o `flutter` quando roda um build de
+# linha de comando -- no `Generated.xcconfig`, o MESMO arquivo que o Xcode do
+# cliente le. Entao sao dois lugares, e os dois sao medidos:
+#
+#   1. o `Info.plist` do app que ESTE comando produziu (o binario);
+#   2. o `Generated.xcconfig`, que e o que o build DO XCODE vai usar depois.
+#
+# Medir so (1) deixaria o Xcode do cliente sair com outro numero -- e foi
+# exatamente essa familia (xcconfig congelado de 18/10) que criou este arquivo.
+#
+# `plutil` e nao `grep`: o `Info.plist` do app compilado e BINARIO, e procurar
+# texto nele e como o portao volta a aprovar lixo. `python3` com `plistlib`
+# serve de reserva, porque ele e dependencia dura deste portao de todo jeito.
+# ---------------------------------------------------------------------------
+PLIST_DO_APP="app/build/ios/iphoneos/Runner.app/Info.plist"
+
+medir_numero_no_plist() {
+  arquivo="$1"
+  if [ ! -f "$arquivo" ]; then
+    echo "REPROVA [plist-ausente]: nao existe $arquivo depois do build. Sem o Info.plist nao ha numero de build para medir, e e ele que o aparelho compara" >&2
+    return 1
+  fi
+  lido=""
+  if command -v plutil >/dev/null 2>&1; then
+    lido=$(plutil -extract CFBundleVersion raw -o - "$arquivo" 2>/dev/null || true)
+  fi
+  if [ -z "$lido" ]; then
+    lido=$(python3 - "$arquivo" <<'PYPLIST' || true
+import plistlib
+import sys
+
+try:
+    with open(sys.argv[1], 'rb') as entrada:
+        dados = plistlib.load(entrada)
+except Exception:
+    sys.exit(1)
+valor = dados.get('CFBundleVersion')
+if isinstance(valor, str) and valor:
+    sys.stdout.write(valor)
+PYPLIST
+)
+  fi
+  if [ -z "$lido" ]; then
+    echo "REPROVA [sem-cfbundleversion]: $arquivo nao da um \`CFBundleVersion\`. Pacote sem numero de build nao se distingue de outro no aparelho, e o aparelho recusa instalar por cima de um numero maior" >&2
+    return 1
+  fi
+  printf '%s' "$lido"
+}
+
+conferir_numero_no_binario() {
+  medido=$(medir_numero_no_plist "$PLIST_DO_APP") || return 1
+  if [ "$medido" != "$BUILD_NUMBER_ESPERADO" ]; then
+    echo "REPROVA [valor-divergente]: $PLIST_DO_APP traz CFBundleVersion='$medido', e o numero esperado e $BUILD_NUMBER_ESPERADO." >&2
+    echo "  Ou o \`--build-number\` se perdeu no caminho -- bandeira que se perde em silencio ja aconteceu aqui em 19/10/2026 --, ou este app nao e o desta execucao." >&2
+    return 1
+  fi
+  echo "APROVA: $PLIST_DO_APP traz CFBundleVersion='$medido', igual ao pedido (lido do plist do app, nao deduzido do comando)"
+
+  xcconfig="app/ios/Flutter/Generated.xcconfig"
+  if [ ! -f "$xcconfig" ]; then
+    echo "REPROVA [xcconfig-ausente]: nao existe $xcconfig, e e dele que o build DO XCODE tira o numero" >&2
+    return 1
+  fi
+  no_xcconfig=$(sed -n 's/^FLUTTER_BUILD_NUMBER=//p' "$xcconfig" | head -1)
+  if [ -z "$no_xcconfig" ]; then
+    echo "REPROVA [xcconfig-sem-numero]: $xcconfig nao declara \`FLUTTER_BUILD_NUMBER\`. O Xcode do cliente le ESTE arquivo: sem a chave, o app que ELE constroi sai com o numero que o projeto tiver, e as duas plataformas divergem sem nada acusar" >&2
+    return 1
+  fi
+  if [ "$no_xcconfig" != "$BUILD_NUMBER_ESPERADO" ]; then
+    echo "REPROVA [xcconfig-divergente]: $xcconfig declara FLUTTER_BUILD_NUMBER=$no_xcconfig, e o esperado e $BUILD_NUMBER_ESPERADO. O build do Xcode sairia com o numero errado -- que e a familia do arquivo congelado de 18/10/2026" >&2
+    return 1
+  fi
+  echo "APROVA: $xcconfig declara FLUTTER_BUILD_NUMBER=$no_xcconfig, entao o build do XCODE sai no mesmo numero"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -358,6 +504,7 @@ conferir_literalidade() {
   achou_versao=0
   achou_commit=0
   achou_mapa=0
+  achou_numero=0
   problema=""
   # `set -f` porque a expansao de `*` nao e de proposito aqui.
   set -f
@@ -368,6 +515,7 @@ conferir_literalidade() {
       --dart-define=APP_VERSION=*) achou_versao=1 ;;
       --dart-define=BUILD_COMMIT=*) achou_commit=1 ;;
       --dart-define-from-file=*) achou_mapa=1 ;;
+      --build-number=*) achou_numero=1 ;;
     esac
     case "$arg" in
       --*) ;;
@@ -397,7 +545,11 @@ conferir_literalidade() {
     echo "REPROVA: o comando de build em $arquivo nao passa \`--dart-define-from-file\`. Foi exatamente esse argumento que se perdeu em silencio em 19/10/2026" >&2
     return 1
   fi
-  echo "APROVA: os $vistos argumentos do comando de build sao literais, e APP_VERSION, BUILD_COMMIT e o arquivo de mapa estao entre eles"
+  if [ "$achou_numero" -ne 1 ]; then
+    echo "REPROVA: o comando de build em $arquivo nao passa \`--build-number=\`. Sem ela o numero do build e o do \`pubspec\`, qualquer numero pedido na linha de comando se perde em silencio, e as duas plataformas saem em versoes diferentes -- com o build saindo 0" >&2
+    return 1
+  fi
+  echo "APROVA: os $vistos argumentos do comando de build sao literais, e APP_VERSION, BUILD_COMMIT, o arquivo de mapa e --build-number estao entre eles"
 }
 
 # ---------------------------------------------------------------------------
@@ -412,6 +564,110 @@ if [ "${1:-}" = "--autoteste" ]; then
   # nao e o dele -- portao reprovando fora do seu assunto e portao que se
   # desliga na primeira vez que incomoda.
   conferir_literalidade "$0" || exit 1
+
+  # AS ISCAS DO NUMERO DO BUILD. Nao compilam nada e nao precisam de Xcode: o
+  # `Info.plist` e um plist, e `plistlib` escreve um de brinquedo nas duas
+  # formas (XML e BINARIO) em milissegundos. Sem elas, a leitura do numero
+  # valeria pela confianca do dia em que foi escrita.
+  falhou_numero=0
+  tmp_do_numero=$(mktemp -d)
+  trap 'rm -rf "$tmp_do_numero"' EXIT
+
+  esperar_numero() {
+    motivo="$1"
+    caminho="$2"
+    desfecho="$3"
+    etiqueta="$4"
+    if saida_do_numero=$(medir_numero_no_plist "$caminho" 2>&1); then
+      if [ "$desfecho" = "aprova" ]; then
+        if [ "$saida_do_numero" = "$etiqueta" ]; then
+          echo "isca aprovada como deveria: $motivo (leu $saida_do_numero)"
+        else
+          echo "REPROVA: a isca '$motivo' leu '$saida_do_numero' e o certo era '$etiqueta'" >&2
+          falhou_numero=1
+        fi
+      else
+        echo "REPROVA: a isca '$motivo' PASSOU. A leitura do numero do build parou de enxergar esta familia" >&2
+        falhou_numero=1
+      fi
+    else
+      if [ "$desfecho" = "reprova" ]; then
+        case "$saida_do_numero" in
+          *"$etiqueta"*) echo "isca reprovada como deveria, com a etiqueta $etiqueta: $motivo" ;;
+          *)
+            echo "REPROVA: a isca '$motivo' reprovou sem a etiqueta $etiqueta -- desfechos colapsados. O que saiu:" >&2
+            printf '%s\n' "$saida_do_numero" | sed 's/^/    /' >&2
+            falhou_numero=1
+            ;;
+        esac
+      else
+        echo "REPROVA: a isca '$motivo' foi REPROVADA, e ela precisa passar" >&2
+        printf '%s\n' "$saida_do_numero" | sed 's/^/    /' >&2
+        falhou_numero=1
+      fi
+    fi
+  }
+
+  python3 - "$tmp_do_numero" <<'PYISCASPLIST'
+import plistlib
+import os
+import sys
+
+pasta = sys.argv[1]
+# BINARIO, que e a forma do `Info.plist` do app compilado -- e a forma em que
+# `grep` nao acha nada.
+with open(os.path.join(pasta, 'com-numero.plist'), 'wb') as saida:
+    plistlib.dump({'CFBundleVersion': '2002', 'CFBundleShortVersionString': '1.0.0'},
+                  saida, fmt=plistlib.FMT_BINARY)
+with open(os.path.join(pasta, 'numero-errado.plist'), 'wb') as saida:
+    plistlib.dump({'CFBundleVersion': '1', 'CFBundleShortVersionString': '1.0.0'},
+                  saida, fmt=plistlib.FMT_BINARY)
+with open(os.path.join(pasta, 'sem-numero.plist'), 'wb') as saida:
+    plistlib.dump({'CFBundleShortVersionString': '1.0.0'}, saida, fmt=plistlib.FMT_BINARY)
+with open(os.path.join(pasta, 'nao-e-plist.plist'), 'w', encoding='utf-8') as saida:
+    saida.write('isto nao e um plist\n')
+PYISCASPLIST
+
+  esperar_numero "plist BINARIO com CFBundleVersion=2002" "$tmp_do_numero/com-numero.plist" aprova 2002
+  esperar_numero "plist SEM CFBundleVersion" "$tmp_do_numero/sem-numero.plist" reprova "[sem-cfbundleversion]"
+  esperar_numero "arquivo que nao e plist" "$tmp_do_numero/nao-e-plist.plist" reprova "[sem-cfbundleversion]"
+  esperar_numero "plist inexistente" "$tmp_do_numero/nao-existe.plist" reprova "[plist-ausente]"
+
+  # A isca do NUMERO ERRADO exercita a comparacao, e nao a leitura: um plist com
+  # `1` onde se esperava 2002 e o defeito de 04/11/2026 em forma de arquivo.
+  esperado_salvo="$BUILD_NUMBER_ESPERADO"
+  plist_salvo="$PLIST_DO_APP"
+  BUILD_NUMBER_ESPERADO=2002
+  PLIST_DO_APP="$tmp_do_numero/numero-errado.plist"
+  if conferir_numero_no_binario >/dev/null 2>&1; then
+    echo "REPROVA: a isca do numero ERRADO no plist (1 onde se esperava 2002) PASSOU" >&2
+    falhou_numero=1
+  else
+    echo "isca reprovada como deveria: CFBundleVersion=1 onde se esperava 2002 (o defeito de 04/11/2026)"
+  fi
+  BUILD_NUMBER_ESPERADO="$esperado_salvo"
+  PLIST_DO_APP="$plist_salvo"
+
+  # A conferencia de TEXTO do numero pedido, nos dois sentidos.
+  numero_salvo="$BUILD_NUMBER"
+  BUILD_NUMBER="$BUILD_NUMBER_ESPERADO"
+  if conferir_numero_do_build >/dev/null 2>&1; then
+    echo "isca aprovada como deveria: numero pedido igual ao esperado"
+  else
+    echo "REPROVA: a isca do numero pedido IGUAL ao esperado foi reprovada" >&2
+    falhou_numero=1
+  fi
+  BUILD_NUMBER=$((BUILD_NUMBER_ESPERADO + 1))
+  if conferir_numero_do_build >/dev/null 2>&1; then
+    echo "REPROVA: a isca do numero pedido DIFERENTE do esperado passou -- o controle positivo sairia do valor que o build usou" >&2
+    falhou_numero=1
+  else
+    echo "isca reprovada como deveria: numero pedido diferente do esperado (uma declaracao so para um desvio)"
+  fi
+  BUILD_NUMBER="$numero_salvo"
+
+  [ "$falhou_numero" -eq 0 ] || exit 1
+
   python3 "$CONFERIDOR" --autoteste
   exit $?
 fi
@@ -441,7 +697,10 @@ conferir_literalidade "$0" || exit 1
 # endereco errado e depois reprovar seria o portao certo na hora errada.
 conferir_destino_do_build || exit 1
 
-echo "compilando o iOS de $MODO de $ENVIRONMENT, versao $BUILD_NAME (de $PUBSPEC), commit $BUILD_COMMIT (de HEAD)..."
+# O NUMERO ANTES DO BUILD, pela mesma razao do destino.
+conferir_numero_do_build || exit 1
+
+echo "compilando o iOS de $MODO de $ENVIRONMENT, versao $BUILD_NAME+$BUILD_NUMBER (de $PUBSPEC), commit $BUILD_COMMIT (de HEAD)..."
 echo "  (--no-codesign: nao toca certificado, perfil nem conta Apple)"
 
 (
@@ -449,6 +708,7 @@ echo "  (--no-codesign: nao toca certificado, perfil nem conta Apple)"
   # mova nem renomeie estes comentarios sem ler `conferir_literalidade`)
   cd app && flutter build ios --"$MODO" --no-codesign \
     --build-name="$BUILD_NAME" \
+    --build-number="$BUILD_NUMBER" \
     --dart-define=APP_VERSION="$BUILD_NAME" \
     --dart-define=API_BASE_URL="$API_BASE_URL" \
     --dart-define=ENVIRONMENT="$ENVIRONMENT" \
@@ -468,6 +728,10 @@ conferir_chaves_do_xcconfig || exit 1
 
 # A ULTIMA PALAVRA E A DO VALOR, e nao a do envelope.
 conferir_valores "$BINARIO" || exit 1
+
+# E O NUMERO DO BUILD, nos DOIS lugares: no `Info.plist` que este comando
+# produziu e no `Generated.xcconfig` que o Xcode do cliente vai ler.
+conferir_numero_no_binario || exit 1
 
 echo
 echo "LEMBRETE: isto NAO prova que o Xcode le o arquivo novo. Depois de"

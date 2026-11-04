@@ -581,8 +581,58 @@ verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta be
 # O que isso fecha: ate 19/10 `make apk` saia 0 com o APK sem `APP_VERSION`
 # dentro -- MEDIDO, a versao aparecia zero vezes nos tres `libapp.so` -- e o
 # bloqueio por versao minima inteiro ficava inerte em silencio.
-apk: verificar-apk-autoteste ## compila o APK de release de hml, confere o pacote e o VALOR das dart-define dentro dele
-	sh infra/verificacao/verificar-apk.sh
+# ---------------------------------------------------------------------------
+# `BUILD_NUMBER=` -- O NUMERO DO BUILD (`versionCode`) PEDIDO NA LINHA DE COMANDO
+#
+# POR QUE ISTO PASSOU A EXISTIR, medido em 04/11/2026 com `aapt2 dump badging`
+# nos quatro APKs entregues:
+#
+#   bichu-hml-46d0587c.apk              28/10 14:54   versionCode=1
+#   bichu-hml-arm64-675c516c.apk        28/10 21:14   versionCode=2001
+#   bichu-hml-arm64-0399da80.apk        29/10 08:02   versionCode=2001
+#   bichu-hml-72372d32-app-release.apk  04/11 06:07   versionCode=1
+#
+# Os `2001` sairam de alguem passando o numero A MAO em 28/10, por FORA destes
+# alvos -- porque por dentro nao havia como: nem `apk` nem `ios` liam numero
+# nenhum, e o comando de build dos portoes nao passava `--build-number`. Pedir
+# um numero maior exigia EDITAR o comando literal do portao. Entao ninguem
+# pedia, todo build herdava o `+N` do `pubspec`, e o APK de 04/11 saiu com
+# `versionCode=1` com o cliente tendo 2001 no aparelho: o Android recusa
+# instalar por cima com `INSTALL_FAILED_VERSION_DOWNGRADE`, e a saida passaria
+# a ser DESINSTALAR, perdendo a sessao e os dados locais dele.
+#
+# O NUMERO VIRA VARIAVEL DE MAKE, E NAO DE AMBIENTE. `BUILD_NUMBER` nao e
+# atribuido neste arquivo, e os dois alvos abaixo RECUSAM valor que chegue pelo
+# ambiente em vez de ignora-lo: num Makefile que atribui com `:=` -- como as
+# cinco URLs da linha 57 em diante --, ambiente que nao sobrepoe e ambiente que
+# se perde EM SILENCIO, e e dessa familia que vem o `localhost` que o PR #161
+# fechou. Quem quer um numero, escreve na linha de comando:
+#
+#   make apk API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+#   make ios API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+#
+# OS DOIS JUNTOS, de proposito: Android e iOS tem de sair na MESMA versao (ja
+# saiu iOS 189 commits atras do Android aqui), e o numero e parte da versao.
+#
+# SEM `BUILD_NUMBER=` os alvos NAO recusam: o padrao e o `+N` de
+# `app/pubspec.yaml`, que e a mesma fonte do `versionName`, e e o portao que
+# diz se aquele padrao ainda passa do ultimo APK entregue. Recusar aqui
+# obrigaria a esteira -- que chama o script direto, sem `make` -- a declarar um
+# numero a cada execucao, e numero de esteira e justamente o que ninguem revisa.
+#
+# O QUE O ALVO PASSA e `BUILD_NUMBER_ESPERADO`, e nao `BUILD_NUMBER`: o portao
+# tem duas variaveis, e a ESPERADA e a que ele cobra DENTRO do pacote. O build
+# segue a esperada quando ninguem declara a outra. Essa separacao e a mesma do
+# `API_BASE_URL_ESPERADO` -- controle positivo tirado da variavel que o build
+# usou compara o valor com ele mesmo e aprova qualquer coisa.
+# ---------------------------------------------------------------------------
+apk: verificar-apk-autoteste ## compila o APK de release de hml, confere o pacote, o VALOR das dart-define e o versionCode dentro dele (aceita BUILD_NUMBER= na linha de comando)
+	@test '$(origin BUILD_NUMBER)' != 'environment' || { \
+	  echo 'REPROVA: `BUILD_NUMBER` chegou pelo AMBIENTE, e aqui ele tem de vir na LINHA DE COMANDO.' >&2; \
+	  echo '  Este Makefile atribui com `:=` (as cinco URLs da linha 57 em diante), e variavel de ambiente NAO sobrepoe `:=` -- quem exporta acha que pediu e o build usa outro numero. Aceitar o ambiente aqui e aceitar as duas formas, e uma delas falha em silencio.' >&2; \
+	  echo '  Rode:  make $@ API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=<n>' >&2; \
+	  exit 1; }
+	BUILD_NUMBER_ESPERADO='$(BUILD_NUMBER)' sh infra/verificacao/verificar-apk.sh
 
 verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor das defines, literalidade do comando) precisam reprovar (nao compila nada)
 	sh infra/verificacao/verificar-apk.sh --autoteste
@@ -632,13 +682,18 @@ verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor
 # do iOS e mudanca sem pedido. O conserto do PORTAO, esse sim, ja o cobre --
 # ver `infra/verificacao/verificar-ios.sh`.
 # ---------------------------------------------------------------------------
-ios: verificar-ios-autoteste ## compila o iOS de release (--no-codesign), confere as chaves do Generated.xcconfig e o VALOR das dart-define dentro do binario; EXIGE API_BASE_URL= na linha de comando
+ios: verificar-ios-autoteste ## compila o iOS de release (--no-codesign), confere as chaves do Generated.xcconfig, o VALOR das dart-define e o numero do build dentro do binario; EXIGE API_BASE_URL= na linha de comando (aceita BUILD_NUMBER=)
 	@test '$(origin API_BASE_URL)' = 'command line' || { \
 	  echo 'REPROVA: `make ios` EXIGE `API_BASE_URL=` na LINHA DE COMANDO, e nao recebeu.' >&2; \
 	  echo '  MEDIDO em 03/11/2026: este Makefile atribui `API_BASE_URL := http://localhost:<porta>` com `:=`, entao o AMBIENTE NAO SOBREPOE e so a linha de comando vence. Herdar o padrao aqui compilaria o iOS apontado para a PROPRIA MAQUINA, e o aparelho do cliente nao tem como dizer isso -- a tela so nao carrega.' >&2; \
 	  echo '  Rode:  make ios API_BASE_URL=https://hml.bichu.app' >&2; \
 	  exit 1; }
-	API_BASE_URL='$(API_BASE_URL)' sh infra/verificacao/verificar-ios.sh
+	@test '$(origin BUILD_NUMBER)' != 'environment' || { \
+	  echo 'REPROVA: `BUILD_NUMBER` chegou pelo AMBIENTE, e aqui ele tem de vir na LINHA DE COMANDO.' >&2; \
+	  echo '  Este Makefile atribui com `:=` (as cinco URLs da linha 57 em diante), e variavel de ambiente NAO sobrepoe `:=` -- quem exporta acha que pediu e o build usa outro numero. Aceitar o ambiente aqui e aceitar as duas formas, e uma delas falha em silencio.' >&2; \
+	  echo '  Rode:  make $@ API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=<n>' >&2; \
+	  exit 1; }
+	API_BASE_URL='$(API_BASE_URL)' BUILD_NUMBER_ESPERADO='$(BUILD_NUMBER)' sh infra/verificacao/verificar-ios.sh
 
 verificar-ios-autoteste: ## as iscas das conferencias do iOS (valor das defines dentro do binario, endereco local proibido, literalidade do comando) precisam reprovar (nao compila nada, nao precisa de Xcode)
 	sh infra/verificacao/verificar-ios.sh --autoteste

@@ -356,6 +356,45 @@ API_BASE_URL=https://hml.bichu.app sh infra/verificacao/verificar-apk.sh
 `.../v1` no build produz requisições para `/v1/v1/...` e um 404 que parece
 defeito de servidor.
 
+### O número do build (`versionCode`), e os dois passos de uma entrega
+
+O APK precisa sair com um `versionCode` **maior** que o do último APK entregue,
+senão o Android recusa instalar por cima com
+`INSTALL_FAILED_VERSION_DOWNGRADE` e a única saída do cliente passa a ser
+desinstalar o aplicativo — perdendo a sessão e os dados locais dele. Isto
+aconteceu: APKs de 28 e 29/10/2026 saíram com `versionCode=2001`, com o número
+passado **à mão por fora dos portões**, e o de 04/11/2026 saiu com `1`.
+
+O número padrão é o `+N` de `app/pubspec.yaml`. Para pedir outro, na **linha de
+comando do `make`** (variável de ambiente não sobrepõe `:=`, e os alvos
+recusam):
+
+```sh
+make apk API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+make ios API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+```
+
+Os dois juntos porque **Android e iOS têm de sair na mesma versão**.
+
+**Depois de entregar um APK ao cliente, são dois passos, e nenhum deles é
+automático:**
+
+```sh
+# 1. registra o número ENTREGUE, medido de dentro do pacote (nunca digitado)
+sh infra/verificacao/verificar-apk.sh --registrar-entrega <apk entregue>
+# 2. sobe o `+N` de app/pubspec.yaml para acima do registrado
+```
+
+O registro (`infra/verificacao/versioncode-entregue.json`) é a linha de base que
+o portão cobra; o `pubspec` é o próximo número livre. Pular o passo 1 faz o
+portão aprovar um pacote que não instala; pular o passo 2 faz o próximo build
+reprovar antes de compilar, dizendo exatamente isto. Para ler o número de um
+artefato sem veredito nenhum:
+
+```sh
+sh infra/verificacao/verificar-apk.sh --medir-versioncode <apk>
+```
+
 É **homologação e não produção**, e ela **não deve receber dado de usuário
 real** — o apex `bichu.app` ainda nem é nosso, o push não está configurado, o
 deep link sobe com as listas vazias e o e-mail não sai do log. O endereço, o que
