@@ -111,6 +111,14 @@ RUN npm run build && test -f dist/bin/api.js && test -f dist/bin/worker.js
 # HEAD.
 FROM base AS commit
 ARG BUILD_COMMIT
+# A ARVORE de que a imagem saiu. VAZIO NAO REPROVA AQUI, de proposito: `make up`,
+# `make test` e a esteira constroem pelo compose, que nao tem como saber a arvore
+# do contexto, e quebrar o build local por isso seria trocar um defeito por
+# outro. Quem exige o carimbo e o CD: `infra/cd/construir-imagem.sh` sempre o
+# passa e confere o ARTEFATO depois de construir, e `infra/cd/implantar.sh`
+# RECUSA implantar imagem com a arvore vazia. Imagem de build local nunca e
+# implantada, e se alguem tentar, reprova nomeando o motivo (02/11/2026).
+ARG BUILD_TREE
 RUN set -eu; \
     if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
       echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
@@ -123,7 +131,8 @@ RUN set -eu; \
       exit 1; \
     fi; \
     mkdir -p /etc/bichu; \
-    printf '%s' "$BUILD_COMMIT" > /etc/bichu/commit
+    printf '%s' "$BUILD_COMMIT" > /etc/bichu/commit; \
+    printf '%s' "${BUILD_TREE:-}" > /etc/bichu/arvore
 
 # --------------------------------------------------------------------------
 # ALVO dev
@@ -179,7 +188,7 @@ COPY --chown=node:node infra/suite ./infra/suite
 COPY --from=build --chown=node:node /app/dist ./dist
 # Ver o bloco "O COMMIT" acima. O COPY e o que poe o estagio `commit` -- e a
 # conferencia que ele carrega -- no grafo deste build.
-COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+COPY --from=commit /etc/bichu/commit /etc/bichu/arvore /etc/bichu/
 ARG BUILD_COMMIT
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node
@@ -201,7 +210,7 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node api ./api
 COPY --from=build --chown=node:node /app/dist ./dist
 # Ver o bloco "O COMMIT" acima.
-COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+COPY --from=commit /etc/bichu/commit /etc/bichu/arvore /etc/bichu/
 ARG BUILD_COMMIT
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node
@@ -236,7 +245,7 @@ COPY --chown=node:node migrations ./migrations
 # O migrador nao responde sonda, mas e artefato como os outros dois: se ele
 # puder ser produzido sem saber de onde veio, existe um caminho de build sem a
 # conferencia, e caminho sem portao e por onde o portao deixa de valer.
-COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+COPY --from=commit /etc/bichu/commit /etc/bichu/arvore /etc/bichu/
 ARG BUILD_COMMIT
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node

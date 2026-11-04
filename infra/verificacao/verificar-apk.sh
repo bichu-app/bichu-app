@@ -72,7 +72,53 @@ PISO_BYTES=1048576
 # que diverge e a que ninguem percebe. Nenhuma delas e segredo: todas ja estao
 # em documento versionado. Dao para sobrescrever pelo ambiente quando um alvo
 # diferente precisar ser compilado.
-API_BASE_URL="${API_BASE_URL:-https://hml.bichu.app}"
+#
+# A EXCECAO E `API_BASE_URL`, E ELA TEM DUAS VARIAVEIS DESDE 03/11/2026.
+#
+# A ARMADILHA, medida no banco de dados do `make` naquele dia:
+#
+#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:<porta>
+#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:<porta>
+#   make -pn API_BASE_URL=... | grep '^API_BASE_URL'  -> o valor passado
+#
+# A PORTA NAO E FIXA, E ISSO REFORCA O CONSERTO. Ela vem de `portas.local.mk`,
+# gerado por `infra/escolher-portas.py`, e muda por maquina E por worktree --
+# MEDIDO em 03/11/2026, na mesma maquina e no mesmo dia: `3200` num worktree e
+# `3400` noutro. Um controle positivo tirado dessa variavel nao e so
+# autoaprovacao: ele concorda com um valor que nem e estavel entre duas copias
+# do mesmo repositorio.
+#
+# O `Makefile` atribui com `:=`, entao o AMBIENTE NAO SOBREPOE e so a LINHA DE
+# COMANDO vence. Quem compilava sem `API_BASE_URL=` ali gerava um APK apontado
+# para a propria maquina -- e ESTE PORTAO O APROVAVA, porque montava a cadeia
+# de CONTROLE POSITIVO a partir de `$API_BASE_URL`, a MESMA variavel que o
+# build usara: o controle virava `localhost:<porta>`, era achado no `libapp.so` e
+# tudo passava. Controle que sai do valor medido nao e controle: e
+# autoaprovacao. Houve APK entregue assim.
+#
+# `API_BASE_URL_ESPERADO` e o destino que se ESPERA no binario, e e dele que
+# sai o controle positivo. `API_BASE_URL` e o que o build vai usar.
+#
+# Para compilar DELIBERADAMENTE para outro destino, declare os DOIS:
+#
+#   API_BASE_URL_ESPERADO=https://outro.exemplo \
+#   API_BASE_URL=https://outro.exemplo \
+#     sh infra/verificacao/verificar-apk.sh
+#
+# Duas declaracoes para um desvio e de proposito: o desvio fica escrito, e nao
+# herdado em silencio de quem exportou uma variavel tres comandos atras.
+API_BASE_URL_ESPERADO="${API_BASE_URL_ESPERADO:-https://hml.bichu.app}"
+API_BASE_URL="${API_BASE_URL:-$API_BASE_URL_ESPERADO}"
+
+# O CONTROLE NEGATIVO. Um endereco INVENTADO, que nao pode existir em binario
+# nenhum deste repositorio, e que o conferidor passou a EXIGIR em 03/11/2026.
+#
+# Ele nao existia neste portao, e a falta era real: sem ele a hipotese "a minha
+# busca casa qualquer coisa" nunca foi medida aqui -- e e ela que invalidaria
+# todo achado de PRESENCA, inclusive o de endereco proibido que entrou agora.
+# Nao e um endereco de producao de verdade justamente para que ninguem o
+# "conserte" apontando para um host real.
+CONTROLE_NEGATIVO="${CONTROLE_NEGATIVO:-api-de-producao-que-nunca-existiu.bichu.invalido}"
 ENVIRONMENT="${ENVIRONMENT:-hml}"
 # A VERSAO DOS TERMOS NAO E ESCRITA AQUI, E ISSO NAO E ARRUMACAO.
 #
@@ -257,12 +303,18 @@ conferir_versao_no_binario() {
     return 1
   }
 
-  # O controle sai de `$API_BASE_URL` sem o esquema, porque e a parte que
-  # aparece no binario como cadeia inteira; o esquema tambem aparece, mas
-  # cortar nele deixaria o controle curto demais para ser controle.
-  controle=$(printf '%s' "$API_BASE_URL" | sed 's|^https\{0,1\}://||')
+  # O controle sai de `$API_BASE_URL_ESPERADO` sem o esquema -- do valor
+  # ESPERADO, e NUNCA do valor que o build usou. Essa troca de uma variavel
+  # pela outra e metade do conserto da armadilha descrita no alto do arquivo:
+  # tirada do valor medido, a cadeia de controle concorda com qualquer coisa,
+  # `localhost` incluido.
+  #
+  # A outra metade sao os `--proibido` abaixo, escritos LITERAIS pela cicatriz
+  # de 19/10/2026: lista de bandeiras guardada em variavel de shell e expandida
+  # sem aspas e justamente a forma de perder argumento em silencio.
+  controle=$(printf '%s' "$API_BASE_URL_ESPERADO" | sed 's|^https\{0,1\}://||')
   if [ -z "$controle" ]; then
-    echo "REPROVA: a string de controle ficou vazia a partir de API_BASE_URL='$API_BASE_URL'. Sem controle a medicao do valor nao vale nada" >&2
+    echo "REPROVA: a string de controle ficou vazia a partir de API_BASE_URL_ESPERADO='$API_BASE_URL_ESPERADO'. Sem controle a medicao do valor nao vale nada" >&2
     return 1
   fi
 
@@ -285,7 +337,33 @@ conferir_versao_no_binario() {
     --chave TERMS_VERSION \
     --chave TERMS_URL \
     --chave PRIVACY_URL \
-    --chave BUILD_COMMIT
+    --chave BUILD_COMMIT \
+    --controle-negativo "$CONTROLE_NEGATIVO" \
+    --proibido 'http://localhost' \
+    --proibido 'https://localhost' \
+    --proibido 'http://127.0.0.1' \
+    --proibido 'https://127.0.0.1' \
+    --proibido 'http://0.0.0.0'
+}
+
+# ---------------------------------------------------------------------------
+# O DESTINO DO BUILD. Reprova quando o valor que o build VAI usar divergir do
+# ESPERADO declarado.
+#
+# So no caminho de build, e nunca em `--conferir`: ali o pacote foi produzido
+# por outro comando, e comparar o `API_BASE_URL` DESTE processo com qualquer
+# coisa nao diria nada sobre aquele arquivo. Quem cobra o `--conferir` e o
+# `--proibido`, que mede o binario.
+# ---------------------------------------------------------------------------
+conferir_destino_do_build() {
+  if [ "$API_BASE_URL" = "$API_BASE_URL_ESPERADO" ]; then
+    echo "APROVA: o build vai apontar para '$API_BASE_URL', que e o destino ESPERADO declarado"
+    return 0
+  fi
+  echo "REPROVA: o build ia apontar para API_BASE_URL='$API_BASE_URL', e o destino ESPERADO declarado e API_BASE_URL_ESPERADO='$API_BASE_URL_ESPERADO'." >&2
+  echo "  Se isto veio de \`make\` sem \`API_BASE_URL=\` na LINHA DE COMANDO, o valor e o \`http://localhost:<porta>\` do proprio Makefile: ele atribui com \`:=\`, e o ambiente NAO sobrepoe. Rode \`make apk API_BASE_URL=https://hml.bichu.app\`." >&2
+  echo "  Se o desvio for DELIBERADO, declare os dois: \`API_BASE_URL_ESPERADO=<destino> API_BASE_URL=<destino>\`. Duas declaracoes para um desvio e de proposito -- o desvio fica escrito." >&2
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -693,6 +771,10 @@ command -v unzip >/dev/null 2>&1 || {
 # antes do build no workflow: reprovar na leitura do comando custa milissegundos,
 # e descobrir a mesma coisa depois custa o build inteiro.
 conferir_literalidade "$0"
+
+# O DESTINO ANTES DO BUILD: compilar um APK de 75 MB para o endereco errado e
+# so depois reprovar seria o portao certo na hora errada.
+conferir_destino_do_build
 conferir_versao_dos_termos
 
 echo "compilando o APK de release de $ENVIRONMENT, versao $BUILD_NAME (de $PUBSPEC)..."
