@@ -47,9 +47,24 @@ const TRES_FOTOS: readonly FotoDoPerfilDeOutraPessoa[] = [
   },
 ];
 
+/** As fotos que a vitrine PROPRIA devolve, distintas das de conexao de propósito. */
+const DUAS_FOTOS_PROPRIAS: readonly FotoDoPerfilDeOutraPessoa[] = [
+  {
+    gradeKey: comoObjectKey('people/thumb/minha-um.jpg'),
+    abertaKey: comoObjectKey('people/card/minha-um.jpg'),
+    altText: 'o meu quintal',
+  },
+  {
+    gradeKey: comoObjectKey('people/thumb/minha-dois.jpg'),
+    abertaKey: comoObjectKey('people/card/minha-dois.jpg'),
+    altText: null,
+  },
+];
+
 interface Bancada {
   readonly servico: PerfilDePessoa;
   readonly pedidosDeVitrine: { total: number };
+  readonly pedidosDeVitrinePropria: { total: number };
   readonly perguntasDeAresta: { total: number };
 }
 
@@ -59,6 +74,7 @@ function bancada(
   conexoesDaPessoa = 0,
 ): Bancada {
   const pedidosDeVitrine = { total: 0 };
+  const pedidosDeVitrinePropria = { total: 0 };
   const perguntasDeAresta = { total: 0 };
 
   const conexoes: LeitorDeConexao = {
@@ -80,6 +96,13 @@ function bancada(
       pedidosDeVitrine.total += 1;
       return Promise.resolve(TRES_FOTOS);
     },
+    // **FOTOS DIFERENTES DAS DE CONEXAO, e isso e o que torna o caso
+    // mensuravel:** com as mesmas fotos nas duas portas, um caso que pedisse a
+    // porta errada passaria igual. Aqui o corpo DIZ qual das duas respondeu.
+    vitrinePropria: () => {
+      pedidosDeVitrinePropria.total += 1;
+      return Promise.resolve(DUAS_FOTOS_PROPRIAS);
+    },
   };
 
   return {
@@ -90,6 +113,7 @@ function bancada(
       clock: { now: () => AGORA },
     }),
     pedidosDeVitrine,
+    pedidosDeVitrinePropria,
     perguntasDeAresta,
   };
 }
@@ -254,6 +278,11 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
       'contact_channel_verified',
       'display_name',
       'handle',
+      // A SEGUNDA EMENDA A LISTA FECHADA (03/11/2026, decisao do cliente), e
+      // ela entra aqui pela mesma forma que `contact_channel_verified` entrou:
+      // nomeada, com data e com motivo. Ver `PersonProfile.is_self` no
+      // contrato para por que o aplicativo nao tem como derivar isto.
+      'is_self',
       'pets_count',
       'public_ref',
     ]);
@@ -386,5 +415,150 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
     const b = bancada(MARINA_VISIVEL, { estado: 'connected', ref: 'ref-da-aresta-0001' }, 12);
     const corpo = await corpoDe(b);
     assert.equal(corpo['connections_count'], 12);
+  });
+
+  // ---------------------------------------------------------------------
+  // O PROPRIO PERFIL -- `is_self`, E A VITRINE QUE VEM COM ELE
+  // ---------------------------------------------------------------------
+  //
+  // Decisao do cliente, 03/11/2026: *"quando o proprio usuario clica no perfil
+  // que esta no post, ele nao deve ter um botao para adicionar conexao, sendo
+  // que ele e ele mesmo. No maximo mostrar a pagina do perfil com a galeria de
+  // fotos dele."*, e depois *"pode corrigir isso tambem"* sobre a galeria.
+  //
+  // **A VITRINE ERA IMPOSSIVEL DE ABRIR NO PROPRIO PERFIL**, e nao e detalhe de
+  // consulta: o `WHERE` dela exige aresta `accepted`, e NINGUEM TEM ARESTA
+  // CONSIGO MESMO. Entao `connection_state` consigo mesmo e sempre `none`, a
+  // vitrine vinha sempre ausente, e a tela lia a ausencia como "voce nao e
+  // conexao dela" -- dizendo *"As fotos aparecem para quem e conexao."* SOBRE AS
+  // FOTOS DE QUEM ESTAVA OLHANDO.
+  //
+  // **O PONTO UNICO:** a decisao e UMA comparacao em `porApelido`
+  // (`pessoa.userId === quemOlha`), e dela saem as DUAS coisas -- o `is_self` do
+  // corpo e a escolha da porta da vitrine. Nao existe segundo predicado: a
+  // consulta da vitrine propria recebe UM id so e nao tem como comparar nada.
+
+  void it('PROPRIO PERFIL -- `is_self` e `true` quando quem olha E a pessoa', async () => {
+    const corpo = comoResposta(
+      await bancada().servico.porApelido(MARINA, 'marina-vet'),
+      BASE_DE_MIDIA,
+    );
+    assert.equal(
+      corpo['is_self'],
+      true,
+      'sem isto a tela nao tem como saber que o perfil e de quem esta olhando: a intersecao de `Me` e `PersonProfile` e so o `handle`, que muda',
+    );
+  });
+
+  void it('PROPRIO PERFIL -- a vitrine SAI, e vem da porta PROPRIA e nao da de conexao', async () => {
+    const b = bancada();
+    const corpo = comoResposta(await b.servico.porApelido(MARINA, 'marina-vet'), BASE_DE_MIDIA);
+
+    // ANCORADO NA PORTA, e nao so na presenca da chave: as duas portas
+    // devolvem fotos DIFERENTES de proposito, entao o corpo diz qual respondeu.
+    assert.equal(b.pedidosDeVitrinePropria.total, 1, 'a porta propria nao foi pedida');
+    assert.equal(
+      b.pedidosDeVitrine.total,
+      0,
+      'a porta de CONEXAO foi pedida para o proprio perfil: ela exige aresta `accepted`, que consigo mesmo nunca existe',
+    );
+
+    const fotos = corpo['showcase'] as readonly Record<string, unknown>[] | undefined;
+    assert.ok(fotos !== undefined, 'REPROVA: a vitrine veio AUSENTE no proprio perfil');
+    assert.equal(fotos.length, 2);
+    assert.match(String(fotos[0]?.['grid_url']), /people\/thumb\/minha-um\.jpg$/);
+  });
+
+  void it('PROPRIO PERFIL -- a vitrine sai mesmo com `connection_state` `none`', async () => {
+    // Este e o caso que a regra antiga tornava impossivel. Nenhuma aresta, e as
+    // fotos saem de qualquer forma.
+    const b = bancada();
+    const perfil = await b.servico.porApelido(MARINA, 'marina-vet');
+    assert.equal(perfil.connectionState, 'none', 'consigo mesmo nao ha aresta, e e isso mesmo');
+    assert.equal(perfil.souEu, true);
+    assert.equal(perfil.vitrine?.length, 2);
+  });
+
+  void it('PROPRIO PERFIL -- a vitrine propria vem VAZIA como `[]`, e nunca ausente', async () => {
+    // `[]` para terceiro seria a afirmacao proibida ("ela nao tem foto") sobre
+    // uma vitrine que quem olha nao pode ver. Para si mesmo nao e proibida:
+    // "voce nao publicou fotos" e uma afirmacao que quem olha pode fazer sobre
+    // si, e e o que deixa a tela escolher a frase certa em vez da de estranho.
+    const b = bancada();
+    const perfis: PerfilDePessoaRepository = {
+      perfilPorApelido: () => Promise.resolve(MARINA_VISIVEL),
+      vitrineDeConexao: () => Promise.resolve(TRES_FOTOS),
+      vitrinePropria: () => Promise.resolve([]),
+    };
+    const servico = new PerfilDePessoa({
+      perfis,
+      conexoes: {
+        arestaVivaEntre: () => Promise.resolve(undefined),
+        contarConexoes: () => Promise.resolve(0),
+        estaConectado: () => Promise.resolve(false),
+        estadosPorApelido: () => {
+          throw new Error('o perfil de UMA pessoa nao pergunta estado em lote');
+        },
+      },
+      convites: { resolver: () => Promise.resolve(undefined) },
+      clock: { now: () => AGORA },
+    });
+    const corpo = comoResposta(await servico.porApelido(MARINA, 'marina-vet'), BASE_DE_MIDIA);
+    assert.deepEqual(corpo['showcase'], [], 'vitrine propria vazia tem de chegar como `[]`');
+    assert.equal(b.pedidosDeVitrine.total, 0);
+  });
+
+  // ---------------------------------------------------------------------
+  // CONTRAPESO: PARA TERCEIRO NAO AFROUXOU UMA LINHA
+  // ---------------------------------------------------------------------
+  //
+  // Decisao do cliente de 19/10/2026, que NAO foi reaberta: *"ele pode ver
+  // nome, quantidade de pets, conexoes, mas nao as fotos publicadas e nem a
+  // timeline do usuario"*. Consertar o proprio perfil afrouxando este ramo
+  // seria VAZAMENTO, e nao conserto -- e sem estes casos apagar o `EXISTS` da
+  // aresta passaria em todos os de cima.
+
+  void it('CONTRAPESO -- estranho continua com `is_self` FALSO e SEM vitrine', async () => {
+    const b = bancada();
+    const corpo = await corpoDe(b);
+
+    assert.equal(corpo['is_self'], false, '`false` e informacao, e nao ausencia');
+    assert.ok(
+      !Object.hasOwn(corpo, 'showcase'),
+      'REPROVA: o conserto do proprio perfil vazou a vitrine para quem nao e conexao',
+    );
+    assert.equal(
+      b.pedidosDeVitrinePropria.total,
+      0,
+      'REPROVA: a porta da vitrine PROPRIA foi pedida para o perfil de OUTRA pessoa',
+    );
+    assert.equal(b.pedidosDeVitrine.total, 0);
+  });
+
+  void it('CONTRAPESO -- conexao ACEITA de terceiro continua vindo pela porta de CONEXAO', async () => {
+    const b = bancada(MARINA_VISIVEL, { estado: 'connected', ref: 'ref-da-aresta-0001' });
+    const corpo = await corpoDe(b);
+
+    assert.equal(corpo['is_self'], false);
+    assert.equal(b.pedidosDeVitrine.total, 1, 'a porta de conexao deixou de ser usada');
+    assert.equal(b.pedidosDeVitrinePropria.total, 0);
+    // E sao as fotos DELA (tres), e nao as de quem olha (duas).
+    assert.equal((corpo['showcase'] as readonly unknown[]).length, 3);
+  });
+
+  void it('CONTRAPESO -- os tres estados NAO-aceitos de terceiro seguem sem vitrine', async () => {
+    for (const aresta of [
+      undefined,
+      { estado: 'pending_sent' as const, ref: 'ref-da-aresta-0001' },
+      { estado: 'pending_received' as const, ref: 'ref-da-aresta-0001' },
+    ]) {
+      const b = bancada(MARINA_VISIVEL, aresta);
+      const corpo = await corpoDe(b);
+      assert.ok(
+        !Object.hasOwn(corpo, 'showcase'),
+        `REPROVA: vitrine de terceiro no estado \`${aresta?.estado ?? 'none'}\``,
+      );
+      assert.equal(b.pedidosDeVitrinePropria.total, 0);
+    }
   });
 });

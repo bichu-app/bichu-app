@@ -369,6 +369,9 @@ void main() {
             'photo_icon_url': _urlDaFoto,
             'connection_state': 'connected',
             'connection_ref': 'r1',
+            // Perfil de OUTRA pessoa, que e conexao aceita: a vitrine sai pela
+            // porta de conexao, e e dela que o cache de imagem fala.
+            'is_self': false,
           });
         }
         return _json(<String, dynamic>{}, status: 404);

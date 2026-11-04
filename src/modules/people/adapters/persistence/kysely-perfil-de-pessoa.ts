@@ -68,6 +68,45 @@ export function construtorDoPerfilPorApelido(
     .compile();
 }
 
+/**
+ * **A PRÓPRIA VITRINE, e é a MESMA consulta da de conexão MENOS o `EXISTS` da
+ * aresta aceita** (decisão do cliente de 03/11/2026).
+ *
+ * **UM id só, e isso é a defesa e não economia de parâmetro:** não existe
+ * `dono` separado aqui, então nenhuma chamada consegue pedir por esta consulta
+ * a vitrine de terceiro. A alternativa -- a consulta de conexão com um booleano
+ * que dispensa o `EXISTS` -- é a forma que vaza, porque o booleano errado
+ * entrega a vitrine de outra pessoa a um estranho e nada no tipo acusa.
+ *
+ * **OS OUTROS PREDICADOS FICAM TODOS**, e nenhum deles é decoração aqui:
+ * `purpose`/`status`/chaves não nulas porque `PersonShowcasePhoto` exige as
+ * duas derivadas e foto não pronta não as tem; `bloqueio_entre` e
+ * `foto_ocultada_para_quem_denunciou` porque os dois são sobre `quemOlha`, e
+ * mantê-los custa nada e deixa a consulta correta mesmo se a identidade a
+ * montante algum dia divergir. **O único predicado que sai é o da aresta**, que
+ * é exatamente o que nunca pode existir consigo mesmo.
+ */
+export function construtorDaVitrinePropria(
+  db: Kysely<Database>,
+  quemOlha: UserId,
+): CompiledQuery<LinhaDaFotoDoPerfil> {
+  return db
+    .selectFrom('user_showcase_images as v')
+    .innerJoin('catalog_images as c', 'c.id', 'v.image_id')
+    .select(['c.thumb_key as grade_key', 'c.public_key as aberta_key', 'v.alt_text as alt_text'])
+    .where('v.user_id', '=', quemOlha)
+    .where('c.purpose', '=', PROPOSITO_DA_VITRINE)
+    .where('c.status', '=', FOTO_PRONTA)
+    .where(sql<boolean>`c.thumb_key IS NOT NULL`)
+    .where(sql<boolean>`c.public_key IS NOT NULL`)
+    .where(sql<boolean>`NOT bloqueio_entre(${quemOlha}::uuid, ${quemOlha}::uuid)`)
+    .where(
+      sql<boolean>`NOT foto_ocultada_para_quem_denunciou(c.public_key, ${quemOlha}::uuid)`,
+    )
+    .orderBy('v.position', 'asc')
+    .compile();
+}
+
 /** **A vitrine de `dono`, e a conexão aceita está no `WHERE`.** */
 export function construtorDaVitrineDeConexao(
   db: Kysely<Database>,
@@ -133,6 +172,11 @@ export function criarPerfilDePessoaRepository(db: Kysely<Database>): PerfilDePes
       const { rows } = await db.executeQuery(
         construtorDaVitrineDeConexao(db, dono, quemOlha),
       );
+      return rows.map(comoFoto);
+    },
+
+    async vitrinePropria(quemOlha: UserId) {
+      const { rows } = await db.executeQuery(construtorDaVitrinePropria(db, quemOlha));
       return rows.map(comoFoto);
     },
   };

@@ -219,6 +219,9 @@ Map<String, dynamic> _perfilJson({
   'connection_state': estado,
   'connection_ref': estado == 'connected' ? 'r1' : null,
   'contact_channel_verified': true,
+  // Este arquivo mede a tela de TERCEIRO, e o nome dele diz isso: `is_self`
+  // falso em toda chamada, e e o que mantem a vitrine atras da aresta aceita.
+  'is_self': false,
   'showcase': ?fotos,
 };
 

@@ -80,6 +80,13 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// O vazio de quem **é** conexão.
   static const String conexaoSemFoto = 'Este usuário ainda não publicou fotos.';
 
+  /// **O vazio de quem está olhando o PRÓPRIO perfil.**
+  ///
+  /// Ela existe porque as outras duas mentem aqui: [fotosSoParaConexao] é falsa
+  /// (conexão não abre nada no próprio perfil, e nem poderia — ninguém tem
+  /// aresta consigo mesmo) e [conexaoSemFoto] fala de você na terceira pessoa.
+  static const String aindaSemFoto = 'Você ainda não publicou fotos.';
+
   /// O que o toque na célula faz.
   static const String dicaDeAmpliar = 'Ampliar';
 
@@ -193,7 +200,17 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       appBar: AppBar(
         title: const Text(TelaDePerfilDePessoa.tituloDaBarra),
         actions: <Widget>[
-          if (perfil != null)
+          // **O `⋮` É O MENU DE OUTRA PESSOA, e por isso ele não existe no
+          // próprio perfil** (decisão do cliente, 03/11/2026). Os três itens
+          // dele são sobre terceiro: denunciar, bloquear e desfazer conexão.
+          //
+          // **O servidor já recusava os três**, e isso foi medido e não
+          // suposto: `blockUser` e `reportUserProfile` devolvem erro de campo
+          // com a mensagem *"Este perfil é seu."*. Então nunca deu para se
+          // bloquear nem para se denunciar de verdade — o que o menu oferecia
+          // eram becos sem saída, e é por isso que o conserto é ESCONDER e não
+          // acrescentar trava.
+          if (perfil != null && !perfil.souEu)
             MenuDoPerfil(
               refDaPessoa: perfil.publicRef,
               api: widget.seguranca,
@@ -280,8 +297,20 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       const SizedBox(height: BichuEspaco.e4),
       _contagens(perfil, cores, textos),
       const SizedBox(height: BichuEspaco.e6),
-      ..._acoesDaRelacao(perfil, cores, textos),
-      const SizedBox(height: BichuEspaco.e6),
+      // **AS AÇÕES DA RELAÇÃO SÓ EXISTEM SOBRE TERCEIRO** (decisão do cliente,
+      // 03/11/2026, *"ele não deve ter um botão para adicionar conexão, sendo
+      // que ele é ele mesmo"*). São os QUATRO estados que saem, e não só o
+      // `Pedir conexão` que ele relatou: nenhum de `pedido enviado`, `pedido
+      // recebido`, `cancelar` e `conectado` faz sentido sobre si mesmo, e as
+      // frases que os narram também não.
+      //
+      // **O `SizedBox` entra DENTRO da guarda**, e não antes dela: fora, o
+      // próprio perfil ficaria com um vão de 24 dp entre as contagens e a
+      // galeria, pagando espaço por um bloco que não existe.
+      if (!perfil.souEu) ...<Widget>[
+        ..._acoesDaRelacao(perfil, cores, textos),
+        const SizedBox(height: BichuEspaco.e6),
+      ],
       _vitrine(perfil, cores, textos),
     ];
   }
@@ -380,6 +409,24 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   Widget _vitrine(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     final fotos = perfil.vitrine;
 
+    // **NO PRÓPRIO PERFIL AS FOTOS SÃO DE QUEM ESTÁ OLHANDO**, e nenhuma das
+    // duas frases de terceiro serve aqui (decisão do cliente, 03/11/2026,
+    // *"pode corrigir isso também"*): [fotosSoParaConexao] é FALSA, porque
+    // conexão não abre nada no próprio perfil e nem poderia — o `WHERE` da
+    // vitrine de conexão exige aresta `accepted` e ninguém tem aresta consigo
+    // mesmo —, e [conexaoSemFoto] fala de quem está olhando na terceira pessoa.
+    //
+    // **AUSENTE E VAZIO SÃO A MESMA COISA PARA SI MESMO**, e é deliberado:
+    // depois do conserto o servidor manda sempre a lista quando `is_self`, mas
+    // se ela faltasse a tela NÃO pode cair na frase de estranho — que é
+    // exatamente o defeito relatado.
+    if (perfil.souEu) {
+      if (fotos == null || fotos.isEmpty) {
+        return _recado(TelaDePerfilDePessoa.aindaSemFoto, cores, textos);
+      }
+      return _grade(fotos);
+    }
+
     if (fotos == null) {
       return _recado(TelaDePerfilDePessoa.fotosSoParaConexao, cores, textos);
     }
@@ -387,6 +434,15 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       return _recado(TelaDePerfilDePessoa.conexaoSemFoto, cores, textos);
     }
 
+    return _grade(fotos);
+  }
+
+  /// A grade das fotos, **a MESMA para a vitrine própria e para a de conexão**.
+  ///
+  /// Ela saiu de dentro de [_vitrine] quando o próprio perfil ganhou galeria:
+  /// duas cópias da grade seriam duas definições do lado da célula e da
+  /// derivada que ela pede, e a segunda envelheceria calada.
+  Widget _grade(List<FotoDoPerfil> fotos) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
