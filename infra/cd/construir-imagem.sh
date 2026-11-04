@@ -6,7 +6,7 @@
 #   ex.: construir-imagem.sh bichu-app . prod
 #        construir-imagem.sh bichu-migrador . migrador
 #        construir-imagem.sh bichu-web web
-#        construir-imagem.sh bichu-admin-web admin   # exige VITE_CAPTCHA_SITE_KEY
+#        construir-imagem.sh bichu-admin-web admin   # exige DESTINO + VITE_CAPTCHA_SITE_KEY
 #
 # Saida (em $GITHUB_OUTPUT, ou na tela):
 #   ref=<registro>/<nome>@sha256:...   o digest, que e o que se implanta
