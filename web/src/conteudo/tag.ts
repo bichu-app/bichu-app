@@ -15,6 +15,18 @@ export const TAG = {
   enviando: 'Avisando o tutor…',
   abaixoDoBotao: 'É um toque. Você não precisa se cadastrar.',
 
+  // O pet existe, a tag vale, e o tutor NAO marcou o pet como perdido: aqui nao
+  // ha aviso para enviar, e e por isso que o botao sai da pagina. Mas quem
+  // escaneou a plaquinha pode ser justamente quem achou o animal ANTES de o
+  // tutor perceber que ele saiu -- entao a pagina precisa dizer o que fazer, e
+  // nao ficar sem acao nenhuma.
+  naoPerdidoTitulo: 'Este pet não está marcado como perdido.',
+  naoPerdidoTexto: (nome: string) =>
+    `O tutor de ${nome} não avisou que ele saiu de casa. Por isso não há aviso para enviar daqui.`,
+  naoPerdidoSeParecer: (nome: string) =>
+    `Se ${nome} parece perdido, fique com ele em um lugar seguro e abra esta página de novo: quando o tutor marcar ${nome} como perdido, o botão de avisar aparece aqui.`,
+  naoPerdidoEndereco: 'Para abrir esta página de novo, guarde este endereço:',
+
   avisadoTitulo: (nome: string | null) => (nome ? `Pronto. O tutor de ${nome} foi avisado.` : 'Pronto. O tutor foi avisado.'),
   avisadoTexto: 'Ele recebe o aviso agora. Você pode ir embora.',
   conviteApp: 'O Bichu também tem app, para acompanhar a resposta do tutor e proteger o seu pet.',
