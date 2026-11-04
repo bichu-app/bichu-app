@@ -22,8 +22,16 @@
 // `?aba=usuarios` fica pendurado esperando a proxima reconstrucao. O `Aplicar`
 // da folha de filtros fecha uma rota sem pagina (`Navigator.pop` do
 // `showModalBottomSheet`), o `GoRouter` notifica, `AbaRede` reconstroi -- e a
-// pessoa cai em `Usuarios`, que abre sem lista nenhuma. Dai o *"acaba nao
-// listando nada"*: nao e o filtro que nao casa, e outra aba.
+// pessoa cai em `Usuarios`, que abre sem lista nenhuma.
+//
+// **E O *"ACABA NAO LISTANDO NADA"* TEM UMA SEGUNDA CAUSA, MEDIDA AQUI.** Na
+// base, `_FolhaDeFiltros._aplicar` fechava a folha ANTES de entregar a
+// escolha. Com a aba desmontada pelo proprio `pop`, `aoAplicar` caia num
+// `State` descartado: a reproducao imprimiu *"setState() called after
+// dispose(): _AgendaDaRedeState"* com a pilha passando por `_trocarRecorte` e
+// `_aplicarAFolha`, e o recorte NUNCA chegou ao servidor. Entao o *nada* era
+// duplo -- aba errada E recorte no chao --, e por isso as assercoes de cada
+// caso daqui sao DUAS: a aba e a consulta.
 //
 // ## POR QUE O TOQUE, E NAO O DESENHO
 //
