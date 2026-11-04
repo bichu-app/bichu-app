@@ -200,6 +200,16 @@ void main() {
             'objeto grafico ficou sem o que medir.',
       );
 
+      // UMA EXPECTATIVA SO PARA OS DOIS CRITERIOS, e a razao e de diagnostico.
+      //
+      // Na primeira versao deste caso o texto tinha `expect` proprio ANTES do
+      // grafico. Rodado contra o codigo velho, o botao reprovava pela mensagem
+      // do TEXTO (1.62:1 do rotulo no escuro) e o `expect` abortava o caso
+      // antes de o grafico ser medido -- entao o giro a 1.02:1, que e o
+      // defeito do SC 1.4.11, NAO aparecia na reprovacao. Quem reintroduzisse
+      // o giro junto com o rotulo cacaria o defeito na mensagem errada.
+      // Juntando as duas listas numa expectativa, nenhum dos dois criterios
+      // esconde o outro, e o relatorio nomeia os dois.
       final texto = verificarContrasteDeTexto(
         tester,
         tela: 'botao-primario',
@@ -207,24 +217,24 @@ void main() {
         piso: 4.5,
         isentarInativo: true,
       );
-      expect(texto, isEmpty, reason: 'contraste de texto no botao ($tema):\n${relatorio(texto)}');
-
       final grafico = verificarContrasteDeIndicador(
         tester,
         tela: 'botao-primario',
         tema: tema,
       );
       expect(
-        grafico,
+        <Violacao>[...grafico, ...texto],
         isEmpty,
         reason:
-            'o giro de carga nao atinge 3:1 (SC 1.4.11) no tema $tema. Medido '
-            'em 03/11/2026: `on-action-fill` sobre `disabled-surface` da '
-            '1.02:1 no escuro -- um giro invisivel. O botao fica DESABILITADO '
-            'enquanto carrega, entao o fundo dele e `disabled-surface` e nao '
-            '`action-fill`: a tinta que pertence aquele fundo e `on-disabled`, '
-            'que e o que `widgets/folha_de_senha.dart` ja usava no mesmo giro.'
-            '\n${relatorio(grafico)}',
+            'contraste abaixo do piso no botao primario ($tema). Os DOIS '
+            'defeitos de 03/11/2026 moram aqui: o GIRO pintava '
+            '`on-action-fill` sobre `disabled-surface` (1.02:1 no escuro, '
+            'piso de 3:1 do SC 1.4.11) porque o botao fica DESABILITADO '
+            'enquanto carrega; e o ROTULO usava `textos.labelLarge` pelado, '
+            'que carrega `text-primary` do tema e vence o `foregroundColor` '
+            'do botao (1.62:1 sobre a manteiga no escuro). O grafico vem '
+            'PRIMEIRO na lista de proposito.\n'
+            '${relatorio(<Violacao>[...grafico, ...texto])}',
       );
 
       // A isencao do rotulo desabilitado e PREVISTA, e a lista vai para o
@@ -241,6 +251,101 @@ void main() {
             'inativo. O botao com `carregando: true` passa `onPressed: null`, '
             'e se o verificador nao enxerga isso a isencao do SC 1.4.3 esta '
             'sendo aplicada por outro critério, ou nao esta sendo aplicada.',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // OS TRES BOTOES PREENCHIDOS DO MESMO MECANISMO (04/11/2026)
+    // -----------------------------------------------------------------------
+    //
+    // Cada um reprovava num tema DIFERENTE e os tres eram o mesmo defeito, o
+    // que e justamente por que cada caso roda nos dois.
+
+    testWidgets('A FOLHA DE SENHA das operacoes destrutivas, tema $tema', (
+      tester,
+    ) async {
+      await tester.pumpWidget(folhaDeSenhaReal(escuro: escuro));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO: o rotulo que carrega o defeito esta na arvore. Sem
+      // ele, uma folha que deixasse de montar devolveria zero violacao.
+      expect(
+        find.text('Confirmar'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o botao de confirmar nao esta na folha, e e o rotulo '
+            'dele que media 2.10:1 no claro e 1.87:1 no escuro.',
+      );
+
+      final v = verificarContrasteDeTexto(
+        tester,
+        tela: 'folha-de-senha',
+        tema: tema,
+        piso: 4.5,
+        isentarInativo: true,
+      );
+      expect(
+        v,
+        isEmpty,
+        reason:
+            'contraste abaixo do piso na folha de senha ($tema). **Esta e a '
+            'folha das seis operacoes destrutivas**, exclusao de conta '
+            'inclusive: o rotulo do `Confirmar` usava `textos.labelLarge` '
+            'pelado, que carrega `text-primary` e vence o `foregroundColor` '
+            'do botao -- 2.10:1 no claro e 1.87:1 no escuro sobre `primary`. '
+            'A tinta que pertence a `primary` e `on-primary`.\n'
+            '${relatorio(v)}',
+      );
+    });
+
+    testWidgets('A FOLHA DESTRUTIVA, tema $tema', (tester) async {
+      await tester.pumpWidget(folhaDestrutivaReal(escuro: escuro));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Excluir'), findsOneWidget);
+
+      final v = verificarContrasteDeTexto(
+        tester,
+        tela: 'folha-destrutiva',
+        tema: tema,
+        piso: 4.5,
+        isentarInativo: true,
+      );
+      expect(
+        v,
+        isEmpty,
+        reason:
+            'contraste abaixo do piso na folha destrutiva ($tema). O rotulo '
+            'do botao media 2.35:1 sobre `urgency` no tema CLARO; no escuro o '
+            'mesmo par dava 9.92:1 e passava por acidente, porque la '
+            '`urgency` e escuro. A tinta de `urgency` e `on-urgency`.\n'
+            '${relatorio(v)}',
+      );
+    });
+
+    testWidgets('O CONVITE DE PASSKEY, tema $tema', (tester) async {
+      await tester.pumpWidget(conviteDePasskeyReal(escuro: escuro));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ativar'), findsOneWidget);
+
+      final v = verificarContrasteDeTexto(
+        tester,
+        tela: 'convite-de-passkey',
+        tema: tema,
+        piso: 4.5,
+        isentarInativo: true,
+      );
+      expect(
+        v,
+        isEmpty,
+        reason:
+            'contraste abaixo do piso no convite de passkey ($tema). O rotulo '
+            'do `Ativar` media 1.62:1 sobre `action-fill` no tema ESCURO; no '
+            'claro `text-primary` e `on-action-fill` tem o MESMO valor e ele '
+            'saia certo por coincidencia, a 9.35:1. Este botao nao declara '
+            '`style` e herda o `filledButtonTheme`.\n'
+            '${relatorio(v)}',
       );
     });
   }

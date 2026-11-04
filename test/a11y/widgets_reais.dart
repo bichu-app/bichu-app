@@ -59,13 +59,22 @@
 
 library;
 
+import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/reautenticacao.dart';
+import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/convite_de_passkey.dart';
+import 'package:bichu/widgets/folha_de_senha.dart';
+import 'package:bichu/widgets/folha_destrutiva.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 /// A casca minima com o TEMA DO APP instalado.
 ///
@@ -228,5 +237,89 @@ Widget distintivoDaAbaComContagem({required bool escuro}) {
         naoLidas: 3,
       ),
     ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OS TRES BOTOES PREENCHIDOS DO MESMO MECANISMO (04/11/2026)
+// ---------------------------------------------------------------------------
+//
+// Eles entraram na galeria porque o conserto deles entrou na mesma PR, e a
+// razao e dita aqui para a proxima pessoa: se o portao alcanca um defeito e o
+// conserto fica fora, a branch nasce vermelha depois da mescla OU o portao
+// precisa de isencao para ele -- e isencao que sobra aprova o furo quando ele
+// voltar. Conserto sem guarda e conserto com prazo.
+//
+// Os tres pintavam o rotulo com `textos.labelLarge` PELADO, que carrega
+// `text-primary` do tema e vence o `foregroundColor` do botao:
+//
+//   folha_de_senha.dart      rotulo sobre `primary`      2.10 claro / 1.87 escuro
+//   folha_destrutiva.dart    rotulo sobre `urgency`      2.35 claro / 9.92 escuro
+//   convite_de_passkey.dart  rotulo sobre `action-fill`  9.35 claro / 1.62 escuro
+//
+// Note que cada um reprova num tema DIFERENTE, e os tres sao o mesmo defeito.
+// E por isso que toda montagem daqui leva os dois temas: um portao de um tema
+// so teria pego um de tres.
+
+/// A FOLHA DE SENHA das seis operacoes destrutivas, ATIVA.
+///
+/// Ativa e nao carregando, de proposito: o defeito esta no rotulo do botao
+/// HABILITADO, e `isentarInativo` -- que o caso liga -- dispensaria o rotulo se
+/// o botao estivesse desabilitado. Medir a folha so no estado de carga mediria
+/// justamente o estado que a norma isenta.
+///
+/// A PORTA E A DE VERDADE (`AuthApi` sobre `ApiClient`), com um cliente que
+/// nunca e chamado: este caso nao toca em `Confirmar`. Um duble de `AuthApi`
+/// seria mais curto e nao diria nada diferente aqui, mas a bancada da folha ja
+/// e esta em `test/widgets/folha_de_senha_test.dart` e duas bancadas da mesma
+/// peca divergem na primeira edicao.
+Widget folhaDeSenhaReal({required bool escuro}) {
+  final cliente = MockClient((http.Request pedido) async {
+    throw StateError(
+      'REPROVA: a medicao de contraste nao deveria chamar o servidor. '
+      'Se este cliente foi chamado, o caso passou a exercer o fluxo da folha '
+      'em vez de medir a cor dela.',
+    );
+  });
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: 'https://exemplo.invalido'),
+    cliente: cliente,
+    tokenDeAcesso: () async => 'token-de-medicao',
+  );
+
+  return cascaReal(
+    escuro: escuro,
+    child: FolhaDeSenha(
+      auth: AuthApi(api),
+      escopo: EscopoDeReautenticacao.exclusaoDaConta,
+    ),
+  );
+}
+
+/// A FOLHA DESTRUTIVA, ativa.
+Widget folhaDestrutivaReal({required bool escuro}) {
+  return cascaReal(
+    escuro: escuro,
+    child: FolhaDestrutiva(
+      titulo: 'Excluir o pet',
+      corpo: 'Isto nao tem volta.',
+      oQueSome: const <String>['As fotos', 'O historico'],
+      rotuloDeConfirmar: 'Excluir',
+      rotuloAcessivelDeConfirmar: 'Excluir o pet, sem volta',
+      rotuloDeCancelar: 'Cancelar',
+      aoConfirmar: () async {},
+    ),
+  );
+}
+
+/// O CONVITE DE PASSKEY, ativo.
+///
+/// O `build` dele nao toca `Escopo` -- so os callbacks de `_ativar` e
+/// `_naoQuero` tocam --, e e por isso que ele monta sem sessao de mentira.
+/// Medido, nao suposto: um `build` que lesse o escopo estouraria aqui.
+Widget conviteDePasskeyReal({required bool escuro}) {
+  return cascaReal(
+    escuro: escuro,
+    child: const ConviteDePasskey(rotuloDoAparelho: 'Aparelho de medicao'),
   );
 }
