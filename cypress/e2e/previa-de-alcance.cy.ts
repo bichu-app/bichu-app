@@ -18,7 +18,10 @@ import { criarConta, criarPet, autorizacao } from '../apoio/massa';
 import type { OuProblema, PreviaDeAlcance } from '../apoio/respostas';
 
 const ESTADOS_DA_PREVIA = ['computed', 'unavailable', 'no_location'];
-const BLOQUEIOS = ['contact_channel_unverified', 'pet_photo_missing', 'pet_already_lost'];
+const BLOQUEIOS = ['contact_channel_unverified', 'pet_already_lost'];
+// `pet_photo_missing` SAIU de `blockers` em 03/11/2026 e entrou aqui: ele
+// avisa, e nao impede abrir.
+const AVISOS = ['pet_photo_missing'];
 
 describe('@regressao prévia de alcance', () => {
   it('com coordenada, o estado é do vocabulário fechado e o corpo é coerente', () => {
@@ -38,6 +41,7 @@ describe('@regressao prévia de alcance', () => {
           expect(r.body.reach_status, `vocabulário fechado: ${ESTADOS_DA_PREVIA.join(', ')}`).to.be.oneOf(ESTADOS_DA_PREVIA);
           expect(r.body.radius_m, 'radius_m é obrigatório').to.be.a('number');
           expect(r.body.blockers, 'blockers é obrigatório, mesmo vazio').to.be.an('array');
+          expect(r.body.warnings, 'warnings é obrigatório, mesmo vazio').to.be.an('array');
 
           if (r.body.reach_status === 'computed') {
             expect(r.body.reachable_tutors, 'computed conta tutores, inclusive zero').to.be.a('number');
@@ -85,6 +89,13 @@ describe('@regressao prévia de alcance', () => {
           for (const bloqueio of r.body.blockers as string[]) {
             expect(bloqueio, `bloqueio fora do vocabulário: ${bloqueio}`).to.be.oneOf(BLOQUEIOS);
           }
+          for (const aviso of r.body.warnings as string[]) {
+            expect(aviso, `aviso fora do vocabulário: ${aviso}`).to.be.oneOf(AVISOS);
+          }
+          expect(
+            r.body.blockers,
+            'falta de foto deixou de bloquear em 03/11/2026: ela avisa, e quem decide por blockers.length travaria em silêncio',
+          ).to.not.include('pet_photo_missing');
           expect(
             r.body.blockers,
             'falta de coordenada reduz o alcance, não a existência do caso, e por isso não pode aparecer como bloqueio',

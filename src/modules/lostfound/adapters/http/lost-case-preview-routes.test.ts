@@ -201,7 +201,7 @@ function tipoDe(corpo: Record<string, unknown>): string | undefined {
 }
 
 void describe('a rota existe e responde o que o contrato declara', () => {
-  void it('o dono recebe 200 com os cinco campos de LostCaseReachPreview', async () => {
+  void it('o dono recebe 200 com os seis campos de LostCaseReachPreview', async () => {
     const app = servidor({ areaDeReferencia: { neighborhood: 'Vila Madalena', city: 'São Paulo' } });
     const { status, corpo } = await pedir(app);
     await app.close();
@@ -213,6 +213,7 @@ void describe('a rota existe e responde o que o contrato declara', () => {
       'radius_m',
       'reach_status',
       'reachable_tutors',
+      'warnings',
     ]);
     assert.equal(corpo['radius_m'], 5000);
   });
@@ -245,7 +246,7 @@ void describe('a rota existe e responde o que o contrato declara', () => {
     assert.equal(corpo['reachable_tutors'], 0);
   });
 
-  void it('os blockers são os três do contrato, e falta de coordenada não é um deles', async () => {
+  void it('os blockers são os dois do contrato, e falta de coordenada não é um deles', async () => {
     const app = servidor({
       temCanalVerificado: false,
       temFotoPronta: false,
@@ -254,12 +255,26 @@ void describe('a rota existe e responde o que o contrato declara', () => {
     const { corpo } = await pedir(app);
     await app.close();
 
-    assert.deepEqual(corpo['blockers'], [
-      'contact_channel_unverified',
-      'pet_photo_missing',
-      'pet_already_lost',
-    ]);
+    assert.deepEqual(corpo['blockers'], ['contact_channel_unverified', 'pet_already_lost']);
     assert.equal(corpo['reach_status'], 'no_location');
+  });
+
+  void it('FALTA DE FOTO SAI EM `warnings`, e `blockers` fica VAZIO', async () => {
+    const app = servidor({ temFotoPronta: false });
+    const { status, corpo } = await pedir(app);
+    await app.close();
+
+    assert.equal(status, 200);
+    assert.deepEqual(corpo['blockers'], []);
+    assert.deepEqual(corpo['warnings'], ['pet_photo_missing']);
+  });
+
+  void it('com foto pronta, `warnings` sai VAZIO e não ausente', async () => {
+    const app = servidor();
+    const { corpo } = await pedir(app);
+    await app.close();
+
+    assert.deepEqual(corpo['warnings'], []);
   });
 
   void it('meia coordenada é recusada com o campo que faltou, e não vira no_location', async () => {
@@ -370,6 +385,7 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
       'radius_m',
       'reach_status',
       'reachable_tutors',
+      'warnings',
     ]);
   });
 });

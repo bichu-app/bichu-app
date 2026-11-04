@@ -7,6 +7,7 @@ import '../../api/falhas.dart';
 import '../../api/fila_offline.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_caso.dart';
+import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/oportunidades_de_aviso.dart';
 import '../../escopo.dart';
@@ -47,6 +48,19 @@ class TelaAlcanceDoAlerta extends StatefulWidget {
       'não tem um.';
 
   static const String rotuloDeAvisar = 'Avisar agora';
+
+  /// O pet **nunca teve** foto pronta. A faixa e INFORMATIVA: o alerta sai.
+  static String semFotoDe(String nomeDoPet) =>
+      '$nomeDoPet ainda não tem foto no cadastro. O alerta vai sair assim '
+      'mesmo, com a descrição e os sinais — mas é a foto que faz um vizinho '
+      'reconhecer um animal na rua.';
+
+  /// Ha foto enviada, ainda em `processing`. Caso DIFERENTE do de cima: aqui
+  /// nao falta nada ao tutor, falta tempo ao servidor.
+  static String fotoEmProcessamentoDe(String nomeDoPet) =>
+      'A foto de $nomeDoPet ainda está sendo preparada. O alerta vai sair '
+      'assim mesmo, com a descrição e os sinais, e a foto entra no cartaz e '
+      'na lista assim que ficar pronta.';
 
   /// Variante A: com zero contado, o caso continua valendo pela lista publica e
   /// pela tag, e o rotulo diz exatamente o que o toque faz.
@@ -205,8 +219,12 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
   Widget build(BuildContext context) {
     final r = widget.rascunho;
     final previa = _previa;
+    // **BLOQUEIO e AVISO decidem coisas DIFERENTES.** O bloqueio desabilita o
+    // envio; o aviso nunca. Trocar um pelo outro aqui foi o defeito de
+    // 03/11/2026, quando falta de foto vivia em `blockers` e travava o botao.
     final bloqueio =
         (previa != null && previa.bloqueado) ? previa.bloqueios.first : null;
+    final mostrarAvisoDeFoto = previa?.semFotoPronta ?? false;
 
     return Scaffold(
       appBar: const BarraDeConta(
@@ -231,10 +249,17 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
                 raioEmMetros: previa?.raioEmMetros ?? 5000,
                 rotuloDaArea: previa?.rotuloDaArea ?? r.area?.bairro,
                 nomeDoPet: r.pet.nome,
+                // `Eles vao receber a FOTO` virou mentira no dia em que caso
+                // sem foto passou a existir.
+                comFoto: !mostrarAvisoDeFoto,
               ),
             if (bloqueio != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
               _Bloqueio(bloqueio: bloqueio),
+            ],
+            if (mostrarAvisoDeFoto) ...<Widget>[
+              const SizedBox(height: BichuEspaco.e6),
+              _AvisoDeFoto(pet: r.pet),
             ],
             if (_erro != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
@@ -252,6 +277,9 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
                 : TelaAlcanceDoAlerta.rotuloDeAvisar,
             critico: true,
             carregando: _fase == _Fase.enviando,
+            // Os DOIS bloqueios que sobraram continuam travando. Falta de
+            // foto nao esta entre eles desde 03/11/2026, e por isso ela nao
+            // chega aqui: ela vive em `previa.avisos`.
             aoTocar:
                 (bloqueio != null || _fase == _Fase.enviando) ? null : _enviar,
           ),
@@ -295,6 +323,7 @@ class _Alcance extends StatelessWidget {
     required this.raioEmMetros,
     required this.rotuloDaArea,
     required this.nomeDoPet,
+    required this.comFoto,
   });
 
   final EstadoDoAlcance estado;
@@ -302,6 +331,9 @@ class _Alcance extends StatelessWidget {
   final int raioEmMetros;
   final String? rotuloDaArea;
   final String nomeDoPet;
+
+  /// Ha foto pronta para o alerta carregar?
+  final bool comFoto;
 
   String get _raio {
     final km = (raioEmMetros / 1000).round();
@@ -327,8 +359,9 @@ class _Alcance extends StatelessWidget {
       EstadoDoAlcance.calculado => (
           'Vamos avisar ${tutores!} ${tutores == 1 ? 'tutor' : 'tutores'} '
               '$_raio.',
-          'Eles vão receber a foto de $nomeDoPet e os sinais. Ninguém vê seu '
-              'telefone nem seu endereço.',
+          'Eles vão receber ${comFoto ? 'a foto' : 'a descrição'} de '
+              '$nomeDoPet e os sinais. Ninguém vê seu telefone nem seu '
+              'endereço.',
         ),
       EstadoDoAlcance.semLocalizacao => (
           TelaAlcanceDoAlerta.tituloSemLocalizacao,
@@ -380,11 +413,6 @@ class _Bloqueio extends StatelessWidget {
           aoTocarNaAcao: () =>
               context.push(Rotas.verifiqueSeuEmail, extra: email),
         ),
-      BloqueioDoCaso.petSemFoto => const FaixaDeAviso(
-          texto: 'Este pet ainda não tem foto pronta. O alerta sem foto pede '
-              'que o vizinho reconheça um animal pela descrição, e é a foto '
-              'que faz alguém reconhecer na rua.',
-        ),
       BloqueioDoCaso.petJaPerdido => const FaixaDeAviso(
           peso: PesoDaFaixa.informativo,
           texto: 'Este pet já está sendo procurado. Você abriu esse caso antes, '
@@ -392,5 +420,27 @@ class _Bloqueio extends StatelessWidget {
         ),
       BloqueioDoCaso.desconhecido => const SizedBox.shrink(),
     };
+  }
+}
+
+/// O aviso de que falta foto. **Informativo, e sem acao**: o alerta vai sair, e
+/// o que o tutor precisa saber e que ele sai valendo menos.
+///
+/// Os DOIS casos tem texto proprio, porque a saida de cada um e diferente: num
+/// nao existe foto, no outro ela existe e esta a caminho. O texto antigo
+/// ("ainda nao tem foto pronta") cobria os dois e nao ajudava em nenhum.
+class _AvisoDeFoto extends StatelessWidget {
+  const _AvisoDeFoto({required this.pet});
+
+  final Pet pet;
+
+  @override
+  Widget build(BuildContext context) {
+    return FaixaDeAviso(
+      peso: PesoDaFaixa.informativo,
+      texto: pet.temFotoEmProcessamento
+          ? TelaAlcanceDoAlerta.fotoEmProcessamentoDe(pet.nome)
+          : TelaAlcanceDoAlerta.semFotoDe(pet.nome),
+    );
   }
 }
