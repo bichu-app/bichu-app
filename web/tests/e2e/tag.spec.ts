@@ -111,3 +111,29 @@ test('/t?codigo= leva ao endereco da tag (Procurar este codigo)', async ({ page 
   await expect(page).toHaveURL(new RegExp(`/t/${CODIGOS.inexistente}$`));
   await expect(page.locator('h1')).toHaveText('Esse código não é de nenhuma tag do Bichu.');
 });
+
+// As duas pontas da decisao do cliente de 03/11/2026: o botao de avisar o tutor
+// existe SO quando o pet esta marcado como perdido. `CODIGOS.semFoto` e o codigo
+// do mock com `lost.is_lost: false` -- o mesmo estado renderizado.
+test('/t/ 200: o botao de avisar existe no pet perdido e NAO existe no pet que nao esta perdido', async ({ page }) => {
+  await page.goto(`/t/${CODIGOS.perdido}`);
+  await expect(page.getByText('Este pet está perdido')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Avisar o tutor' })).toBeVisible();
+
+  await page.goto(`/t/${CODIGOS.semFoto}`);
+  await expect(page.locator('h1')).toHaveText('Thor');
+  await expect(page.getByText('Este pet está perdido')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Avisar o tutor/ })).toHaveCount(0);
+  await expect(page.locator('form[data-envio]')).toHaveCount(0);
+});
+
+test('/t/ 200 nao perdido: a pagina diz que nao esta perdido e o que fazer se parecer que esta', async ({ page }) => {
+  await page.goto(`/t/${CODIGOS.semFoto}`);
+  await expect(page.getByText('Este pet não está marcado como perdido.')).toBeVisible();
+  await expect(page.getByText('O tutor de Thor não avisou que ele saiu de casa.')).toBeVisible();
+  await expect(page.getByText(/Se Thor parece perdido/)).toBeVisible();
+  await expect(page.getByText(`/t/${CODIGOS.semFoto}`)).toBeVisible();
+  await expect(page.getByText('Se o animal estiver machucado ou em perigo agora')).toBeVisible();
+  // Nada de formulario de contato: o servidor recusa telefone e e-mail neste caminho.
+  await expect(page.locator('input[type="email"], input[type="tel"], textarea')).toHaveCount(0);
+});

@@ -126,11 +126,29 @@ double pisoEfetivo(double pisoDaTela, double? tamanho, FontWeight? peso) {
 ///
 /// Texto sem cor resolvivel ou sem fundo solido identificavel vira violacao do
 /// tipo `indeterminado`, NUNCA aprovacao silenciosa.
+/// [isentarInativo] dispensa o texto que esta DENTRO de um controle inativo,
+/// que e a unica isencao de contraste que o SC 1.4.3 concede e a unica que o
+/// sistema preve (paragrafo 18.2.1, item 3).
+///
+/// **ELA NAO E PRESUMIDA POR COR, e essa e a diferenca que importa.** Dispensar
+/// o par "`on-disabled` sobre `disabled-surface`" por reconhecer os dois
+/// valores faria o verificador dar o perdao a qualquer texto que por acaso
+/// tivesse aquelas cores, inclusive num controle bem ativo. O que esta medido
+/// aqui e o ESTADO: o texto esta sob um `ButtonStyleButton` cujo `enabled` e
+/// falso, ou sob um `Semantics` que anuncia `enabled: false`. Inativo e o que a
+/// arvore diz, nao o que a paleta sugere.
+///
+/// Ela nasceu desligada de proposito: as telas conformes de `telas.dart`
+/// declaram a isencao por CHAVE e continuam medindo do jeito que sempre
+/// mediram. Quem liga isto e quem monta widget de verdade, onde o controle
+/// desabilitado chega pelo proprio estado do componente e nao ha onde pendurar
+/// chave.
 List<Violacao> verificarContrasteDeTexto(
   WidgetTester tester, {
   required String tela,
   required String tema,
   required double piso,
+  bool isentarInativo = false,
 }) {
   final violacoes = <Violacao>[];
   final vistos = <RenderParagraph>{};
@@ -145,6 +163,8 @@ List<Violacao> verificarContrasteDeTexto(
 
     final isencao = _isencaoDe(elemento);
     if (isencao != null) continue;
+
+    if (isentarInativo && _dentroDeControleInativo(elemento)) continue;
 
     final estilo = ro.text.style;
     final frente = estilo?.color;
@@ -698,3 +718,265 @@ List<ResultadoDoPar> verificarPares(
 String _semChaves(String ref) => ref.startsWith('{') && ref.endsWith('}')
     ? ref.substring(1, ref.length - 1)
     : ref;
+
+// ---------------------------------------------------------------------------
+// Trava A2: contraste de OBJETO GRAFICO nao textual (SC 1.4.11)
+// ---------------------------------------------------------------------------
+
+/// Prefixo da chave de isencao de objeto GRAFICO.
+///
+/// **Ele e separado de [prefixoIsencao] de proposito, e a separacao e a parte
+/// util.** Isencao e por CRITERIO, nao por widget: um `a11y-exempt:componente
+/// desabilitado, SC 1.4.3` declarado para o ROTULO de um botao dispensa o
+/// contraste do TEXTO, e nada mais. Se o mesmo prefixo valesse aqui, pendurar
+/// aquela chave num ancestral silenciaria tambem o indicador de carga de
+/// dentro do botao -- que e exatamente o defeito medido em 03/11/2026, um
+/// `CircularProgressIndicator` a 1.02:1 no tema escuro. Uma chave que dispensa
+/// um criterio nao pode dispensar o outro sem alguem escrever que quis isso.
+const String prefixoIsencaoDeGrafico = 'a11y-exempt-grafico:';
+
+/// Contraste dos INDICADORES contra o fundo solido atras deles, piso de 3:1
+/// (SC 1.4.11, objeto grafico).
+///
+/// POR QUE ELE EXISTE, e por que [verificarContrasteDeTexto] nao bastava:
+/// aquele le `RenderParagraph`, e indicador de carga nao tem paragrafo nenhum.
+/// Um botao que fica legivel e com o giro INVISIVEL passava nas duas travas
+/// com folga, porque nenhuma das duas olhava para ele. Foi assim que
+/// `widgets/botao_primario.dart` pintou o giro com a tinta de um
+/// preenchimento (`on-action-fill`) enquanto o botao, por estar desabilitado
+/// durante a carga, pintava o fundo com `disabled-surface`: 1.02:1 no escuro,
+/// um giro que nao existe para quem olha.
+///
+/// Devolve violacao `indeterminado`, e NUNCA aprovacao silenciosa, quando o
+/// indicador nao tem cor resolvida ou quando nao ha fundo solido atras dele.
+List<Violacao> verificarContrasteDeIndicador(
+  WidgetTester tester, {
+  required String tela,
+  required String tema,
+  double piso = 3.0,
+}) {
+  final violacoes = <Violacao>[];
+
+  for (final elemento in tester.allElements) {
+    final w = elemento.widget;
+    if (w is! ProgressIndicator) continue;
+    if (_isencaoDeGrafico(elemento) != null) continue;
+
+    final frente = w.color;
+    if (frente == null) {
+      violacoes.add(
+        Violacao(
+          tipo: TipoDeViolacao.indeterminado,
+          tela: tela,
+          tema: tema,
+          alvo: '${w.runtimeType}',
+          detalhe:
+              'o indicador nao declara `color`, entao quem decide a tinta e o '
+              'tema do Material e nao o design system. O verificador nao tem o '
+              'que medir e por isso reprova: pinte com um token',
+        ),
+      );
+      continue;
+    }
+
+    final fundo = _fundoSolidoMaisProximo(elemento);
+    if (fundo == null) {
+      violacoes.add(
+        Violacao(
+          tipo: TipoDeViolacao.indeterminado,
+          tela: tela,
+          tema: tema,
+          alvo: '${w.runtimeType}',
+          detalhe:
+              'nenhum ancestral com preenchimento solido atras do indicador: '
+              'sem fundo nao ha razao a medir',
+        ),
+      );
+      continue;
+    }
+
+    final razao = razaoWcag(frente, fundo);
+    if (razao + 0.005 < piso) {
+      violacoes.add(
+        Violacao(
+          tipo: TipoDeViolacao.contraste,
+          tela: tela,
+          tema: tema,
+          alvo: '${w.runtimeType}',
+          detalhe:
+              'frente ${hexDaCor(frente)} sobre fundo ${hexDaCor(fundo)} '
+              '(objeto grafico, SC 1.4.11)',
+          medido: razao,
+          piso: piso,
+        ),
+      );
+    }
+  }
+
+  return violacoes;
+}
+
+/// Quantos indicadores a arvore tem. Serve de CONTROLE POSITIVO: zero
+/// indicador com lista de violacoes vazia e cegueira, nao conformidade.
+int indicadoresNaArvore(WidgetTester tester) {
+  var n = 0;
+  for (final elemento in tester.allElements) {
+    if (elemento.widget is ProgressIndicator) n++;
+  }
+  return n;
+}
+
+/// A razao medida de UM indicador. Usada pela isca, que precisa afirmar o
+/// numero e nao so a reprovacao.
+double razaoMedidaDoIndicador(WidgetTester tester) {
+  for (final elemento in tester.allElements) {
+    final w = elemento.widget;
+    if (w is! ProgressIndicator) continue;
+    final frente = w.color;
+    final fundo = _fundoSolidoMaisProximo(elemento);
+    if (frente == null || fundo == null) {
+      throw StateError(
+        'REPROVA: nao consegui medir o indicador '
+        '(frente=$frente fundo=$fundo).',
+      );
+    }
+    return razaoWcag(frente, fundo);
+  }
+  throw StateError('REPROVA: nao achei indicador nenhum na arvore.');
+}
+
+String? _isencaoDeGrafico(Element elemento) {
+  String? deChave(Key? k) {
+    if (k is ValueKey<String> && k.value.startsWith(prefixoIsencaoDeGrafico)) {
+      return k.value.substring(prefixoIsencaoDeGrafico.length);
+    }
+    return null;
+  }
+
+  var achado = deChave(elemento.widget.key);
+  if (achado != null) return achado;
+  elemento.visitAncestorElements((a) {
+    final m = deChave(a.widget.key);
+    if (m != null) {
+      achado = m;
+      return false;
+    }
+    return true;
+  });
+  return achado;
+}
+
+/// Quantos paragrafos de texto NAO VAZIO a arvore tem.
+///
+/// Serve de CONTROLE POSITIVO para quem monta widget de verdade: a lista de
+/// violacoes vazia tem dois significados indistinguiveis -- "esta tudo acima
+/// do piso" e "nao havia texto nenhum para medir". Em replica escrita a mao a
+/// segunda hipotese nao existe; num widget que depende de toque, de folha
+/// inferior ou de estado, ela e o modo de falha mais provavel. Contar separa
+/// as duas.
+int paragrafosMedidos(WidgetTester tester) {
+  final vistos = <RenderParagraph>{};
+  var n = 0;
+  for (final elemento in tester.allElements) {
+    final ro = elemento.renderObject;
+    if (ro is! RenderParagraph) continue;
+    if (!vistos.add(ro)) continue;
+    if (ro.text.toPlainText().trim().isEmpty) continue;
+    n++;
+  }
+  return n;
+}
+
+/// Verdadeiro quando [elemento] esta dentro de um controle que a arvore declara
+/// INATIVO.
+///
+/// Mede o estado, e nao a cor: `ButtonStyleButton.enabled` falso (que e
+/// `onPressed == null` em `FilledButton`, `TextButton`, `OutlinedButton` e
+/// `ElevatedButton`), `IconButton` sem `onPressed`, ou um `Semantics` que
+/// anuncia `enabled: false`.
+bool _dentroDeControleInativo(Element elemento) {
+  bool inativo(Widget w) {
+    if (w is ButtonStyleButton) return !w.enabled;
+    if (w is IconButton) return w.onPressed == null;
+    if (w is Semantics) return w.properties.enabled == false;
+    return false;
+  }
+
+  if (inativo(elemento.widget)) return true;
+  var achado = false;
+  elemento.visitAncestorElements((a) {
+    if (inativo(a.widget)) {
+      achado = true;
+      return false;
+    }
+    return true;
+  });
+  return achado;
+}
+
+/// O texto que [verificarContrasteDeTexto] dispensaria por estar em controle
+/// inativo, para o resumo da execucao do job.
+///
+/// Isencao que ninguem ve vira isencao permanente -- vale para esta tanto
+/// quanto para as declaradas por chave.
+List<String> inativosIsentados(WidgetTester tester) {
+  final vistos = <RenderParagraph>{};
+  final saida = <String>{};
+  for (final elemento in tester.allElements) {
+    final ro = elemento.renderObject;
+    if (ro is! RenderParagraph) continue;
+    if (!vistos.add(ro)) continue;
+    final texto = ro.text.toPlainText().trim();
+    if (texto.isEmpty) continue;
+    if (!_dentroDeControleInativo(elemento)) continue;
+    saida.add(_resumo(texto));
+  }
+  final lista = saida.toList()..sort();
+  return lista;
+}
+
+/// Os fundos solidos que o verificador DE FATO achou atras de texto, em hex.
+///
+/// POR QUE ISTO EXISTE, e e uma cegueira que eu tinha no proprio portao novo:
+/// procurar o ROTULO de uma pastilha na arvore prova que ela esta la, e nao
+/// prova em qual RAMO do ternario ela foi pintada -- o rotulo e o mesmo nos
+/// dois. Se o `selecionado` do fixture deixasse de chegar, todas as pastilhas
+/// cairiam no ramo nao-marcado, o par trocado sairia da medicao e o caso
+/// continuaria verde com a mesma mensagem de sucesso. O que prova o ramo e o
+/// FUNDO: `primary` so aparece atras de texto quando a pastilha esta marcada.
+Set<String> fundosMedidosAtrasDeTexto(WidgetTester tester) {
+  final vistos = <RenderParagraph>{};
+  final fundos = <String>{};
+  for (final elemento in tester.allElements) {
+    final ro = elemento.renderObject;
+    if (ro is! RenderParagraph) continue;
+    if (!vistos.add(ro)) continue;
+    if (ro.text.toPlainText().trim().isEmpty) continue;
+    final fundo = _fundoSolidoMaisProximo(elemento);
+    if (fundo != null) fundos.add(hexDaCor(fundo));
+  }
+  return fundos;
+}
+
+/// QUANTOS paragrafos cairam sobre o fundo [hex].
+///
+/// O conjunto de [fundosMedidosAtrasDeTexto] diz se um fundo apareceu; ele nao
+/// diz quantas vezes, e a diferenca foi medida e nao suposta. O CONTROLE
+/// NEGATIVO que forcou esta funcao: com a opcao de filtro DESMARCADA no
+/// fixture, o conjunto continuava contendo `primary` e o caso continuava verde
+/// -- porque a folha tem DOIS grupos de pastilha, e a de ORDENACAO nasce
+/// marcada pela ordem efetiva. O "contains" estava provando o ramo de outro
+/// grupo, e a prosa dizia que provava o do filtro. Contar separa os dois.
+int paragrafosSobreFundo(WidgetTester tester, String hex) {
+  final vistos = <RenderParagraph>{};
+  var n = 0;
+  for (final elemento in tester.allElements) {
+    final ro = elemento.renderObject;
+    if (ro is! RenderParagraph) continue;
+    if (!vistos.add(ro)) continue;
+    if (ro.text.toPlainText().trim().isEmpty) continue;
+    final fundo = _fundoSolidoMaisProximo(elemento);
+    if (fundo != null && hexDaCor(fundo) == hex) n++;
+  }
+  return n;
+}

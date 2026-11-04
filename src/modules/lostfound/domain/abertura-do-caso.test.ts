@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   TETO_DE_CASOS_ABERTOS_POR_CONTA,
   atingiuTetoDaConta,
+  avisosParaAbrirCaso,
   bloqueiosParaAbrirCaso,
   rotuloDaArea,
   temCoordenada,
@@ -28,11 +29,8 @@ void describe('bloqueios para abrir caso', () => {
     );
   });
 
-  void it('sem foto pronta: o vizinho não reconhece "um caramelo de porte médio"', () => {
-    assert.deepEqual(
-      bloqueiosParaAbrirCaso({ ...PRONTO, temFotoPronta: false }),
-      ['pet_photo_missing'],
-    );
+  void it('sem foto pronta NÃO bloqueia: o cliente tirou a trava em 03/11/2026', () => {
+    assert.deepEqual(bloqueiosParaAbrirCaso({ ...PRONTO, temFotoPronta: false }), []);
   });
 
   void it('pet já perdido: um segundo caso divide a atenção e duplica o aviso', () => {
@@ -50,8 +48,34 @@ void describe('bloqueios para abrir caso', () => {
         petJaTemCasoAberto: true,
         casosAbertosDaConta: 0,
       }),
-      ['contact_channel_unverified', 'pet_photo_missing', 'pet_already_lost'],
+      ['contact_channel_unverified', 'pet_already_lost'],
     );
+  });
+});
+
+void describe('avisos para abrir caso', () => {
+  void it('com foto pronta, nada a avisar', () => {
+    assert.deepEqual(avisosParaAbrirCaso(PRONTO), []);
+  });
+
+  void it('sem foto pronta: o fato NÃO desaparece, ele vira aviso', () => {
+    assert.deepEqual(avisosParaAbrirCaso({ ...PRONTO, temFotoPronta: false }), [
+      'pet_photo_missing',
+    ]);
+  });
+
+  void it('aviso e bloqueio são listas SEPARADAS, e a foto só entra numa delas', () => {
+    const semNada = {
+      temCanalVerificado: false,
+      temFotoPronta: false,
+      petJaTemCasoAberto: true,
+      casosAbertosDaConta: 0,
+    };
+
+    // A isca que o defeito de 03/11 tinha: `pet_photo_missing` em `blockers`
+    // faz todo consumidor que decide por `blockers.length > 0` travar.
+    assert.ok(!bloqueiosParaAbrirCaso(semNada).includes('pet_photo_missing' as never));
+    assert.deepEqual(avisosParaAbrirCaso(semNada), ['pet_photo_missing']);
   });
 });
 

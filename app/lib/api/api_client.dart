@@ -105,12 +105,24 @@ class ApiClient {
     );
   }
 
+  /// `tokenDeReautenticacao` vira o cabecalho `X-Reauth-Token`, a SEGUNDA
+  /// credencial que o esquema `reauth` do contrato exige nas operacoes
+  /// destrutivas. Ele e de uso unico, vale 5 minutos e e emitido para UM
+  /// escopo so (`x-reauth-scope`), entao nao da para guardar nem reaproveitar:
+  /// quem chama pede um token e o gasta na mesma acao.
   Future<Map<String, dynamic>> delete(
     String caminho, {
     String? ifMatch,
     bool exigeToken = true,
+    String? tokenDeReautenticacao,
   }) {
-    return _enviar('DELETE', caminho, ifMatch: ifMatch, exigeToken: exigeToken);
+    return _enviar(
+      'DELETE',
+      caminho,
+      ifMatch: ifMatch,
+      exigeToken: exigeToken,
+      tokenDeReautenticacao: tokenDeReautenticacao,
+    );
   }
 
   /// Baixa o corpo binario de uma rota **autenticada desta API**.
@@ -176,6 +188,7 @@ class ApiClient {
     String? idempotencyKey,
     String? ifMatch,
     bool exigeToken = true,
+    String? tokenDeReautenticacao,
   }) async {
     return _lerResposta(
       await _trocar(
@@ -186,6 +199,7 @@ class ApiClient {
         idempotencyKey: idempotencyKey,
         ifMatch: ifMatch,
         exigeToken: exigeToken,
+        tokenDeReautenticacao: tokenDeReautenticacao,
       ),
     );
   }
@@ -198,6 +212,7 @@ class ApiClient {
     String? idempotencyKey,
     String? ifMatch,
     bool exigeToken = true,
+    String? tokenDeReautenticacao,
   }) async {
     final uri = _url(caminho, query);
     final correlationId = _uuidV4();
@@ -214,6 +229,9 @@ class ApiClient {
     }
     if (ifMatch != null) {
       cabecalhos['If-Match'] = ifMatch;
+    }
+    if (tokenDeReautenticacao != null && tokenDeReautenticacao.isNotEmpty) {
+      cabecalhos['X-Reauth-Token'] = tokenDeReautenticacao;
     }
     if (exigeToken) {
       final token = await tokenDeAcesso?.call();
