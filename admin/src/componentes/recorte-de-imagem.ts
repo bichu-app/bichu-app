@@ -1,16 +1,7 @@
-import { LIMITE_DE_BYTES, TIPOS_ACEITOS, type Proposito, type TipoAceito } from './envio-de-imagem.ts';
+import { LIMITE_DE_BYTES, TIPOS_ACEITOS, type TipoAceito } from './envio-de-imagem.ts';
 
-/**
- * A proporcao da moldura por proposito, e ela NAO e escolha de tela: sai da
- * geometria das derivadas em `src/modules/media/domain/derivadas.ts`.
- */
-export const PROPORCAO_DA_MOLDURA: Record<Proposito, number | null> = {
-  store_item: null,
-  network_event: 16 / 9,
-  directory_logo: 1,
-  directory_photo: 16 / 9,
-  directory_gallery: 16 / 9,
-};
+/** A moldura mora no PONTO UNICO do piso, e so e reexportada aqui. */
+export { PROPORCAO_DA_MOLDURA } from './piso-da-imagem.ts';
 
 /** Zoom de 1x (a imagem inteira dentro da moldura) a 4x. */
 export const ESCALA_MINIMA = 1;

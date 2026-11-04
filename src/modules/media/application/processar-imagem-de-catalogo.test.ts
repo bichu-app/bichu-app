@@ -84,17 +84,37 @@ void describe('processamento da imagem de catalogo', () => {
     assert.equal((await processarImagemDeCatalogo(certa.deps, { catalog_image_id: 'c2' })).tipo, 'pronta');
   });
 
-  void it('ISCA: encontro com 600 x 599 ou 599 x 600 e recusado, com o numero no motivo; 600 x 600 passa', async () => {
+  // O piso do encontro passou de 600 x 600 para 600 x 338 em 03/11/2026: a
+  // LARGURA decidida segue 600 e a altura e a que a moldura 16:9 impoe. Entao
+  // 600 x 599 -- que ANTES era recusado -- passa, e e exatamente o caso do
+  // cliente: *"as vezes a foto ja tem 600px de largura e e muito grande na
+  // altura"*. O que reprova continua reprovando, por largura ou por altura.
+  void it('ISCA: encontro com 599 de largura ou 337 de altura e recusado, com o numero no motivo', async () => {
     for (const [largura, altura] of [
-      [600, 599],
       [599, 600],
+      [1200, 337],
     ] as const) {
       const capa = bancada({ purpose: 'network_event', dimensoes: dim(largura, altura) });
       assert.equal((await processarImagemDeCatalogo(capa.deps, { catalog_image_id: 'c3' })).tipo, 'recusada');
-      assert.deepEqual(capa.eventos, ['recusada:A imagem precisa ter pelo menos 600 x 600 pixels.']);
+      assert.deepEqual(capa.eventos, ['recusada:A imagem precisa ter pelo menos 600 x 338 pixels.']);
     }
-    const quadrada = bancada({ purpose: 'network_event', dimensoes: dim(600, 600) });
-    assert.equal((await processarImagemDeCatalogo(quadrada.deps, { catalog_image_id: 'c3b' })).tipo, 'pronta');
+  });
+
+  void it('CONTRAPESO: 600 x 599 e 600 x 338 PASSAM no encontro -- era o impasse do cliente', async () => {
+    for (const [i, [largura, altura]] of (
+      [
+        [600, 599],
+        [600, 600],
+        [600, 338],
+      ] as const
+    ).entries()) {
+      const capa = bancada({ purpose: 'network_event', dimensoes: dim(largura, altura) });
+      assert.equal(
+        (await processarImagemDeCatalogo(capa.deps, { catalog_image_id: `c3b${String(i)}` })).tipo,
+        'pronta',
+        `${String(largura)} x ${String(altura)}`,
+      );
+    }
   });
 
   void it('ISCA: o minimo antigo do encontro (1600 x 900) nao volta -- retrato de celular 720 x 1280 passa', async () => {

@@ -270,7 +270,7 @@ void describe('escrita administrativa da Loja', () => {
   });
 
   void describe('dimensao declarada no pedido de envio (01/10)', () => {
-    void it('ISCA: encontro abaixo de 600 x 600 e 422 image-too-small, com os dois campos, sem intencao nem trilha', async () => {
+    void it('ISCA: encontro abaixo de 600 x 338 e 422 image-too-small, com os dois campos, sem intencao nem trilha', async () => {
       const erro = await m.catalogo
         .autorizarEnvioDeCatalogo(AUTOR, {
           purpose: 'network_event',

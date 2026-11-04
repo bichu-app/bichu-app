@@ -283,7 +283,7 @@ void describe('rotas da escrita administrativa da Loja, dentro da guarda', () =>
     assert.equal(b.estado().intencoes.length, 1);
   });
 
-  void it('ISCA (01/10): capa de encontro declarada com 599 x 600 e 422 image-too-small, nada e assinado; 600 x 600 passa', async () => {
+  void it('ISCA: capa de encontro declarada com 599 x 600 e 422 image-too-small, nada e assinado; 600 x 600 passa', async () => {
     const pequena = await chamar(b, 'POST', '/admin/media/catalog-image-intents', {
       corpo: { purpose: 'network_event', content_type: 'image/jpeg', byte_size: 1000, width: 599, height: 600 },
     });

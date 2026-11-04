@@ -347,7 +347,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       //
       // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
       // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
-      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // faixa 16:9 do topo da ficha; a minima e 600 x 338. O que NAO se
       // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
       'directory_suggestion_photo',
       'user_photo',
@@ -751,7 +751,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       //
       // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
       // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
-      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // faixa 16:9 do topo da ficha; a minima e 600 x 338. O que NAO se
       // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
       'directory_suggestion_photo',
       'user_photo',

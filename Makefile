@@ -872,7 +872,28 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # arquivo -- entao o git nao vai conflitar aqui e o numero se desatualiza calado.
 # A integracao RECONTA sobre a arvore final e corrige esta linha na ultima
 # entrada que toca a arvore medida.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (875 arquivos), do painel (145) e do site (49), tres processos; `workspace/**` fora do escopo
+# RECONTADO EM 04/11/2026 na entrada 7 de 8 da integracao (#168), sobre a arvore
+# MESCLADA. O git NAO CONFLITOU nesta linha: o #168 nao toca o `Makefile`, e por
+# isso o numero ficaria DEFASADO EM SILENCIO -- que e a forma exata de defeito
+# que esta linha existe para impedir, e a mesma que foi encontrada na entrada 4.
+#
+# `eslint . -f json` nas TRES arvores, em worktree FORA do repositorio, por DOIS
+# caminhos independentes que CONCORDARAM (CLI com formatador json e a API de Node
+# `ESLint().lintFiles`), com as LISTAS de arquivo identicas entre os caminhos:
+#
+#   raiz   875  (nao se moveu; LISTAS IDENTICAS a da entrada 6)
+#   painel 146  (era 145: +1)
+#   site    49  (nao se moveu; LISTAS IDENTICAS)
+#
+# CENSO POR LISTA, nunca pelo digito. UM entrou e NENHUM saiu:
+#   painel + src/componentes/piso-da-imagem.ts
+# ZERO erros e ZERO avisos nas tres arvores.
+#
+# AINDA NAO E O NUMERO FINAL: a entrada 8 (#169) acrescenta
+# `src/tools/sou-eu-decidido-num-lugar-so.test.ts` a raiz e tambem NAO toca este
+# arquivo. A contagem e recontada e corrigida lá, que e a ultima entrada a tocar
+# a arvore medida.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (875 arquivos), do painel (146) e do site (49), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
@@ -881,7 +902,7 @@ verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da rai
 # A ausencia de `admin/node_modules` REPROVA nomeando a receita, em vez de sair
 # 127 ("eslint: command not found") parecendo defeito de codigo. Mesma doutrina
 # do portao de segredos: nao conseguir conferir nao e aprovacao.
-verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (145 arquivos; a raiz ignora `admin/**` e nao tem como lintar)
+verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (146 arquivos; a raiz ignora `admin/**` e nao tem como lintar)
 	@test -d admin/node_modules || { \
 	  echo "admin/node_modules ausente: o lint do painel NAO RODOU. Rode \`cd admin && npm ci\`."; \
 	  echo "Isto nao e aprovacao -- a raiz ignora \`admin/**\` e ninguem mais confere o painel aqui."; \

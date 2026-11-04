@@ -75,7 +75,7 @@ const DE_OUTRA_PESSOA = `${PREFIXO}de-outra-pessoa`;
 const DO_PAINEL = `${PREFIXO}do-painel`;
 
 /** O motivo que o processador grava, e que a lista do dono tem de mostrar. */
-const MOTIVO_DA_RECUSA = 'A imagem precisa ter pelo menos 600 x 600 pixels.';
+const MOTIVO_DA_RECUSA = 'A imagem precisa ter pelo menos 600 x 338 pixels.';
 
 let banco: DbHandle;
 let cliente: pg.Client;
@@ -573,7 +573,7 @@ void describe('ISCA -- o estado da capa chega ao dono, e nao ao visitante', () =
     const publico = await repo.buscarEncontro(MEU_FUTURO);
     assert.notEqual(publico, undefined);
     const corpo = JSON.stringify(projetarEncontro(publico!, agora));
-    for (const proibido of ['rejection_reason', 'rejected', '600 x 600']) {
+    for (const proibido of ['rejection_reason', 'rejected', '600 x 338']) {
       assert.equal(corpo.includes(proibido), false, `${proibido} na leitura publica`);
     }
     // E a imagem recusada nao vira capa publica nenhuma.
