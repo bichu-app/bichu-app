@@ -82,6 +82,18 @@ export const CENARIOS = {
     [CODIGOS.avisoDesativada]: { slug: 'tag-revoked' },
     [CODIGOS.malformado]: { slug: 'tag-code-malformed' },
   },
+  // O enriquecimento do aviso, que e por onde o contato de quem achou chega ao
+  // tutor (decisao do cliente, 03/11/2026). A chave do mock e `''` aqui -- a
+  // operacao nao tem parametro de caminho --, entao `'*'` e o cenario de todas.
+  //
+  // `contact_shared_at` e o que a tela le para dizer a verdade sobre o contato
+  // em vez de afirmar sucesso por otimismo.
+  enrichFinderFoundReport: {
+    '*': {
+      status: 200,
+      sobrescrever: { pet_display_name: 'Thor', contact_shared_at: '2026-11-03T18:00:00Z' },
+    },
+  },
   confirmEmailVerification: {
     [TOKENS.emailValido]: { status: 200 },
     [TOKENS.emailVencido]: { slug: 'verification-token-expired' },

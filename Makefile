@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-versao-dos-termos verificar-versao-dos-termos-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste ios verificar-ios-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste verificar-cd-autoteste verificar-cd-iscas
+.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-versao-dos-termos verificar-versao-dos-termos-autoteste verificar-texto-do-consentimento verificar-texto-do-consentimento-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste ios verificar-ios-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste verificar-cd-autoteste verificar-cd-iscas
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -314,6 +314,22 @@ verificar-versao-dos-termos: ## a versao que o aceite grava e a MESMA que o site
 
 verificar-versao-dos-termos-autoteste: ## cada isca do portao da versao dos termos reprova pela regra dela, mais os dois controles positivos
 	node infra/verificacao/verificar-versao-dos-termos.mjs --autoteste
+
+# O MESMO defeito do portao acima, num par diferente: o texto do consentimento do
+# achador tem DOIS literais, em DOIS projetos (a fonte em `src/`, a copia que a
+# tela exibe em `web/`). Aqui a consequencia e pior que a versao errada: se as
+# duas divergirem, `finder_contact_consents.consent_text` afirma que a pessoa leu
+# um texto que ela nao leu -- deixa de ser prova e passa a ser prova falsa.
+#
+# Depende de `npm run build`: o portao le o JS COMPILADO da fonte, e nao o
+# TypeScript. Sem o `dist/` ele reprova dizendo isso, em vez de aprovar por
+# omissao.
+verificar-texto-do-consentimento: ## o texto que a TELA exibe e o que o SERVIDOR grava, byte a byte (precisa de `npm run build`)
+	npm run build
+	node infra/verificacao/verificar-texto-do-consentimento.mjs
+
+verificar-texto-do-consentimento-autoteste: ## as iscas do portao do texto do consentimento reprovam, inclusive a de UM caractere
+	node infra/verificacao/verificar-texto-do-consentimento.mjs --autoteste
 
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname, migracao e as iscas (positivas e negativas)
 	python3 infra/verificacao/verificar_portabilidade.py
@@ -800,7 +816,63 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # A recontagem foi feita num worktree FORA do repositorio: com worktree dentro,
 # `eslint .` estoura o heap varrendo os GB dos worktrees das outras frentes, e o
 # numero nunca chega a sair.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (870 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+#
+# RECONTADO EM 03/11/2026, sobre a arvore DESTA frente (consentimento do contato
+# do achador) e DEPOIS DA ULTIMA EDICAO -- a unica hora em que o numero vale.
+# `npx eslint . -f json` nas TRES arvores, contando as entradas do relatorio, num
+# worktree FORA do repositorio:
+#
+#   raiz   874  (era 870: +4, as tres fontes novas de `src/` e `tests/` mais o
+#                portao `infra/verificacao/verificar-texto-do-consentimento.mjs`)
+#   painel 145  (nao se moveu: esta frente nao encosta no backoffice)
+#   site    49  (era 47: +2, `web/src/dominio/contato-do-achador.ts` e o teste de
+#                unidade dele; o `.astro` e o `.json` novos nao entram na varredura)
+#
+# ZERO erros e ZERO avisos nas tres. Os numeros foram MEDIDOS, e nao somados ao
+# 870 -- somar delta e o atalho que a nota acima registra como proibido.
+# PROSA PRESERVADA DO LADO trabalho/consentimento-contato-achador-03-11 (PR
+# #165): a linha dele dizia `ESLint da raiz (874 arquivos)` e `do site (49)`, e o
+# bloco que ele escreveu esta ACIMA, VERBATIM e sem reembrulhar. NENHUM LADO FOI
+# ESCOLHIDO e os deltas NAO FORAM SOMADOS.
+#
+# RECONTADO EM 04/11/2026 na integracao dos oito PRs, sobre a arvore MESCLADA e
+# DEPOIS da ultima edicao desta entrada. O git NAO CONFLITOU nesta linha -- a
+# `development` nao a tocou --, e por isso ele ficou SOZINHO com os 874 do lado
+# do #165. Esse numero e de OUTRA ARVORE: a base do #165 media 870, a
+# `development` desta entrada mede 871, e somar o delta de um a base do outro e
+# o palpite que esta nota proibe.
+#
+# A BASE JA ESTAVA DEFASADA, e isso foi MEDIDO e nao suposto: a linha dizia 870
+# e a `development` media 871. O arquivo a mais, POR LISTA, e
+# `tests/integration/caso-de-perdido-sem-foto.test.ts`, que chegou com a mescla
+# do PR #164 (315fb815) sem que a linha fosse atualizada -- ausente em fb8e5c2d,
+# presente em 315fb815. Nenhum portao le esta contagem, e por isso ela se
+# desatualiza em silencio: e exatamente o motivo de ela estar escrita aqui.
+#
+# `eslint . -f json` nas TRES arvores, em worktree FORA do repositorio, por DOIS
+# caminhos independentes que CONCORDARAM (a CLI com o formatador json e a API de
+# Node `ESLint().lintFiles`, com as LISTAS de arquivo identicas entre os dois):
+#
+#   raiz   875  (era 871: +4)
+#   painel 145  (nao se moveu, e as LISTAS sao IDENTICAS -- medido, nao suposto)
+#   site    49  (era 47: +2)
+#
+# CENSO POR LISTA, nunca pelo digito, porque delete+add se cancelam na contagem.
+# Os SEIS que entraram tem endereco, e nenhum saiu:
+#   raiz  + infra/verificacao/verificar-texto-do-consentimento.mjs
+#         + src/modules/found/domain/consentimento-de-contato.ts
+#         + src/modules/messaging/domain/divulgacao-de-contato.ts
+#         + tests/integration/consentimento-do-contato-do-achador.test.ts
+#   site  + src/dominio/contato-do-achador.ts
+#         + tests/unidade/contato-do-achador.test.ts
+# ZERO erros e ZERO avisos nas tres arvores.
+#
+# ESTE VALOR NAO SOBREVIVE AS ENTRADAS SEGUINTES: o #166, o #168 e o #169 ainda
+# acrescentam fonte em `src/`, `admin/` e `web/`, e NENHUM deles toca este
+# arquivo -- entao o git nao vai conflitar aqui e o numero se desatualiza calado.
+# A integracao RECONTA sobre a arvore final e corrige esta linha na ultima
+# entrada que toca a arvore medida.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (875 arquivos), do painel (145) e do site (49), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
@@ -838,7 +910,7 @@ verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (145 arqu
 # A ausencia de `web/node_modules` REPROVA nomeando a receita, em vez de sair
 # 127 ("eslint: command not found") parecendo defeito de codigo. Mesma doutrina
 # do painel: nao conseguir conferir nao e aprovacao.
-verificar-lint-do-site: ## ESLint do site, com o tsconfig dele (47 arquivos; a raiz ignora `web/**` e nao tem como lintar)
+verificar-lint-do-site: ## ESLint do site, com o tsconfig dele (49 arquivos; a raiz ignora `web/**` e nao tem como lintar)
 	@test -d web/node_modules || { \
 	  echo "web/node_modules ausente: o lint do site NAO RODOU. Rode \`cd web && npm ci\`."; \
 	  echo "Isto nao e aprovacao -- a raiz ignora \`web/**\` e ninguem mais confere o site aqui."; \
@@ -958,7 +1030,7 @@ verificar-segredos-do-gerenciador-autoteste: ## as iscas do portao de segredos r
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-segredos-do-gerenciador-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-cd-autoteste verificar-versao-dos-termos-autoteste verificar-versao-dos-termos verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-backoffice-contrato verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-segredos-do-gerenciador-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-cd-autoteste verificar-versao-dos-termos-autoteste verificar-versao-dos-termos verificar-texto-do-consentimento-autoteste verificar-texto-do-consentimento verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-backoffice-contrato verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs

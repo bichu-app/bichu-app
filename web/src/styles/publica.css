@@ -78,6 +78,64 @@
 .garantia-contato .icone { width: var(--icon-size-inline); height: var(--icon-size-inline); }
 .aviso-recompensa { font-weight: var(--font-weight-bold); text-align: center; text-wrap: balance; }
 
+/* O CONTATO DE QUEM ACHOU, sob consentimento (decisao do cliente, 03/11/2026).
+   `<details>` fecha a secao SEM JavaScript, preservando "e um toque" para quem
+   so quer avisar e ir embora. O `summary` tem altura de alvo critico porque e um
+   controle, e quem o toca esta na rua com um animal na mao. */
+/* `display` do `<details>` fica NO PADRAO, e isto nao e descuido: trocar para
+   `grid` faz o navegador perder o esconde-conteudo do estado fechado, e os campos
+   aparecem com a seta ainda apontando para a direita. Medido -- com `display:
+   grid` aqui, a isca de alvo de 48 px acusou a caixinha na pagina do pet
+   perdido, que so devia existir depois de alguem abrir a secao. O `grid` mora no
+   corpo, que e um elemento proprio. */
+.contato {
+  padding: var(--space-4);
+  background: var(--cor-surface-sunken);
+  border-radius: var(--radius-lg);
+}
+.contato__corpo { display: grid; gap: var(--space-4); padding-block-start: var(--space-4); }
+.contato__resumo {
+  display: flex; align-items: center; min-height: var(--target-critico);
+  font-family: var(--type-label-family); font-weight: var(--type-label-weight);
+  color: var(--cor-text-primary); cursor: pointer;
+}
+.contato textarea.campo__entrada { min-height: calc(var(--target-critico) * 2); resize: vertical; }
+
+.consentimento {
+  display: grid; gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--cor-surface);
+  border: var(--border-hairline) solid var(--cor-outline-control);
+  border-radius: var(--radius-lg);
+}
+.consentimento--erro { border: var(--border-medium) solid var(--cor-error); }
+/* O rotulo inteiro e a area de toque: a caixinha sozinha tem 1 mm e esta pessoa
+   esta de pe, na rua. `min-height` do alvo critico vale para a LINHA toda. */
+.consentimento__marca {
+  display: flex; gap: var(--space-3); align-items: center;
+  min-height: var(--target-critico); cursor: pointer;
+}
+/* A CAIXINHA TEM O ALVO MINIMO (48 px), e nao o tamanho que o navegador daria.
+   A isca de acessibilidade mede o `<input>`, e nao o rotulo em volta: com os
+   24 px padrao ela reprovou nomeando este campo. E e a medicao certa -- quem toca
+   isto esta de pe, na rua, com um animal na mao. */
+.consentimento__marca input {
+  flex: none; width: var(--target-min); height: var(--target-min);
+  accent-color: var(--cor-primary);
+}
+.consentimento__rotulo {
+  font-family: var(--type-label-family); font-weight: var(--type-label-weight);
+  color: var(--cor-text-primary);
+}
+.consentimento__finalidade { font-weight: var(--font-weight-bold); }
+/* O TEXTO QUE FICA GRAVADO. Menor que o corpo, e nunca escondido: o registro
+   afirma que a pessoa leu isto, entao recortar com "leia mais" tornaria a
+   afirmacao falsa. */
+.consentimento__texto {
+  color: var(--cor-text-secondary);
+  font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line);
+}
+
 .acao {
   position: sticky; bottom: 0; z-index: 5;
   display: grid; gap: var(--space-2); justify-items: center; text-align: center;

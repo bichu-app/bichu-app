@@ -4620,6 +4620,17 @@ paths:
       description: |
         E a operacao da tela "Contar mais". Todos os campos sao opcionais e a
         falha aqui nao e grave: o aviso principal ja saiu.
+
+        **E tambem onde o achador consente em compartilhar o contato dele com o
+        tutor** (decisao do cliente, 03/11/2026). O consentimento e um ato
+        explicito no corpo -- `finder_contact.share_consent` --, e sem ele o
+        contato NAO chega ao tutor: o caminho que libera tem de provar o
+        consentimento, e a ausencia de prova recusa. Ver
+        `FinderContactShareConsent`.
+
+        O caminho inverso continua fechado: **o achador nunca ve telefone,
+        e-mail nem endereco do tutor**, por esta operacao ou por qualquer
+        outra.
       security:
         - finderToken: []
       x-rate-limit:
@@ -16794,11 +16805,94 @@ components:
         finder_contact:
           type: object
           description: |
-            Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
-            para avisar a resposta do tutor e o desfecho do caso.
+            O contato de quem achou. **Dado pessoal de alguem que NAO TEM
+            CONTA**, e por isso o que decide se ele chega ao tutor nao e esta
+            estrutura: e `share_consent`.
+
+            **Sem `share_consent`** nada muda em relacao a antes de 03/11/2026:
+            `display_name` e gravado e ja era mostrado ao tutor, `email` serve
+            so para avisar a resposta do tutor e o desfecho do caso, e
+            `phone_e164` e **recusado com `400`**.
+
+            **Com `share_consent` valido**, os tres entram na conversa do tutor
+            como mensagem de SISTEMA, com a finalidade escrita ao lado. Mensagem
+            de sistema porque o corpo de mensagem HUMANA e redigido
+            (`redigirCanalMediado` retira telefone, e-mail e endereco), e
+            atravessar e exatamente o que a pessoa consentiu.
+
+            Este campo nao existe em `FoundReportEnrichment`: quem tem conta tem
+            o proprio contato na conta, e esta decisao nao o toca.
           properties:
             display_name: { type: string, maxLength: 60 }
             email: { type: string, format: email }
+            phone_e164:
+              type: string
+              pattern: '^\+55\d{10,11}$'
+              description: |
+                Mesmo formato de `professionals.phone_e164`, e pelo mesmo
+                motivo: numero que nao e discavel nao serve para o tutor ligar.
+
+                **So e aceito com `share_consent`; sozinho ele e `400`.** Campo
+                aceito e descartado em silencio e a forma mais discreta de um
+                vazamento nascer, e aqui a ausencia de prova RECUSA em vez de
+                guardar para depois.
+
+                **Nao e persistido em coluna nenhuma.** Ele vai para a mensagem
+                da conversa, que e imutavel e e o instante a que o
+                consentimento se refere; segunda copia em coluna seria guarda
+                sem finalidade propria (ADR-0010, emenda 6).
+            share_consent: { $ref: '#/components/schemas/FinderContactShareConsent' }
+
+    FinderContactShareConsent:
+      type: object
+      description: |
+        O ato explicito de consentir, da decisao do cliente de 03/11/2026,
+        literal: *"o achador vai enviar os dados e ter um botao de 'aceito
+        compartilhar meus dados com o tutor do pet' com o objetivo
+        exclusivamente dele conseguir entrar em contato para recuperar seu
+        pet"*.
+
+        **`accepted` so aceita `true`, e nao existe `false` neste contrato.** E
+        desenho, nao descuido: a recusa se diz OMITINDO `share_consent`. Uma
+        bandeira de dois valores tem um valor que, lido errado, libera; campo
+        ausente nao tem esse modo de falha. Caixinha pre-marcada na tela nao
+        satisfaz isto -- o que vale e o ato, e o registro dele.
+
+        **O servidor NAO grava texto que o cliente mande.** O cliente informa a
+        VERSAO que exibiu; o servidor resolve essa versao para o texto que ele
+        mesmo publica e grava ESSE. Texto vindo do cliente nao provaria nada,
+        porque o cliente e a parte interessada. Versao desconhecida e `400`:
+        gravar "consentiu" sem saber o que a pessoa leu e gravar nada.
+
+        A fonte unica dos textos e
+        `src/modules/found/domain/consentimento-de-contato.ts`, e ela e
+        **apenda**: versao antiga continua resolvendo para o texto que era
+        exibido quando ela era a atual. O registro
+        (`finder_contact_consents`) guarda QUEM consentiu, QUANDO, o TEXTO lido
+        e a FINALIDADE -- sem os quatro nao ha como demonstrar o consentimento
+        depois, e e isso que a lei cobra.
+
+        Por que o texto, e nao um ponteiro para a versao, como
+        `accepted_terms_version` faz: o achador **nao tem conta**, entao nao ha
+        perfil onde reconsultar o que ele aceitou, e este registro e a unica
+        evidencia que existe. Ponteiro passa a mentir sobre todo consentimento
+        antigo no dia em que o texto mudar, e mente em silencio.
+      required: [accepted, consent_version]
+      properties:
+        accepted:
+          type: boolean
+          enum: [true]
+          description: |
+            Somente `true`. Ver a descricao do schema: `false` nao e
+            representavel de proposito.
+        consent_version:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: |
+            A versao do texto que a tela exibiu. Mesmo teto de
+            `accepted_terms_version` em `RegisterRequest`, e pela mesma razao:
+            e rotulo de versao, nao texto.
 
     StrayFoundReportInput:
       type: object
@@ -16984,6 +17078,24 @@ components:
         message: { type: string, nullable: true }
         pet_display_name: { type: string }
         conversation_url: { type: string, format: uri }
+        contact_shared_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            O instante em que o contato do achador foi divulgado ao tutor
+            **NESTA requisicao**, ou nulo quando esta requisicao nao divulgou
+            nada. **Nao e "ja divulgou alguma vez"**, e a distincao e
+            deliberada: responder isso exigiria uma leitura a mais para
+            devolver, a quem nao tem conta, a data de um ato antigo -- e a tela
+            so precisa confirmar o que acabou de acontecer.
+
+            E fato do PROPRIO achador, e por isso sai para ele. Nao ha
+            identificador aqui, nem do tutor nem do aviso.
+
+            **Nao ha operacao para desfazer**, e a tela nao deve oferecer um
+            "desfazer" que o produto nao tem: a mensagem que levou o contato e
+            imutavel e fica no historico da conversa.
 
     # ----------------------------------------------------------------------
     # As tres vistas do achador sem conta (SEC-001)

@@ -51,6 +51,8 @@ export function comoVistaDoAviso(vista: VistaDoAvisoParaOAchador): Record<string
     message: vista.message,
     ...(vista.petDisplayName === null ? {} : { pet_display_name: vista.petDisplayName }),
     conversation_url: vista.conversationUrl,
+    contact_shared_at:
+      vista.contactSharedAt === null ? null : vista.contactSharedAt.toISOString(),
   };
 }
 
