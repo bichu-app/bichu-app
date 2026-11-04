@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # versionName / versionCode.
 #
-# O `+N` NAO E ENFEITE, E ELE SUBIU DE `+1` PARA `+2003` EM 04/11/2026.
+# O `+N` NAO E ENFEITE, E ELE SUBIU DE `+1` PARA `+2005` EM 04/11/2026.
 #
 # `1.0.0` e a versao do PRODUTO e nao muda aqui. O numero depois do `+` e o
 # `versionCode` do Android: o unico que o aparelho compara na hora de instalar
@@ -13,9 +13,9 @@ publish_to: 'none'
 # artefato de 04/11, compilado sem numero nenhum, saiu com 1. O Android recusou
 # com `INSTALL_FAILED_VERSION_DOWNGRADE`.
 #
-# Entao este valor e o PROXIMO NUMERO LIVRE, e nao um numero qualquer: o 2003
-# foi entregue em 04/11/2026 (o APK de hml do commit d0471d96, com o conserto do
-# coracao de curtido do Mural) e esta registrado em
+# Entao este valor e o PROXIMO NUMERO LIVRE, e nao um numero qualquer: o 2004
+# foi entregue em 04/11/2026 (o APK de hml do commit 78801f60, o mais atual da
+# `development`) e esta registrado em
 # `infra/verificacao/versioncode-entregue.json`, que e a linha de base que
 # `verificar-apk.sh` cobra. Quem entregar um APK novo registra o numero dele
 # (`--registrar-entrega`) e sobe este `+N` acima do registrado -- o portao
@@ -24,7 +24,7 @@ publish_to: 'none'
 # O build dos portoes sobrescreve os dois com `--build-name` e `--build-number`
 # (`verificar-apk.sh` e `verificar-ios.sh`), e `BUILD_NUMBER=` na linha de
 # comando do `make` e o que pede um numero diferente deste.
-version: 1.0.0+2004
+version: 1.0.0+2005
 
 environment:
   sdk: ^3.13.3
