@@ -71,7 +71,11 @@ const foto = pet ? fotoPermitida(pet.photo_url, midia) : null;
 if (pet?.photo_url && !foto) {
   process.stderr.write(`${JSON.stringify({ ts: new Date().toISOString(), aviso: 'foto do pet fora de MEDIA_PUBLIC_BASE_URL; mostrada como sem foto', rota: '/t/' })}\n`);
 }
-const perdido = resolucao?.lost?.is_lost ? desde(resolucao.lost.since) : undefined;
+// LEITURA UNICA de `lost.is_lost` (TagResolution, api/openapi.yaml): e ela que
+// decide a faixa de perdido E a existencia do botao de avisar o tutor. Fora de
+// `pet` nao ha resolucao, e sem resolucao o pet nao esta perdido.
+const estaPerdido = resolucao?.lost?.is_lost === true;
+const perdido = estaPerdido ? desde(resolucao?.lost?.since) : null;
 const cuidados = frase(pet?.care_notes);
 const marcas = frase(pet?.distinctive_marks);
 const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
@@ -79,7 +83,7 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
 <Publica titulo={TAG.tituloDaPagina} descricao={TAG.descricaoDaPagina}>
   {tela.tela === 'pet' && pet && (
     <>
-      {perdido !== undefined && (
+      {estaPerdido && (
         <div class="faixa-perdido" role="note">
           <Icone nome="info" />
           <p class="faixa-perdido__titulo">{TAG.perdidoTitulo}</p>
@@ -99,10 +103,21 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
           </div>
         )}
       </section>
-      <div class="garantia-contato">
-        <Icone nome="lock" />
-        <p>{TAG.garantiaContato}</p>
-      </div>
+      {estaPerdido ? (
+        <div class="garantia-contato">
+          <Icone nome="lock" />
+          <p>{TAG.garantiaContato}</p>
+        </div>
+      ) : (
+        <div class="caixa">
+          <h2 class="caixa__titulo">{TAG.naoPerdidoTitulo}</h2>
+          <p>{TAG.naoPerdidoTexto(pet.display_name)}</p>
+          <p>{TAG.naoPerdidoSeParecer(pet.display_name)}</p>
+          <p class="caixa__rotulo">{TAG.naoPerdidoEndereco}</p>
+          <p class="endereco">{endereco}</p>
+          <p>{TAG.emPerigo}</p>
+        </div>
+      )}
       <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
     </>
   )}
@@ -178,7 +193,7 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
   )}
 
   <Fragment slot="acao">
-    {tela.tela === 'pet' && (
+    {tela.tela === 'pet' && estaPerdido && (
       <div class="acao">
         <form method="post" data-envio>
           <input type="hidden" name="chave" value={chave} />
@@ -202,5 +217,6 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
     )}
     {(tela.tela === 'codigo-inexistente' || tela.tela === 'tag-desativada' || tela.tela === 'espere') && <RegistrarAchado />}
   </Fragment>
-  {(tela.tela === 'pet' || tela.tela === 'nao-avisou') && <ScriptDeEnvio />}
+  {/* O script so decora `form[data-envio]`; sem botao de avisar nao ha formulario para decorar. */}
+  {((tela.tela === 'pet' && estaPerdido) || tela.tela === 'nao-avisou') && <ScriptDeEnvio />}
 </Publica>
