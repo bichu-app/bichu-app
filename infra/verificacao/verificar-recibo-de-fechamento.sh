@@ -66,7 +66,10 @@ conferir() {
   if [ ! -f "$arquivo" ]; then
     echo "pre-push: '$ref' e branch de integracao e nao ha recibo de fechamento." >&2
     echo "" >&2
-    echo "  Rode:  make fechar-integracao" >&2
+    # O `API_BASE_URL_DO_APK=` NAO E ENFEITE NESTA MENSAGEM: desde 03/11/2026
+    # o alvo RECUSA sem ele, e uma mensagem de recusa que manda rodar um
+    # comando que tambem recusa resgata a pessoa para dentro de outro erro.
+    echo "  Rode:  make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app" >&2
     echo "  Ele roda \`verificar\`, a suite Flutter e COMPILA UM APK de verdade." >&2
     echo "  Em 22/09/2026 uma integracao se declarou verde sem nunca ter" >&2
     echo "  compilado um, e o defeito chegou ao cliente." >&2
@@ -84,7 +87,7 @@ conferir() {
     echo "  recibo de:  ${carimbado:-<vazio>}" >&2
     echo "" >&2
     echo "  Recibo velho aprova codigo que ninguem provou. Rode de novo:" >&2
-    echo "    make fechar-integracao" >&2
+    echo "    make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app" >&2
     return 1
   fi
 
@@ -92,7 +95,7 @@ conferir() {
     echo "pre-push: o recibo existe e e deste commit, mas a arvore estava SUJA" >&2
     echo "  quando a lista de fechamento rodou (arvore=${arvore:-<vazio>})." >&2
     echo "  O que foi provado nao e o que esta sendo empurrado. Commite e rode" >&2
-    echo "  \`make fechar-integracao\` de novo." >&2
+    echo "  \`make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app\` de novo." >&2
     return 1
   fi
 

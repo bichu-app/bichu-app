@@ -27,7 +27,10 @@ import type {
   FoundReportRepository,
   NovaIntencaoDeFotoDoAchadorSemConta,
 } from '../../ports/found-report-repository.js';
-import type { AcessoDoAchador } from '../../ports/conversa-do-achador.js';
+import type {
+  AcessoDoAchador,
+  ConversaDoAchadorParaAviso,
+} from '../../ports/conversa-do-achador.js';
 import { registrarRotasDoAvisoDoAchador } from './finder-found-report-routes.js';
 import { problemaDaResposta, respostaDeclarada } from '../../../../shared/http/problema-do-contrato.js';
 
@@ -52,12 +55,25 @@ interface Cenario {
   readonly fotosJaPedidas?: number;
 }
 
+/**
+ * O que o serviço pediu para DIVULGAR ao tutor, como a bancada o recebeu.
+ *
+ * Guardado como dado solto de propósito: o que esta bancada mede é a
+ * responsabilidade do módulo `found` — quais dados ele entrega e com que texto de
+ * consentimento. O recado que o TUTOR lê é montado dentro da transação do módulo
+ * `messaging`, a partir da linha gravada, e é medido lá e na integração.
+ */
+interface Divulgacao {
+  readonly pedido: Record<string, unknown>;
+}
+
 interface Bancada {
   readonly app: RegistradorDeRotas;
   readonly mudancas: EnriquecimentoDoAchador[];
   readonly recados: string[];
   readonly intencoes: NovaIntencaoDeFotoDoAchadorSemConta[];
   readonly argumentos: unknown[];
+  readonly divulgacoes: Divulgacao[];
 }
 
 function bancada(cenario: Cenario = {}): Bancada {
@@ -65,6 +81,7 @@ function bancada(cenario: Cenario = {}): Bancada {
   const recados: string[] = [];
   const intencoes: NovaIntencaoDeFotoDoAchadorSemConta[] = [];
   const argumentos: unknown[] = [];
+  const divulgacoes: Divulgacao[] = [];
   const resumoCerto = hashDeToken(TOKEN);
   let temPonto = false;
   let temFoto = false;
@@ -147,6 +164,33 @@ function bancada(cenario: Cenario = {}): Bancada {
   };
   const clock: Clock = { now: () => AGORA };
 
+  /**
+   * O dublê da conversa. Vai por `as unknown as` de propósito: a divulgação do
+   * contato é gravada e entregue pelo módulo `messaging`, e esta bancada só
+   * precisa registrar O QUE o `found` pediu — não a forma final da porta.
+   */
+  const conversa = {
+    acesso: (token: string) =>
+      Promise.resolve(
+        token === TOKEN
+          ? (cenario.acesso ?? { situacao: 'valido', aceitaMensagem: true })
+          : { situacao: 'recusado' },
+      ),
+    entregarRecado: (_token: string, recado: string) => {
+      recados.push(recado);
+      return Promise.resolve(redigirCanalMediado(recado).texto);
+    },
+    divulgarContatoComConsentimento: (_token: string, pedido: Record<string, unknown>) => {
+      divulgacoes.push({ pedido });
+      return Promise.resolve({
+        consentidoEm: new Date(AGORA),
+        finalidade: 'owner_contact',
+        versao: pedido['versaoDoConsentimento'],
+        texto: pedido['textoDoConsentimento'],
+      });
+    },
+  } as unknown as ConversaDoAchadorParaAviso;
+
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
@@ -156,18 +200,7 @@ function bancada(cenario: Cenario = {}): Bancada {
   registrarRotasDoAvisoDoAchador(app, {
     avisos: new AvisoDoAchadorService({
       repositorio,
-      conversa: {
-        acesso: (token) =>
-          Promise.resolve(
-            token === TOKEN
-              ? (cenario.acesso ?? { situacao: 'valido', aceitaMensagem: true })
-              : { situacao: 'recusado' },
-          ),
-        entregarRecado: (_token, recado) => {
-          recados.push(recado);
-          return Promise.resolve(redigirCanalMediado(recado).texto);
-        },
-      },
+      conversa,
       armazenamento,
       ids,
       clock,
@@ -176,7 +209,7 @@ function bancada(cenario: Cenario = {}): Bancada {
     contrato: carregarContrato('api/openapi.yaml'),
   });
 
-  return { app, mudancas, recados, intencoes, argumentos };
+  return { app, mudancas, recados, intencoes, argumentos, divulgacoes };
 }
 
 interface Resposta {
@@ -375,6 +408,202 @@ void describe('enrichFinderFoundReport: "Contar mais", sem id e sem coordenada d
     }
   });
 });
+
+/**
+ * O CONTATO DE QUEM ACHOU CHEGA AO TUTOR, E SÓ COM CONSENTIMENTO.
+ *
+ * Decisão do cliente, 03/11/2026, literal: *"o achador vai enviar os dados e ter
+ * um botão de 'aceito compartilhar meus dados com o tutor do pet' com o objetivo
+ * exclusivamente dele conseguir entrar em contato para recuperar seu pet"*.
+ *
+ * Os quatro casos são os quatro que a decisão exige, e cada um mede uma coisa que
+ * a ausência do mecanismo não produz. Medidos contra `fb8e5c2d` antes do
+ * conserto — ver o relatório do PR.
+ */
+void describe('o contato do achador só chega ao tutor com consentimento', () => {
+  const VERSAO = '2026-11-03';
+  const DO_ACHADOR = {
+    nome: 'Ana Paula',
+    email: 'ana.paula@exemplo.invalid',
+    telefone: '+5511912345678',
+  };
+  const consentimento = { accepted: true, consent_version: VERSAO };
+
+  void it('CASO 1 — SEM consentimento o contato não chega, e a recusa de hoje segue de pé', async () => {
+    // 1a. telefone sem consentimento é RECUSADO, e não ignorado em silêncio:
+    // campo aceito e descartado é a forma mais discreta de um vazamento nascer.
+    const comTelefone = bancada();
+    const recusa = await pedir(comTelefone.app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: { finder_contact: { phone_e164: DO_ACHADOR.telefone } },
+    });
+    await comTelefone.app.close();
+    assert.equal(recusa.status, 400, `telefone sem consentimento passou: ${recusa.bruto}`);
+    assert.equal(tipoDe(recusa.corpo), 'validation-failed');
+    assert.equal(comTelefone.divulgacoes.length, 0, 'divulgou sem consentimento');
+    assert.equal(comTelefone.mudancas.length, 0, 'gravou apesar da recusa');
+
+    // 1b. e-mail e nome SEM consentimento continuam valendo como antes: eles são
+    // gravados, e nada deles é divulgado ao tutor por esta decisão.
+    const semConsentir = bancada();
+    const aceito = await pedir(semConsentir.app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: { finder_contact: { display_name: DO_ACHADOR.nome, email: DO_ACHADOR.email } },
+    });
+    await semConsentir.app.close();
+    assert.equal(aceito.status, 200, aceito.bruto);
+    assert.equal(semConsentir.divulgacoes.length, 0, 'divulgou sem o ato de consentir');
+    assert.equal(
+      aceito.corpo['contact_shared_at'] ?? null,
+      null,
+      'a resposta afirma divulgação que não houve',
+    );
+
+    // 1c. a trava de hoje NÃO foi trocada por bandeira: nome com telefone dentro
+    // continua recusado, porque agora existe campo próprio para o telefone.
+    const nomeComTelefone = bancada();
+    const travada = await pedir(nomeComTelefone.app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: { finder_contact: { display_name: 'Ana 11987654321' } },
+    });
+    await nomeComTelefone.app.close();
+    assert.equal(travada.status, 400, `a trava de hoje caiu: ${travada.bruto}`);
+    assert.equal(nomeComTelefone.divulgacoes.length, 0);
+  });
+
+  void it('CASO 2 — COM consentimento, nome, e-mail e telefone são entregues para o tutor', async () => {
+    const { app, divulgacoes, recados } = bancada();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: {
+        message: 'Ela está comigo, calma e bem.',
+        finder_contact: { ...contatoDoAchador(DO_ACHADOR), share_consent: consentimento },
+      },
+    });
+    await app.close();
+
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.equal(divulgacoes.length, 1, `o contato não foi divulgado: ${resposta.bruto}`);
+
+    const { pedido } = divulgacoes[0]!;
+    const contato = pedido['contato'] as Record<string, unknown>;
+    assert.equal(contato['nome'], DO_ACHADOR.nome);
+    assert.equal(contato['email'], DO_ACHADOR.email);
+    assert.equal(contato['telefone'], DO_ACHADOR.telefone, 'o telefone não foi divulgado');
+
+    // A resposta confirma ao PRÓPRIO achador que ele compartilhou.
+    const quando = resposta.corpo['contact_shared_at'];
+    assert.equal(typeof quando, 'string', `\`contact_shared_at\` não saiu: ${resposta.bruto}`);
+    assert.equal(new Date(String(quando)).getTime(), AGORA);
+
+    // O recado de "Contar mais" continua indo pela conversa pelo caminho de
+    // sempre, e REDIGIDO: o consentimento abre o contato, e não o texto livre.
+    assert.equal(recados.length, 1, 'o recado deixou de ir para a conversa');
+    assert.ok(
+      !recados[0]!.includes(DO_ACHADOR.telefone),
+      'o recado livre passou a carregar telefone em claro',
+    );
+  });
+
+  void it('CASO 3 — o registro guarda o texto lido, o instante e a finalidade', async () => {
+    const { app, divulgacoes } = bancada();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: {
+        finder_contact: {
+          ...contatoDoAchador(DO_ACHADOR),
+          share_consent: {
+            ...consentimento,
+            // O cliente tenta ditar o texto. O servidor NÃO pode gravar isto: o
+            // cliente é a parte interessada, e texto dele não prova nada.
+            consent_text: 'eu concordo com tudo para sempre',
+          },
+        },
+      },
+    });
+    await app.close();
+
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.equal(divulgacoes.length, 1, `nada foi registrado: ${resposta.bruto}`);
+    const { pedido } = divulgacoes[0]!;
+
+    const texto = pedido['textoDoConsentimento'];
+    assert.equal(typeof texto, 'string', 'o registro foi pedido sem o texto lido');
+    const lido = String(texto);
+    assert.notEqual(lido.trim(), '', 'texto vazio não demonstra consentimento nenhum');
+    assert.ok(
+      !lido.includes('para sempre'),
+      `o servidor gravou o texto que o CLIENTE mandou: ${lido}`,
+    );
+    // As três coisas que fazem o consentimento existir estão escritas no texto.
+    for (const exigido of ['finalidade exclusiva', 'tutor', 'opcional']) {
+      assert.ok(lido.includes(exigido), `o texto lido não diz \`${exigido}\`: ${lido}`);
+    }
+    assert.equal(pedido['versaoDoConsentimento'], VERSAO, 'a versão do texto não foi registrada');
+    assert.equal(
+      new Date(String(resposta.corpo['contact_shared_at'])).getTime(),
+      AGORA,
+      'o instante do consentimento não é o da requisição',
+    );
+
+    // Versão que não é nossa não resolve para texto nenhum, e por isso é recusada:
+    // gravar "consentiu" sem saber o que ele leu é gravar nada.
+    const desconhecida = bancada();
+    const recusa = await pedir(desconhecida.app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: {
+        finder_contact: {
+          ...contatoDoAchador(DO_ACHADOR),
+          share_consent: { accepted: true, consent_version: '1999-01-01' },
+        },
+      },
+    });
+    await desconhecida.app.close();
+    assert.equal(recusa.status, 400, `versão desconhecida foi aceita: ${recusa.bruto}`);
+    assert.equal(desconhecida.divulgacoes.length, 0, 'divulgou sob versão que não existe');
+  });
+
+  void it('CASO 4 — divulgar o contato do achador não abre nada do tutor para ele', async () => {
+    const { app, divulgacoes } = bancada();
+    const resposta = await pedir(app, {
+      metodo: 'PATCH',
+      url: '/finder/found-report',
+      corpo: {
+        finder_contact: { ...contatoDoAchador(DO_ACHADOR), share_consent: consentimento },
+      },
+    });
+    await app.close();
+
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.equal(divulgacoes.length, 1, 'sem divulgação não há o que medir nesta direção');
+
+    // O sentido é UM. A página diz "quem acha nunca vê telefone nem endereço do
+    // tutor", e esta decisão não a emenda.
+    exigirQueNaoVaza(resposta, 'PATCH com consentimento');
+    const divulgado = JSON.stringify(divulgacoes[0]!.pedido);
+    for (const doTutor of [DO_TUTOR.email, DO_TUTOR.telefone, DO_TUTOR.endereco, DO_TUTOR.userId]) {
+      assert.ok(
+        !divulgado.includes(doTutor),
+        `dado do TUTOR entrou no pedido de divulgação: ${doTutor}`,
+      );
+    }
+  });
+});
+
+/** `finder_contact` com os três campos de contato, sem o consentimento. */
+function contatoDoAchador(de: {
+  nome: string;
+  email: string;
+  telefone: string;
+}): Record<string, unknown> {
+  return { display_name: de.nome, email: de.email, phone_e164: de.telefone };
+}
 
 void describe('o token nas duas operações, pelo que o CONTRATO declara', () => {
   const invalido = problemaDaResposta('FinderLinkInvalid');

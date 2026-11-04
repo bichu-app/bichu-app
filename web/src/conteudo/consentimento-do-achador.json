@@ -1,0 +1,5 @@
+{
+  "_leia": "A COPIA QUE A TELA EXIBE do texto de consentimento do achador. A FONTE e o servidor: `src/modules/found/domain/consentimento-de-contato.ts` e quem GRAVA o texto, resolvendo-o a partir da versao que o cliente informa. Este arquivo existe porque a tela precisa EXIBIR o mesmo texto, e `make verificar-texto-do-consentimento` prova que os dois sao iguais byte a byte. Se divergirem, o registro deixa de provar o que a pessoa leu -- que e a unica coisa que legitima entregar o contato dela a um terceiro. Nao edite este arquivo sozinho: edite a fonte, e traga a copia junto.",
+  "versao": "2026-11-03",
+  "texto": "Aceito compartilhar com o tutor deste pet os dados de contato que eu preenchi aqui — nome, e-mail e telefone —, com a finalidade exclusiva de ele entrar em contato comigo para recuperar o animal. O Bichu não usa esses dados para outra coisa e não os mostra a mais ninguém. Compartilhar é opcional: sem isso, o meu recado e a minha foto continuam chegando ao tutor pela conversa do Bichu."
+}

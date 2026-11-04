@@ -420,7 +420,12 @@ interface LinhaDaArestaPorApelido {
 }
 
 interface LinhaDaConexao {
-  readonly handle: string;
+  /**
+   * O apelido da outra ponta, **anulável**: `users.handle` é anulável e 22 das
+   * 61 contas de homologação estavam sem ele em 03/11/2026. A linha vem com
+   * nulo em vez de não vir — ver o cabeçalho de [construtorDasConexoes].
+   */
+  readonly handle: string | null;
   readonly display_name: string | null;
   readonly pets_count: string | number;
   readonly connections_count: string | number;
@@ -431,6 +436,34 @@ interface LinhaDaConexao {
 /**
  * **A LISTA DAS PRÓPRIAS CONEXÕES ACEITAS** (cliente, 22/10/2026: *"o usuário pode
  * abrir a lista de usuários que é sua conexão"*).
+ *
+ * ## POR QUE NÃO HÁ FILTRO DE APELIDO AQUI (03/11/2026)
+ *
+ * Até 03/11/2026 esta consulta carregava `AND (to_jsonb(outro) ->> 'handle') IS
+ * NOT NULL`, pelo argumento de que uma linha sem apelido seria *"uma porta que
+ * não abre"*. O defeito que isso produziu foi relatado pelo cliente e medido no
+ * banco de homologação: uma conexão **aceita** entre duas contas desaparecia da
+ * lista de uma delas porque a OUTRA não tinha escolhido apelido — e eram **22
+ * das 61 contas**, porque o apelido não é exigido no cadastro (`RegisterRequest`
+ * não o tem em `required`) e nenhum fluxo obriga a escolher.
+ *
+ * O filtro também fazia esta consulta **discordar da contagem do resumo**:
+ * `construtorDaContagemDeConexoes` nunca olhou apelido, então `total` aqui e
+ * `connected_count` lá divergiam por exatamente as conexões sem apelido.
+ *
+ * A linha agora vem com `handle` nulo, e **é a borda que decide o que fazer com
+ * o nulo** — o mesmo desenho que a caixa de PEDIDOS (`ConnectionPerson.handle`
+ * é anulável desde que ela nasceu) e a lista de bloqueados já usavam: a tela
+ * escreve o nome de exibição e **não** oferece a porta do perfil.
+ *
+ * ## A ORDEM FICA TOTAL MESMO COM NULO
+ *
+ * Com `display_name` e `handle` os dois anuláveis, as duas chaves de ordenação
+ * podem empatar, e `LIMIT/OFFSET` sobre ordem parcial **repete e perde linha**
+ * entre páginas. `outro.public_ref` entra como terceira chave: ele é único por
+ * conta e `NOT NULL`, e fica **só no `ORDER BY`** — não é projetado, e por isso
+ * não entra no corpo (ADR-0010 item 6, que o portão da borda cobra por nome de
+ * coluna de saída).
  */
 export function construtorDasConexoes(
   db: Kysely<Database>,
@@ -460,8 +493,9 @@ export function construtorDasConexoes(
       count(*) OVER ()                      AS total
     ${juncaoDaAresta(quemChama)}
       AND c.state = 'accepted'
-      AND (to_jsonb(outro) ->> 'handle') IS NOT NULL
-    ORDER BY outro.display_name ASC, (to_jsonb(outro) ->> 'handle') ASC
+    ORDER BY outro.display_name ASC NULLS LAST,
+             (to_jsonb(outro) ->> 'handle') ASC NULLS LAST,
+             outro.public_ref ASC
     LIMIT ${recorte.limite} OFFSET ${deslocamento}
   `.compile(db);
 }

@@ -1062,8 +1062,18 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
       }),
       ordem: widget.ordena ? _ordemPendente : null,
     );
-    Navigator.of(context).pop();
+    // **A ESCOLHA VAI ANTES DE A FOLHA FECHAR, e a ordem nao e estilo**
+    // (03/11/2026). Fechar primeiro era um `Navigator.pop`, e quem escuta o
+    // roteador reconstroi com ele -- na secao `Rede` essa reconstrucao
+    // desmontava a aba de onde a folha tinha sido aberta, e `aoAplicar` caia
+    // num `State` ja descartado: `setState() called after dispose()`, com o
+    // recorte perdido e nenhuma chamada ao servidor. Entregar a escolha
+    // enquanto quem pediu a folha ainda esta montado tira a ordem de desmonte
+    // da conta, e vale para as CINCO listagens que compartilham esta peca.
+    // Nenhum dos cinco manipuladores navega (medido, nao suposto), entao o
+    // `pop` logo abaixo continua fechando a folha e nada mais.
     widget.aoAplicar(escolha);
+    Navigator.of(context).pop();
   }
 
   @override

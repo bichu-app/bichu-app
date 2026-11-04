@@ -45,13 +45,19 @@ RUN npm ci --omit=dev --no-audit --no-fund
 # reprova aqui, com o motivo.
 FROM ${NODE_IMAGE} AS commit
 ARG BUILD_COMMIT
+# A ARVORE de que a imagem saiu (02/11/2026). Vazio NAO reprova aqui: o build
+# pelo compose nao sabe a arvore do contexto, e so o CD exige o carimbo --
+# `infra/cd/construir-imagem.sh` sempre o passa e confere o artefato, e
+# `infra/cd/implantar.sh` recusa implantar imagem com a arvore vazia.
+ARG BUILD_TREE
 RUN set -eu; \
     if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
       echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
       echo "  Via compose: BUILD_COMMIT=\$(git rev-parse HEAD) docker compose build web" >&2; \
       exit 1; \
     fi; \
-    printf '%s' "$BUILD_COMMIT" > /commit
+    printf '%s' "$BUILD_COMMIT" > /commit; \
+    printf '%s' "${BUILD_TREE:-}" > /arvore
 
 # --------------------------------------------------------------------------
 # final: `dist/`, dependencias de producao e o servidor minimo
@@ -65,6 +71,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0
 WORKDIR /web
 COPY --from=commit /commit /etc/bichu/commit
+COPY --from=commit /arvore /etc/bichu/arvore
 # Tudo do root e so leitura para o processo: quem serve o site nao consegue
 # altera-lo, e a raiz do container tambem e somente leitura no compose.
 COPY --from=deps /web/node_modules ./node_modules

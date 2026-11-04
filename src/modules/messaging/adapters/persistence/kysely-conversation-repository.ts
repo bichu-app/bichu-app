@@ -4,6 +4,11 @@ import type { Db } from '../../../../shared/db/pool.js';
 import { JANELA_DE_AGRUPAMENTO_EM_MS } from '../../../tags/ports/tag-repository.js';
 import type { Papel } from '../../domain/conversa-mediada.js';
 import type { MotivoDeRetencao } from '../../domain/retencao-para-revisao.js';
+import {
+  ESPECIE_DA_DIVULGACAO,
+  recadoDaDivulgacaoDeContato,
+  type ConsentimentoGravado,
+} from '../../domain/divulgacao-de-contato.js';
 import type {
   AberturaPorAviso,
   ConversaDoAchador,
@@ -532,6 +537,59 @@ export function criarConversationRepository(db: Db): ConversationRepository {
         { ...mensagem, senderRole: 'system', senderUserId: null },
         mensagem.especie,
       ),
+
+    /**
+     * Uma transação, duas escritas, e o recado montado **no meio delas** a partir
+     * da linha gravada. Ver a porta para o porquê.
+     */
+    async divulgarContatoSobConsentimento(resumo, pedido) {
+      const conversa = await construtorDaLeituraDoAchador(db, resumo).executeTakeFirst();
+      if (conversa === undefined) return undefined;
+      const conversationId = conversa.id as ConversationId;
+
+      return db.transaction().execute(async (trx) => {
+        const linha = await trx
+          .insertInto('finder_contact_consents')
+          .values({
+            id: pedido.id,
+            found_report_id: pedido.foundReportId,
+            purpose: pedido.finalidade,
+            consent_version: pedido.versaoDoConsentimento,
+            consent_text: pedido.textoDoConsentimento,
+          })
+          .returning(['consented_at', 'purpose', 'consent_version', 'consent_text'])
+          .executeTakeFirstOrThrow();
+
+        const consentimento: ConsentimentoGravado = {
+          consentidoEm: linha.consented_at,
+          finalidade: linha.purpose,
+          versao: linha.consent_version,
+          texto: linha.consent_text,
+        };
+
+        /*
+         * O recado sai da PROVA, e `recadoDaDivulgacaoDeContato` LANÇA se a prova
+         * não se sustentar. Lançar é o único jeito de desfazer aqui: `return`
+         * comita, porque o Kysely só desfaz ao lançar — e um `return` de recusa
+         * deixaria a linha de consentimento gravada sem a divulgação que ela
+         * autoriza, ou pior, dependeria de quem chama conferir.
+         */
+        await construtorDaInsercaoDeMensagem(
+          trx,
+          {
+            id: pedido.mensagemId,
+            conversationId,
+            senderRole: 'system',
+            senderUserId: null,
+            body: recadoDaDivulgacaoDeContato(consentimento, pedido.contato, pedido.nomeDoPet),
+            redactions: [],
+          },
+          ESPECIE_DA_DIVULGACAO,
+        ).executeTakeFirstOrThrow();
+
+        return { consentimento, conversa: conversationId };
+      });
+    },
 
     async contarMensagensDoParticipante(conversa, papel, desde): Promise<number> {
       const linha = await construtorDaContagemDoParticipante(

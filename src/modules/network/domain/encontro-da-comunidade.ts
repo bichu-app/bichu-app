@@ -206,8 +206,9 @@ export interface CorpoDoEncontroDaComunidade {
    *
    * **A rota de autorizacao e a QUE JA EXISTE**
    * (`createNetworkEventCoverUploadIntent`): o proposito e `network_event` nas
-   * quatro, a minima e 600 x 600 nas quatro e a derivada e `DERIVADAS_DO_ENCONTRO`
-   * nas quatro. Nao ha nada que distinga a segunda imagem da primeira no ENVIO.
+   * quatro, a minima e 600 x 338 nas quatro (a LARGURA decidida e 600, e a
+   * altura sai da moldura 16:9 desde 03/11/2026) e a derivada e
+   * `DERIVADAS_DO_ENCONTRO` nas quatro. Nao ha nada que distinga a segunda imagem da primeira no ENVIO.
    *
    * **SE EXCLUI com `cover_image`:** os dois no mesmo corpo sao `400`
    * (`code: cover_and_images_both_sent`). `cover_image` fica porque o APK

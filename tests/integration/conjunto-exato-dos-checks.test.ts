@@ -95,6 +95,23 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'source',
     valores: ['signup', 'recollection'],
   },
+  // 20261103000001. A FINALIDADE do consentimento do achador, e ela e o LIMITE
+  // do consentimento: um valor so, `owner_contact` — o tutor entrar em contato
+  // para recuperar o pet.
+  //
+  // Lista fechada e nao texto livre porque finalidade inventada no meio do
+  // codigo tem de nao compilar E tambem nao gravar: ampliar a finalidade e
+  // ampliar o consentimento sem pedir de novo, e e a unica forma de este
+  // mecanismo virar coleta para outra coisa. Espelha
+  // `FinalidadeDoConsentimento` em
+  // `src/modules/found/domain/consentimento-de-contato.ts`,
+  // `FinalidadeDaDivulgacao` em
+  // `src/modules/messaging/domain/divulgacao-de-contato.ts` e
+  // `FinderContactConsentsTable.purpose` em `src/shared/db/schema.ts`.
+  'public.finder_contact_consents.finder_contact_consents_finalidade_conhecida': {
+    coluna: 'purpose',
+    valores: ['owner_contact'],
+  },
   'public.admin_sessions.admin_sessions_revoked_reason_check': {
     coluna: 'revoked_reason',
     valores: [
@@ -330,7 +347,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       //
       // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
       // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
-      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // faixa 16:9 do topo da ficha; a minima e 600 x 338. O que NAO se
       // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
       'directory_suggestion_photo',
       'user_photo',
@@ -734,7 +751,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       //
       // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
       // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
-      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // faixa 16:9 do topo da ficha; a minima e 600 x 338. O que NAO se
       // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
       'directory_suggestion_photo',
       'user_photo',
@@ -1275,6 +1292,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // valor a elas seria arbitrar data.
   'public.terms_acceptances.terms_acceptances_versao_nao_vazia':
     "CHECK ((btrim(version) <> ''::text))",
+  // 20261103000001. Os dois `NOT NULL` + `CHECK` contra vazio do consentimento
+  // do achador. O do TEXTO e o que importa: consentimento sem o texto lido nao
+  // demonstra consentimento nenhum, e quem recusa isso e o Postgres — nao a
+  // disciplina de quem escreve o repositorio. O achador NAO TEM CONTA, entao
+  // esta linha e a unica evidencia que existe de que ele leu o que leu.
+  'public.finder_contact_consents.finder_contact_consents_texto_nao_vazio':
+    "CHECK ((btrim(consent_text) <> ''::text))",
+  'public.finder_contact_consents.finder_contact_consents_versao_nao_vazia':
+    "CHECK ((btrim(consent_version) <> ''::text))",
   'public.professional_reviews.professional_reviews_body_nao_vazio':
     "CHECK (((body IS NULL) OR (btrim(body) <> ''::text)))",
   'public.professional_reviews.professional_reviews_body_sem_html':
@@ -1720,7 +1746,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'public.conversation_messages.conversation_messages_especie_so_do_sistema':
     "CHECK (((system_kind IS NULL) OR (sender_role = 'system'::text)))",
   'public.conversation_messages.conversation_messages_system_kind_conhecido':
-    "CHECK (((system_kind IS NULL) OR (system_kind = ANY (ARRAY['scan_notice'::text, 'found_notice'::text, 'redaction_warning'::text]))))",
+    // `finder_contact` entrou em 20261103000001: a divulgacao do contato do
+    // achador sob consentimento. Ela e mensagem de SISTEMA porque o corpo de
+    // mensagem HUMANA e redigido, e aqui o telefone e o e-mail TEM de
+    // atravessar — foi para isso que a pessoa consentiu.
+    "CHECK (((system_kind IS NULL) OR (system_kind = ANY (ARRAY['scan_notice'::text, 'found_notice'::text, 'redaction_warning'::text, 'finder_contact'::text]))))",
   // ---------------------------------------------------------------------
   // A RESOLUCAO DA FILA DE MODERACAO, nas quatro filas que existem
   // (`conversation_reports` e `professional_review_reports` da

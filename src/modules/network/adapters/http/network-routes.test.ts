@@ -137,7 +137,7 @@ const CAPA_PRONTA: CapaDoMeuEncontro = {
 const CAPA_RECUSADA: CapaDoMeuEncontro = {
   estado: 'rejected',
   url: null,
-  motivoDaRecusa: 'A imagem precisa ter pelo menos 600 x 600 pixels.',
+  motivoDaRecusa: 'A imagem precisa ter pelo menos 600 x 338 pixels.',
 };
 
 const MEU_ENCONTRO: EncontroDoAutor = {
@@ -1323,7 +1323,7 @@ void describe('a capa do dono: o unico lugar que conta que a foto foi recusada',
       | Record<string, unknown>
       | undefined;
     assert.equal(capa?.['status'], 'rejected');
-    assert.equal(capa?.['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 600 pixels.');
+    assert.equal(capa?.['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 338 pixels.');
     assert.equal(capa?.['url'], null);
   });
 
@@ -1363,7 +1363,7 @@ void describe('a capa do dono: o unico lugar que conta que a foto foi recusada',
     for (const url of ['/network/events', `/network/events/${SLUG}`]) {
       const resposta = await pedir(app, { url });
       assert.equal(resposta.status, 200, resposta.bruto);
-      for (const proibido of ['rejection_reason', 'processing', 'rejected', '600 x 600']) {
+      for (const proibido of ['rejection_reason', 'processing', 'rejected', '600 x 338']) {
         assert.equal(resposta.bruto.includes(proibido), false, `${proibido} em ${url}`);
       }
     }
@@ -1375,6 +1375,6 @@ void describe('a capa do dono: o unico lugar que conta que a foto foi recusada',
       como: QUEM_CHAMA,
     });
     const capa = resposta.corpo['cover'] as Record<string, unknown>;
-    assert.equal(capa['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 600 pixels.');
+    assert.equal(capa['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 338 pixels.');
   });
 });

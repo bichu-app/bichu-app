@@ -185,7 +185,10 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
 });
 
 void describe('a dimensão mínima da foto de pet', () => {
-  void it('é 600 x 600, o mesmo número já aceito para a capa do encontro', () => {
+  // A capa do encontro saiu desta comparação em 03/11/2026: ela é enquadrada
+  // em 16:9 e passou a 600 x 338. A foto de pet é recortada em 1024 x 1126 e
+  // o piso dela continua quadrado.
+  void it('é 600 x 600, e já NÃO é o número da capa do encontro', () => {
     assert.deepEqual(DIMENSAO_MINIMA_DA_FOTO_DE_PET, { largura: 600, altura: 600 });
   });
 

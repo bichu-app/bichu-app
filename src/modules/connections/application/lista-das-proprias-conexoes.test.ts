@@ -14,6 +14,11 @@ const ANA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const BIA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const CARLA = '018f3a2b-0000-7000-8000-0000000000cc' as UserId;
 const DORA = '018f3a2b-0000-7000-8000-0000000000dd' as UserId;
+/**
+ * **SEM APELIDO: ela existe, é conexão, e APARECE na lista** — com `apelido`
+ * nulo, desde o conserto de 03/11/2026. Antes dele ela era filtrada, e é esse o
+ * defeito que o cliente relatou.
+ */
 const ELO = '018f3a2b-0000-7000-8000-0000000000ee' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 
@@ -70,7 +75,7 @@ async function apelidosDe(
   quem: UserId,
   pagina = 1,
   limite = 20,
-): Promise<readonly string[]> {
+): Promise<readonly (string | null)[]> {
   const resultado = await servico.conexoes(contexto(quem), pagina, limite);
   return resultado.itens.map((pessoa) => pessoa.apelido);
 }
@@ -146,14 +151,49 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet']);
   });
 
-  void it('conexao SEM apelido nao entra: a linha seria uma porta que nao abre', async () => {
+  /**
+   * **CONEXÃO ACEITA COM A OUTRA PONTA SEM APELIDO APARECE** — e este é o caso
+   * que o cliente relatou em 03/11/2026: *"no perfil do <uma conta> a <outra>
+   * não aparece como conexão, apenas o <terceiro>, mas eles têm uma conexão"*.
+   *
+   * Até esta data a lista filtrava o apelido nulo, e a asserção deste arquivo
+   * era a oposta. O argumento de então era que a linha seria *"uma porta que não
+   * abre"* — e ele confundia **não poder abrir o perfil** (verdade, e continua)
+   * com **não existir na lista** (que apaga uma relação que as duas pessoas
+   * confirmaram). No banco de homologação eram **22 das 61 contas** sem apelido,
+   * porque ele não é exigido no cadastro.
+   *
+   * A asserção é o par, e é o par que mede: a pessoa sem apelido entra com
+   * `apelido` **nulo**, e o `total` conta as DUAS.
+   */
+  void it('conexao aceita com a outra ponta SEM APELIDO aparece, com apelido nulo', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: ELO, estado: 'accepted' });
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
 
     const pagina = await servico.conexoes(contexto(ANA), 1, 20);
-    assert.deepEqual([...pagina.itens.map((p) => p.apelido)], ['bia-vet']);
-    assert.equal(pagina.total, 1, 'o total conta o MESMO conjunto que a pagina devolve');
+    assert.deepEqual(
+      [...pagina.itens.map((p) => p.nomeDeExibicao)],
+      ['Bia', 'Elo'],
+      'as DUAS conexões aceitas saem; a sem apelido desaparecia antes de 03/11/2026',
+    );
+    assert.deepEqual(
+      [...pagina.itens.map((p) => p.apelido)],
+      ['bia-vet', null],
+      'a pessoa sem apelido vem com `apelido` nulo — é a borda que decide o que ' +
+        'fazer com o nulo, e ela não oferece a porta do perfil',
+    );
+    assert.equal(pagina.total, 2, 'o total conta o MESMO conjunto que a pagina devolve');
+  });
+
+  /**
+   * **ISCA DO CASO DE CIMA.** Sem ela, aquele caso passaria no dia em que a
+   * bancada deixasse de conhecer uma pessoa sem apelido — e não por a lista
+   * saber mostrá-la. A isca mede que `ELO` é mesmo a conta sem apelido.
+   */
+  void it('ISCA: a conta usada no caso de cima e de fato SEM apelido na bancada', () => {
+    const elo = PESSOAS.find((p) => p.id === ELO);
+    assert.equal(elo?.apelido, null, 'a isca passou: `ELO` tem apelido, e o caso acima não mede nada');
   });
 
   void it('ISCA: cada pessoa da lista tem EXATAMENTE os cinco campos da busca', async () => {

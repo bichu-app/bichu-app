@@ -1352,7 +1352,9 @@ export interface paths {
          *     JPEG -- HEIC entra e nunca sai, e a conversao e nossa, no servidor.
          *     SVG nunca, e por IGUALDADE e nunca por prefixo.
          *
-         *     Dimensao minima 600 x 600, a mesma da capa do encontro e da foto de pet:
+         *     Dimensao minima 600 x 600, a mesma da foto de pet -- e **ja nao a da capa do
+         *     encontro**, que passou a 600 x 338 em 03/11/2026 porque a capa e
+         *     enquadrada em 16:9 e esta vitrine e quadrada:
          *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
          *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
          *     worker, nos bytes.
@@ -1528,8 +1530,9 @@ export interface paths {
          *     iPhone e HEIC. A derivada sai sempre em JPEG -- a conversao e nossa, no
          *     servidor. SVG nunca, e por IGUALDADE e nunca por prefixo de `image/`.
          *
-         *     Dimensao minima 600 x 600, a mesma da vitrine, da capa do encontro e da
-         *     foto de pet, e pelo mesmo motivo: a derivada desta foto e `card` de
+         *     Dimensao minima 600 x 600, a mesma da vitrine e da foto de pet, e pelo mesmo
+         *     motivo (**ja nao a da capa do encontro**, que e 600 x 338 desde
+         *     03/11/2026: aquela e enquadrada em 16:9 e esta e quadrada): a derivada desta foto e `card` de
          *     1024 px e o `sharp` nao amplia. `width`/`height` sao opcionais e, quando
          *     vem abaixo dela, respondem `422 image-too-small` **antes** de assinar;
          *     quem decide de verdade e o worker, nos bytes.
@@ -2434,6 +2437,17 @@ export interface paths {
          * Acrescenta onde, foto, recado e contato ao aviso ja enviado
          * @description E a operacao da tela "Contar mais". Todos os campos sao opcionais e a
          *     falha aqui nao e grave: o aviso principal ja saiu.
+         *
+         *     **E tambem onde o achador consente em compartilhar o contato dele com o
+         *     tutor** (decisao do cliente, 03/11/2026). O consentimento e um ato
+         *     explicito no corpo -- `finder_contact.share_consent` --, e sem ele o
+         *     contato NAO chega ao tutor: o caminho que libera tem de provar o
+         *     consentimento, e a ausencia de prova recusa. Ver
+         *     `FinderContactShareConsent`.
+         *
+         *     O caminho inverso continua fechado: **o achador nunca ve telefone,
+         *     e-mail nem endereco do tutor**, por esta operacao ou por qualquer
+         *     outra.
          */
         patch: operations["enrichFinderFoundReport"];
         trace?: never;
@@ -3837,8 +3851,9 @@ export interface paths {
          *     outra pessoa, de outro proposito ou vencido e recusado com `400`
          *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
          *
-         *     Dimensao minima 600 x 600, a mesma do painel: `width`/`height` sao
-         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     Dimensao minima 600 x 338, a mesma do painel -- a LARGURA minima decidida e
+         *     600 e a altura e a que a moldura 16:9 impoe (cliente, 03/11/2026):
+         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
          *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
          *
          *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
@@ -3901,7 +3916,7 @@ export interface paths {
          *     de outro proposito, vencido ou ja usado em OUTRA indicacao e recusado
          *     com `400` (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
          *
-         *     Dimensao minima **256 x 256**, e nao os 600 x 600 da capa do encontro: e
+         *     Dimensao minima **256 x 256**, e nao os 600 x 338 da capa do encontro: e
          *     a mesma minima de `directory_logo`, e o motivo esta escrito lá -- logo de
          *     clinica de bairro costuma ser um PNG de 300 px que saiu de um cartao de
          *     visita, e 256 e o piso em que a derivada `card` de 512 ainda fica
@@ -3951,7 +3966,7 @@ export interface paths {
          *
          *     O logotipo e a **marca**: um quadrado ao lado do nome, 512 x 512, minima
          *     de 256. A foto do estabelecimento e a **faixa do topo da ficha**:
-         *     1280 x 720, minima de 600 x 600. Sao duas geometrias e duas minimas, e
+         *     1280 x 720, minima de 600 x 338. Sao duas geometrias e duas minimas, e
          *     por isso sao duas rotas -- exatamente como `directory_logo` e
          *     `directory_photo` sao dois propositos no painel desde 18/10/2026.
          *
@@ -3987,8 +4002,11 @@ export interface paths {
          *     vencido ou ja usado em OUTRA indicacao e recusado com `400`
          *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
          *
-         *     Dimensao minima **600 x 600**, a mesma da capa do encontro: a derivada
-         *     `banner` e 1280 x 720 e `sharp` nao amplia. `width`/`height` sao
+         *     Dimensao minima **600 x 338**, a mesma da capa do encontro: a LARGURA
+         *     minima decidida e 600 e a altura sai da moldura 16:9 da derivada
+         *     `banner` (1280 x 720), e `sharp` nao amplia. Ela era 600 x 600 -- um
+         *     piso QUADRADO numa faixa deitada, que nenhum recorte 16:9 de 600 de
+         *     largura alcanca (ele da 338) -- e foi corrigida em 03/11/2026. `width`/`height` sao
          *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
          *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
          *
@@ -8517,12 +8535,41 @@ export interface components {
          */
         ConnectedPerson: {
             /**
-             * @description O apelido. **Nao e anulavel aqui**, como em `PersonSearchResult` e ao
-             *     contrario de `ConnectionPerson.handle`: a consulta le `handles`, e e
-             *     o apelido o endereco do perfil que cada linha abre. Conexao de quem
-             *     nao tem apelido nao tem para onde levar, e nao entra na lista.
+             * @description O apelido. **ANULAVEL desde 03/11/2026**, como em
+             *     `ConnectionPerson.handle` e ao contrario de `PersonSearchResult` --
+             *     e a troca e o conserto de um defeito RELATADO PELO CLIENTE e medido
+             *     no banco de homologacao.
+             *
+             *     **O que estava escrito aqui antes, e por que estava errado.** A
+             *     versao anterior dizia que o apelido nao era anulavel porque "conexao
+             *     de quem nao tem apelido nao tem para onde levar, e nao entra na
+             *     lista", e a consulta carregava um `IS NOT NULL` para cumprir isso. O
+             *     efeito medido: uma conexao **aceita** desaparecia da lista de uma
+             *     pessoa porque a OUTRA conta nao tinha escolhido apelido. Eram **22
+             *     das 61 contas**, porque `handle` nao esta em `required` de
+             *     `RegisterRequest` e nenhum fluxo obriga a escolher depois. O
+             *     argumento confundiu duas coisas: **nao poder abrir o perfil** e
+             *     **nao existir na lista**. A primeira e verdade e continua valendo; a
+             *     segunda apaga uma relacao que as duas pessoas confirmaram.
+             *
+             *     O filtro tambem fazia esta lista **discordar do resumo**: o `total`
+             *     daqui e o `connected_count` de `getMyConnectionSummary` saem de
+             *     consultas diferentes, e so esta olhava apelido -- os dois numeros
+             *     divergiam por exatamente as conexoes sem apelido.
+             *
+             *     **O QUE A TELA FAZ COM O NULO.** Escreve o nome de exibicao (ou
+             *     `Usuario sem nome`, quando ele tambem e nulo) e **nao oferece a
+             *     porta do perfil**: nenhum toque, nenhuma seta. E o MESMO desenho que
+             *     a caixa de pedidos (`ConnectionPerson.handle`, anulavel desde que
+             *     ela nasceu) e a lista de bloqueados (`BlockedPerson.handle`) ja usavam, e
+             *     nao ha rotulo novo na linha -- "perfil incompleto" ou equivalente
+             *     seria decisao de produto, e nao foi tomada.
+             *
+             *     **O endereco do perfil continua sendo o apelido**: `getPersonProfile`
+             *     segue com `handle` NAO anulavel, e quem nao tem apelido continua sem
+             *     pagina de perfil. Esta anulabilidade nao abre aquela.
              */
-            handle: string;
+            handle: string | null;
             /**
              * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
              *     (ADR-0010 item 3). **Anulavel**, pela mesma razao de
@@ -9779,14 +9826,92 @@ export interface components {
             photo_upload_ref?: string;
             location?: components["schemas"]["GeoPoint"];
             /**
-             * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
-             *     para avisar a resposta do tutor e o desfecho do caso.
+             * @description O contato de quem achou. **Dado pessoal de alguem que NAO TEM
+             *     CONTA**, e por isso o que decide se ele chega ao tutor nao e esta
+             *     estrutura: e `share_consent`.
+             *
+             *     **Sem `share_consent`** nada muda em relacao a antes de 03/11/2026:
+             *     `display_name` e gravado e ja era mostrado ao tutor, `email` serve
+             *     so para avisar a resposta do tutor e o desfecho do caso, e
+             *     `phone_e164` e **recusado com `400`**.
+             *
+             *     **Com `share_consent` valido**, os tres entram na conversa do tutor
+             *     como mensagem de SISTEMA, com a finalidade escrita ao lado. Mensagem
+             *     de sistema porque o corpo de mensagem HUMANA e redigido
+             *     (`redigirCanalMediado` retira telefone, e-mail e endereco), e
+             *     atravessar e exatamente o que a pessoa consentiu.
+             *
+             *     Este campo nao existe em `FoundReportEnrichment`: quem tem conta tem
+             *     o proprio contato na conta, e esta decisao nao o toca.
              */
             finder_contact?: {
                 display_name?: string;
                 /** Format: email */
                 email?: string;
+                /**
+                 * @description Mesmo formato de `professionals.phone_e164`, e pelo mesmo
+                 *     motivo: numero que nao e discavel nao serve para o tutor ligar.
+                 *
+                 *     **So e aceito com `share_consent`; sozinho ele e `400`.** Campo
+                 *     aceito e descartado em silencio e a forma mais discreta de um
+                 *     vazamento nascer, e aqui a ausencia de prova RECUSA em vez de
+                 *     guardar para depois.
+                 *
+                 *     **Nao e persistido em coluna nenhuma.** Ele vai para a mensagem
+                 *     da conversa, que e imutavel e e o instante a que o
+                 *     consentimento se refere; segunda copia em coluna seria guarda
+                 *     sem finalidade propria (ADR-0010, emenda 6).
+                 */
+                phone_e164?: string;
+                share_consent?: components["schemas"]["FinderContactShareConsent"];
             };
+        };
+        /**
+         * @description O ato explicito de consentir, da decisao do cliente de 03/11/2026,
+         *     literal: *"o achador vai enviar os dados e ter um botao de 'aceito
+         *     compartilhar meus dados com o tutor do pet' com o objetivo
+         *     exclusivamente dele conseguir entrar em contato para recuperar seu
+         *     pet"*.
+         *
+         *     **`accepted` so aceita `true`, e nao existe `false` neste contrato.** E
+         *     desenho, nao descuido: a recusa se diz OMITINDO `share_consent`. Uma
+         *     bandeira de dois valores tem um valor que, lido errado, libera; campo
+         *     ausente nao tem esse modo de falha. Caixinha pre-marcada na tela nao
+         *     satisfaz isto -- o que vale e o ato, e o registro dele.
+         *
+         *     **O servidor NAO grava texto que o cliente mande.** O cliente informa a
+         *     VERSAO que exibiu; o servidor resolve essa versao para o texto que ele
+         *     mesmo publica e grava ESSE. Texto vindo do cliente nao provaria nada,
+         *     porque o cliente e a parte interessada. Versao desconhecida e `400`:
+         *     gravar "consentiu" sem saber o que a pessoa leu e gravar nada.
+         *
+         *     A fonte unica dos textos e
+         *     `src/modules/found/domain/consentimento-de-contato.ts`, e ela e
+         *     **apenda**: versao antiga continua resolvendo para o texto que era
+         *     exibido quando ela era a atual. O registro
+         *     (`finder_contact_consents`) guarda QUEM consentiu, QUANDO, o TEXTO lido
+         *     e a FINALIDADE -- sem os quatro nao ha como demonstrar o consentimento
+         *     depois, e e isso que a lei cobra.
+         *
+         *     Por que o texto, e nao um ponteiro para a versao, como
+         *     `accepted_terms_version` faz: o achador **nao tem conta**, entao nao ha
+         *     perfil onde reconsultar o que ele aceitou, e este registro e a unica
+         *     evidencia que existe. Ponteiro passa a mentir sobre todo consentimento
+         *     antigo no dia em que o texto mudar, e mente em silencio.
+         */
+        FinderContactShareConsent: {
+            /**
+             * @description Somente `true`. Ver a descricao do schema: `false` nao e
+             *     representavel de proposito.
+             * @enum {boolean}
+             */
+            accepted: true;
+            /**
+             * @description A versao do texto que a tela exibiu. Mesmo teto de
+             *     `accepted_terms_version` em `RegisterRequest`, e pela mesma razao:
+             *     e rotulo de versao, nao texto.
+             */
+            consent_version: string;
         };
         /**
          * @description **Coordenada nao e obrigatoria**, pelo mesmo motivo do caso: quem negou
@@ -9961,6 +10086,23 @@ export interface components {
             pet_display_name?: string;
             /** Format: uri */
             conversation_url?: string;
+            /**
+             * Format: date-time
+             * @description O instante em que o contato do achador foi divulgado ao tutor
+             *     **NESTA requisicao**, ou nulo quando esta requisicao nao divulgou
+             *     nada. **Nao e "ja divulgou alguma vez"**, e a distincao e
+             *     deliberada: responder isso exigiria uma leitura a mais para
+             *     devolver, a quem nao tem conta, a data de um ato antigo -- e a tela
+             *     so precisa confirmar o que acabou de acontecer.
+             *
+             *     E fato do PROPRIO achador, e por isso sai para ele. Nao ha
+             *     identificador aqui, nem do tutor nem do aviso.
+             *
+             *     **Nao ha operacao para desfazer**, e a tela nao deve oferecer um
+             *     "desfazer" que o produto nao tem: a mensagem que levou o contato e
+             *     imutavel e fica no historico da conversa.
+             */
+            contact_shared_at?: string | null;
         };
         /**
          * @description A conversa como o achador sem conta a ve. Sem `id` e sem `case_id`: o
@@ -14331,7 +14473,7 @@ export interface components {
          *     **Esquema PROPRIO e nao reuso de `NetworkEventCoverIntentInput`**, e as
          *     duas razoes sao de conteudo e nao de organizacao: a prosa daquele
          *     esquema afirma o proposito `network_event`, que aqui e falso; e a
-         *     dimensao minima e 256 x 256 e nao 600 x 600. A FORMA e a mesma de
+         *     dimensao minima e 256 x 256 e nao 600 x 338. A FORMA e a mesma de
          *     proposito -- quatro campos, mesmos tetos, mesmo `enum` de tres tipos --,
          *     e o que se reusa de verdade e a esteira: `catalog_images`, as derivadas
          *     de `DERIVADAS_DA_LOGO` e o `UploadIntent` da resposta.
@@ -14371,7 +14513,7 @@ export interface components {
          *     **Esquema PROPRIO e nao reuso de `DirectorySuggestionLogoIntentInput`**,
          *     e a razao e de conteudo: a prosa daquele esquema afirma o proposito
          *     `directory_suggestion_logo`, que aqui e falso, e a dimensao minima lá e
-         *     256 x 256 e aqui e **600 x 600**. A FORMA e a mesma de proposito --
+         *     256 x 256 e aqui e **600 x 338**. A FORMA e a mesma de proposito --
          *     quatro campos, mesmos tetos, mesmo `enum` de tres tipos --, e o que se
          *     reusa de verdade e a esteira: `catalog_images`, as derivadas de
          *     `DERIVADAS_DA_FOTO_DO_LOCAL` e o `UploadIntent` da resposta.
@@ -14611,7 +14753,7 @@ export interface components {
              *     nao saberia se o problema foi o formato, o tamanho, a dimensao
              *     minima ou um arquivo truncado -- e portanto nao teria como
              *     consertar. Exemplos reais medidos: *"A imagem precisa ter pelo menos
-             *     600 x 600 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
+             *     600 x 338 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
              *     ter chegado incompleta."*
              *
              *     Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
@@ -14853,7 +14995,7 @@ export interface components {
              *     **1280 x 720**, derivadas 1280 x 720 e 1024 x 576). Confirmar um no
              *     campo do outro e `400 upload_not_usable`.
              *
-             *     ## O PISO DA FOTO E 1280 x 720 DESDE 02/11/2026, E A RAZAO E ARITMETICA
+             *     ## O PISO TEM A PROPORCAO DA MOLDURA, E A ALTURA E DERIVADA DELA
              *
              *     Ele era 600 x 600 -- o numero da LOGO, que e quadrada --, e isso era
              *     uma **regra impossivel**: o painel enquadra a foto do local em 16:9
@@ -14880,7 +15022,22 @@ export interface components {
              *     faixa do topo da ficha.
              *
              *     A regra geral, para o proximo proposito: **piso com a proporcao da
-             *     moldura, ou piso inalcancavel.**
+             *     moldura, ou piso inalcancavel.** Desde 03/11/2026 ela nao depende
+             *     mais de ninguem lembrar: so a **largura** minima e decidida por
+             *     proposito (`LARGURA_MINIMA`), e a **altura e DERIVADA** da proporcao
+             *     da moldura num ponto unico, no painel e no servidor. O cliente
+             *     fixou a regra assim: *"sempre que estivermos falando de upload de
+             *     imagem, isso deve ser tratado no mesmo lugar, e as correcoes devem
+             *     ser realizadas em todos os lugares por ser o mesmo codigo"*.
+             *
+             *     **O 1280 de `directory_photo` e `directory_gallery` FICA**, e nao
+             *     por inercia: `1280/720` e exatamente `16/9`, entao aquele piso
+             *     sempre foi coerente com a moldura. A premissa que o escolheu em
+             *     02/11/2026 ("no piso nada e ampliado") era falsa -- `sharp` usa
+             *     `withoutEnlargement: true` nas duas formas do `resize` e o sistema
+             *     nunca amplia, de modo que uma foto de 600 de largura geraria
+             *     derivadas de 600 x 338, menores e NITIDAS --, mas o numero continua
+             *     coerente, e baixa-lo seria decisao nova que o cliente nao tomou.
              *
              *     **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
              *     verbatim: *"implemente a tabela de galeria entao"*), com a galeria
@@ -14893,10 +15050,17 @@ export interface components {
              *     exatamente as tres derivadas do encontro da `Rede`. Minima
              *     **1280 x 720**, a mesma de `directory_photo` e pelo mesmo motivo:
              *     a galeria tambem e enquadrada em 16:9 no painel, e a maior derivada
-             *     dela tambem e `banner` 1280 x 720. **Ela JA NAO e a de
-             *     `network_event`**, que continua em 600 x 600 com o mesmo defeito
-             *     aritmetico, a espera de decisao do cliente -- a de 02/11/2026 foi
-             *     sobre a foto do estabelecimento, nao sobre a capa do encontro.
+             *     dela tambem e `banner` 1280 x 720. **`network_event` tinha o
+             *     mesmo defeito, e ele foi corrigido em 03/11/2026**: a moldura dela
+             *     e 16:9 e o piso era 600 x 600, e o cliente travou de novo --
+             *     *"estou testando na capa do evento e nao esta funcionando, ta dando
+             *     o mesmo erro antigo"*. Ele disse o que esperava: *"as vezes a foto
+             *     ja tem 600px de largura e e muito grande na altura, ai precisa
+             *     manter os 600px que e o minimo, mas realizar o crop na altura"*.
+             *     Entao a LARGURA minima dela segue **600** e a altura passou a
+             *     **338** (`600 x 9/16`, arredondado), que e o que o recorte 16:9 de
+             *     uma foto de 600 de largura entrega. `1280 x 720` **nao** e o piso
+             *     dela: a decisao de 02/11/2026 foi sobre a foto do estabelecimento.
              *
              *     **`user_photo` nao esta aqui, de proposito**: a foto da propria
              *     pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
@@ -14911,13 +15075,17 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             /**
              * @description Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
-             *     17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
-             *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
-             *     cliente de 01/10; antes, 1600 x 900), 256 x 256 para
-             *     `directory_logo` e **1280 x 720** para `directory_photo` e
-             *     `directory_gallery` (cliente, 02/11/2026: antes eram 600 x 600, que
-             *     e um piso QUADRADO numa moldura 16:9 e por isso inalcancavel -- a
-             *     razao inteira esta em `purpose`). Duas conferencias: a
+             *     17/10/2026), e o numero que o painel mostra em tela.
+             *
+             *     Dimensao minima -- e dela so a **largura** e decidida, porque a
+             *     altura e DERIVADA da proporcao da moldura (a razao inteira esta em
+             *     `purpose`): **800 x 800** para `store_item` (sem moldura: `sharp`
+             *     usa `fit: inside` e nao corta), **600 x 338** para `network_event`
+             *     (largura 600 pedida pelo cliente em 01/10, altura da moldura 16:9
+             *     desde 03/11/2026; antes o par era 600 x 600, QUADRADO e por isso
+             *     inalcancavel), **256 x 256** para `directory_logo` (moldura 1:1) e
+             *     **1280 x 720** para `directory_photo` e `directory_gallery`
+             *     (cliente, 02/11/2026, e `1280/720` E `16/9`). Duas conferencias: a
              *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
              *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
              *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque

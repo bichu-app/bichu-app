@@ -867,7 +867,33 @@ export interface ConversationMessagesTable {
 }
 
 /** BICHUS-278. As tres especies de mensagem do Bichu. */
-export type EspecieDaMensagemDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
+export type EspecieDaMensagemDoSistema =
+  | 'scan_notice'
+  | 'found_notice'
+  | 'redaction_warning'
+  /** A divulgação do contato do achador sob consentimento (03/11/2026). */
+  | 'finder_contact';
+
+/**
+ * O CONSENTIMENTO do achador sem conta para o contato dele chegar ao tutor
+ * (migração `20261103000001`).
+ *
+ * **Apenda, e nunca sobrescreve.** Guarda o TEXTO lido, e não um ponteiro para a
+ * versão de hoje: o achador não tem conta, então esta linha é a única evidência
+ * que existe, e ponteiro passa a mentir sobre todo consentimento antigo no dia em
+ * que o texto mudar.
+ */
+export interface FinderContactConsentsTable {
+  /** UUIDv7 da aplicação. */
+  id: string;
+  /** O aviso identifica QUEM consentiu: o achador sem conta não tem outro id. */
+  found_report_id: string;
+  consented_at: Generated<Date>;
+  /** Lista fechada: a finalidade é o limite do consentimento. */
+  purpose: 'owner_contact';
+  consent_version: string;
+  consent_text: string;
+}
 
 /** BICHUS-278. Ate quando cada LADO leu a conversa. */
 export interface ConversationReadsTable {
@@ -1859,6 +1885,7 @@ export interface Database {
   pet_tags: PetTagsTable;
   tag_scans: TagScansTable;
   found_reports: FoundReportsTable;
+  finder_contact_consents: FinderContactConsentsTable;
   match_candidates: MatchCandidatesTable;
   upload_intents: UploadIntentsTable;
   catalog_upload_intents: CatalogUploadIntentsTable;

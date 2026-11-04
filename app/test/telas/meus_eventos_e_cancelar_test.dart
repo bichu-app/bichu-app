@@ -45,7 +45,10 @@ import 'ajuda_de_tela.dart';
 
 const String _slug = 'encontro-de-domingo-na-praca';
 const String _titulo = 'Encontro de domingo na praça';
-const String _motivoDaRecusa = 'A imagem precisa ter pelo menos 600 x 600 pixels.';
+// 600 x 338 desde 03/11/2026: a LARGURA minima da capa segue 600, e a altura
+// e a que a moldura 16:9 impoe. O servidor monta esta frase em
+// `textoDaRecusaPorDimensao`, e o app so a exibe.
+const String _motivoDaRecusa = 'A imagem precisa ter pelo menos 600 x 338 pixels.';
 
 /// A frase generica que a tela diz ANTES do motivo, e nunca em vez dele.
 const String _rotuloDaRecusa = 'A foto deste encontro foi recusada.';

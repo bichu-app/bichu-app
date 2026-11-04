@@ -1,6 +1,6 @@
 // /t/{code} contra o mock do contrato: cada estado, o status HTTP e o que a pagina
 // NUNCA mostra (telefone e endereco do tutor nao existem na resposta).
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { CODIGOS, limparPedidos, pedidos, semChamadaForaDoContrato, titulo } from './apoio.ts';
 
 test.beforeEach(async ({ request }) => limparPedidos(request));
@@ -136,4 +136,154 @@ test('/t/ 200 nao perdido: a pagina diz que nao esta perdido e o que fazer se pa
   await expect(page.getByText('Se o animal estiver machucado ou em perigo agora')).toBeVisible();
   // Nada de formulario de contato: o servidor recusa telefone e e-mail neste caminho.
   await expect(page.locator('input[type="email"], input[type="tel"], textarea')).toHaveCount(0);
+});
+
+/**
+ * Abre a seção de contato, como a pessoa abre: tocando no `<summary>`.
+ *
+ * O `<details>` nasce FECHADO para preservar o "é um toque" de quem só quer
+ * avisar e ir embora, e por isso todo caso que mexe nos campos passa por aqui.
+ * `<summary>` abre sem JavaScript, então isto vale igual no projeto `sem-js`.
+ */
+async function abrirContato(pagina: Page) {
+  await pagina.getByText('Quer que o tutor fale com você?').click();
+  await expect(pagina.getByLabel('Seu telefone')).toBeVisible();
+}
+
+// ===========================================================================
+// O CONTATO DE QUEM ACHOU, SOB CONSENTIMENTO (decisao do cliente, 03/11/2026)
+// ===========================================================================
+//
+// Os campos vivem DENTRO do ramo `estaPerdido` e enviam pelo `<form>` da barra
+// de acao, ligados por `form="avisar"` -- HTML puro, sem JavaScript.
+
+test('/t/ perdido: o formulario de contato existe, a caixinha nasce DESMARCADA e o texto gravado aparece inteiro', async ({ page }) => {
+  await page.goto(`/t/${CODIGOS.perdido}`);
+
+  // FECHADA no primeiro contato: os campos nao existem na tela antes do toque.
+  await expect(page.getByLabel('Seu telefone')).toBeHidden();
+  await abrirContato(page);
+
+  await expect(page.getByLabel('Seu nome')).toBeVisible();
+  await expect(page.getByLabel('Seu e-mail')).toBeVisible();
+  await expect(page.getByLabel('Seu telefone')).toBeVisible();
+  await expect(page.getByLabel('Recado para o tutor')).toBeVisible();
+
+  // A caixinha NAO vem marcada: o consentimento e um ato, e caixinha
+  // pre-marcada nao e ato nenhum.
+  const caixinha = page.getByRole('checkbox', { name: /Aceito compartilhar meus dados/ });
+  await expect(caixinha).toBeVisible();
+  await expect(caixinha).not.toBeChecked();
+
+  // A finalidade, e o TEXTO QUE FICA GRAVADO, inteiro e sem recorte: o registro
+  // afirma que a pessoa leu isto.
+  await expect(page.getByText(/o tutor entrar em contato com você e recuperar o pet/)).toBeVisible();
+  await expect(page.getByText(/com a finalidade exclusiva de ele entrar em contato comigo/)).toBeVisible();
+  await expect(page.getByText(/Compartilhar é opcional/)).toBeVisible();
+
+  // Os campos pertencem ao formulario da barra de acao, e nao a um segundo
+  // formulario: dois formularios seriam dois envios.
+  await expect(page.locator('#avisar')).toHaveCount(1);
+  await expect(page.locator('form')).toHaveCount(1);
+  await expect(page.getByLabel('Seu telefone')).toHaveAttribute('form', 'avisar');
+});
+
+test('/t/ telefone SEM consentimento: recusa com 400, e o aviso NAO e criado', async ({ page, request }) => {
+  await page.goto(`/t/${CODIGOS.perdido}`);
+  await abrirContato(page);
+  await page.getByLabel('Seu telefone').fill('11 91234-5678');
+  const [resposta] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Avisar o tutor' }).click(),
+  ]);
+  expect(resposta.status()).toBe(400);
+
+  await expect(page.getByText(/Marque "Aceito compartilhar meus dados com o tutor do pet"/)).toBeVisible();
+  // O telefone volta preenchido: a pessoa conserta sem redigitar.
+  await expect(page.getByLabel('Seu telefone')).toHaveValue('11 91234-5678');
+
+  // E NADA foi criado. Validar depois do aviso faria o conserto custar um
+  // SEGUNDO aviso, com o primeiro ja tendo saido sem o contato.
+  const chamadas = await pedidos(request);
+  expect(chamadas.filter((p) => p.operacao === 'createFoundReportFromTag')).toEqual([]);
+  expect(chamadas.filter((p) => p.operacao === 'enrichFinderFoundReport')).toEqual([]);
+});
+
+test('/t/ consentimento sem contato nenhum: recusa, e nada e criado', async ({ page, request }) => {
+  await page.goto(`/t/${CODIGOS.perdido}`);
+  await abrirContato(page);
+  await page.getByRole('checkbox', { name: /Aceito compartilhar meus dados/ }).check();
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Avisar o tutor' }).click(),
+  ]);
+  await expect(page.getByText(/Preencha seu e-mail ou seu telefone/)).toBeVisible();
+  const chamadas = await pedidos(request);
+  expect(chamadas.filter((p) => p.operacao === 'createFoundReportFromTag')).toEqual([]);
+});
+
+test('/t/ COM consentimento: o corpo leva o ato, a versao e o telefone em E.164', async ({ page, request }) => {
+  await page.goto(`/t/${CODIGOS.perdido}`);
+  await abrirContato(page);
+  await page.getByLabel('Seu nome').fill('Ana Paula');
+  await page.getByLabel('Seu e-mail').fill('ana@exemplo.invalid');
+  await page.getByLabel('Seu telefone').fill('(11) 91234-5678');
+  await page.getByLabel('Recado para o tutor').fill('Ele está comigo, calmo e bem.');
+  await page.getByRole('checkbox', { name: /Aceito compartilhar meus dados/ }).check();
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Avisar o tutor' }).click(),
+  ]);
+
+  await expect(page.locator('h1')).toHaveText('Pronto. O tutor de Thor foi avisado.');
+  await expect(page.getByText('O tutor recebeu seu contato junto do aviso')).toBeVisible();
+
+  const chamadas = await pedidos(request);
+  const avisou = chamadas.filter((p) => p.operacao === 'createFoundReportFromTag');
+  expect(avisou).toHaveLength(1);
+  const enriqueceu = chamadas.filter((p) => p.operacao === 'enrichFinderFoundReport');
+  expect(enriqueceu).toHaveLength(1);
+
+  const corpo = enriqueceu[0]?.corpo as {
+    message?: string;
+    finder_contact?: {
+      display_name?: string;
+      email?: string;
+      phone_e164?: string;
+      share_consent?: { accepted?: boolean; consent_version?: string };
+    };
+  };
+  expect(corpo.message).toBe('Ele está comigo, calmo e bem.');
+  expect(corpo.finder_contact?.display_name).toBe('Ana Paula');
+  expect(corpo.finder_contact?.email).toBe('ana@exemplo.invalid');
+  // Normalizado: a pessoa digita com parentese e hifen, o contrato exige E.164.
+  expect(corpo.finder_contact?.phone_e164).toBe('+5511912345678');
+  // O ATO, e a VERSAO do texto que a tela exibiu. Sem os dois o servidor recusa.
+  expect(corpo.finder_contact?.share_consent?.accepted).toBe(true);
+  expect(corpo.finder_contact?.share_consent?.consent_version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  // E o token do achador vai no cabecalho, nunca na URL (ADR-0010, item 6).
+  expect(enriqueceu[0]?.cabecalhos['authorization']).toMatch(/^Bearer /);
+  expect(enriqueceu[0]?.caminho).not.toMatch(/token|phone|email/i);
+});
+
+test('/t/ SEM JavaScript: o consentimento e o contato funcionam igual (D31)', async ({ browser, request }) => {
+  const contexto = await browser.newContext({ javaScriptEnabled: false });
+  const pagina = await contexto.newPage();
+  try {
+    await pagina.goto(`/t/${CODIGOS.perdido}`);
+    // `<summary>` abre SEM JavaScript: e o navegador que faz, nao script nosso.
+    await abrirContato(pagina);
+    await pagina.getByLabel('Seu telefone').fill('11 91234-5678');
+    await pagina.getByRole('checkbox', { name: /Aceito compartilhar meus dados/ }).check();
+    await pagina.getByRole('button', { name: 'Avisar o tutor' }).click();
+    await expect(pagina.locator('h1')).toHaveText('Pronto. O tutor de Thor foi avisado.');
+
+    const enriqueceu = (await pedidos(request)).filter((p) => p.operacao === 'enrichFinderFoundReport');
+    expect(enriqueceu, 'sem JS o contato nao chegou: a pagina passou a depender de script').toHaveLength(1);
+    const corpo = enriqueceu[0]?.corpo as { finder_contact?: { share_consent?: { accepted?: boolean } } };
+    expect(corpo.finder_contact?.share_consent?.accepted).toBe(true);
+  } finally {
+    await contexto.close();
+  }
 });
