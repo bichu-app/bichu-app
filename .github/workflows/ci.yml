@@ -1928,6 +1928,20 @@ jobs:
       # PRECISA reprovar. Isca que passa derruba o job com "o verificador parou
       # de verificar", porque a partir dali todo o resto esta verde por nao
       # estar olhando para nada (docs/06-design-system.md 18.2.1).
+      #
+      # DESDE 03/11/2026 ELE TAMBEM MEDE OS WIDGETS DO APP, e nao so as
+      # replicas. O que mudou e por que: este job estava VERDE no dia em que o
+      # cliente relatou que a pastilha de filtro marcada nao dava leitura --
+      # ela pintava `on-action-fill`, a tinta do preenchimento de ACAO, sobre
+      # `primary`, a 2.10:1 no tema claro. As duas travas nao a pegaram porque
+      # nenhuma das duas olhava para o app: a trava A renderiza as telas de
+      # `telas.dart`, que sao replicas escritas a mao, e a trava B mede uma
+      # LISTA de 86 pares mantida em `design/contrast-pairs.json`, na qual
+      # `on-action-fill` so e medido contra `action-fill`. Par que o app monta e
+      # que ninguem lembrou de escrever na lista nao reprovava em lugar nenhum.
+      # `test/a11y/contraste_de_widgets_reais_test.dart` monta os widgets de
+      # verdade, nos dois temas, ABRINDO a folha inferior onde a pastilha mora,
+      # e mede o par que saiu da arvore de renderizacao.
       - name: suite de acessibilidade e iscas
         working-directory: app
         run: flutter test test/a11y
