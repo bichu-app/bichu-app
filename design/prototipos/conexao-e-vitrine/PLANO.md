@@ -447,7 +447,7 @@ conhece o autor; rosto ali identifica quem avaliou a um público que ele não es
 | Tipos | JPEG, PNG, WebP, **HEIC**; **SVG nunca** | `TIPOS_ACEITOS`, validado por números mágicos e não pelo `Content-Type` |
 | Saída | **JPEG** | `FORMATO_DAS_DERIVADAS` |
 | Alvo de derivada | **300–500 KB** | `PISO_DE_BYTES_DA_DERIVADA_GRANDE` / `TETO_DE_BYTES_DA_DERIVADA` |
-| Mínimo de entrada | **600 × 600**, recusa final com motivo | mesmo mínimo da capa do encontro |
+| Mínimo de entrada | **600 × 600**, recusa final com motivo | a vitrine é 1:1, então o piso é quadrado. **Já não é o mínimo da capa do encontro**, que passou a 600 × 338 em 03/11/2026 porque ela é enquadrada em 16:9 |
 | Quantas fotos | **9** | grade 3×3, uma tela, sem paginação |
 | Capa | a foto de `position = 0` **é o avatar** | molde de `store_item_images` / `network_event_images` |
 | Ordem | explícita, `position 0..8` | mesmo molde, com `UNIQUE` **diferida** |

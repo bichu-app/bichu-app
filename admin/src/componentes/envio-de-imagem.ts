@@ -41,6 +41,15 @@ export { DIMENSAO_MINIMA, LARGURA_MINIMA, PROPORCAO_DA_MOLDURA, alturaDoPiso } f
  * Agora ela diz **o que fazer**: foto maior, e que o enquadramento corta (e o
  * zoom corta mais). Os numeros saem de [DIMENSAO_MINIMA], proposito a
  * proposito, e nunca escritos a mao.
+ *
+ * ## E ela nomeia a LARGURA, que e o que a pessoa escolhe
+ *
+ * Desde 03/11/2026 a frase diz *"pelo menos 600 pixels de largura e 338 de
+ * altura"* em vez de *"600 × 338 pixels"*. A largura vem primeiro porque e ela
+ * que a pessoa controla ao escolher a foto: com moldura forcada, a altura do
+ * recorte sai da largura. Os DOIS numeros ficam porque a conferencia e dos
+ * dois -- uma foto 700 x 300 e larga o bastante e **baixa** demais, e dizer so
+ * a largura mentiria sobre por que ela foi recusada.
  */
 function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {
   const m = DIMENSAO_MINIMA[proposito];
