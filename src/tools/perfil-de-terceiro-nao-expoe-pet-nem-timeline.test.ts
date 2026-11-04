@@ -260,6 +260,24 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
       'contact_channel_verified',
       'display_name',
       'handle',
+      // **A SEGUNDA EMENDA A ESTA LISTA FECHADA** (03/11/2026, decisão do
+      // cliente), e ela entra pela mesma forma que `contact_channel_verified`
+      // entrou em 21/10: nomeada, com data e com motivo escrito no contrato.
+      //
+      // **ELE NÃO EXPÕE NADA DE TERCEIRO, e é por isso que ele cabe aqui.**
+      // `is_self` é um booleano sobre a RELAÇÃO entre quem chama e o perfil
+      // pedido -- "este perfil é seu" --, derivado de `pessoa.userId ===
+      // quemOlha` no servidor. Ele não acrescenta atributo nenhum da pessoa
+      // olhada, e por isso não toca o item 7 do ADR-0010 nem a emenda 2: para
+      // o perfil de OUTRA pessoa ele é sempre `false`, e `false` não conta
+      // nada que já não estivesse na resposta.
+      //
+      // O que ele existe para resolver está medido em `PersonProfile.is_self`:
+      // o aplicativo não tem identificador imutável em comum com este schema
+      // (a interseção de `Me` e `PersonProfile` é só o `handle`, que muda),
+      // então a tela oferecia `Pedir conexão`, denunciar e bloquear sobre a
+      // própria conta -- três ações que o servidor já recusava.
+      'is_self',
       'pets_count',
       'public_ref',
       'showcase',

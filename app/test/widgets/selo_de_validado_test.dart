@@ -358,6 +358,10 @@ void main() {
           'pets_count': 0,
           'connections_count': 0,
           'connection_state': 'none',
+          // `is_self` e obrigatorio no contrato e lido sem nulo: ele entra aqui
+          // como `false` porque este caso mede o SELO de outra pessoa, e nao
+          // a relacao com quem olha.
+          'is_self': false,
         }).canalConfirmado,
         isFalse,
       );
@@ -387,6 +391,7 @@ void main() {
           'connections_count': 0,
           'connection_state': 'none',
           'contact_channel_verified': true,
+          'is_self': false,
         }).canalConfirmado,
         isTrue,
       );

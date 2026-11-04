@@ -173,6 +173,9 @@ Map<String, dynamic> _pessoa() => const <String, dynamic>{
       'pets_count': 3,
       'connections_count': 12,
       'connection_state': 'none',
+      // Perfil de OUTRA pessoa: estas tres paginas medem o que quem NAO tem
+      // conta ve, e nenhuma delas e o proprio perfil.
+      'is_self': false,
       'showcase_visible': false,
       'showcase': <dynamic>[],
     };
