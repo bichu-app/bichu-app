@@ -240,6 +240,124 @@ if [ -z "$BUILD_NAME" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# O NUMERO DO BUILD (`versionCode`), E A REGRESSAO MEDIDA EM 04/11/2026.
+#
+# O QUE ACONTECEU, medido com `aapt2 dump badging` nos quatro APKs entregues:
+#
+#   bichu-hml-46d0587c.apk              28/10 14:54   versionCode=1
+#   bichu-hml-arm64-675c516c.apk        28/10 21:14   versionCode=2001
+#   bichu-hml-arm64-0399da80.apk        29/10 08:02   versionCode=2001
+#   bichu-hml-72372d32-app-release.apk  04/11 06:07   versionCode=1
+#
+# Os `2001` sairam de alguem passando o numero A MAO em 28/10. O `pubspec`
+# declarava `1.0.0+1`, entao TODO build que nao recebeu numero saiu com
+# `versionCode=1` -- e o APK de 04/11 e um deles. O cliente tem o de 29/10
+# (2001) instalado: o Android RECUSA o de 04/11 com
+# `INSTALL_FAILED_VERSION_DOWNGRADE`, e a unica saida passaria a ser
+# desinstalar, perdendo a sessao e os dados locais dele.
+#
+# E ESTE PORTAO APROVOU AQUELE ARTEFATO. Ele conferia endereco, versao do Dart
+# e literalidade -- tres coisas que estavam CERTAS -- e nao conferia a unica que
+# decide se o pacote INSTALA por cima.
+#
+# POR QUE O NUMERO NAO PODIA SER PEDIDO: ate 04/11 o comando de build deste
+# script nao passava `--build-number` e este arquivo nao lia `BUILD_NUMBER`
+# nenhum. Pedir um numero maior exigia EDITAR o comando literal do portao --
+# que e exatamente a forma de mexer que o portao de literalidade existe para
+# tornar visivel. Entao ninguem pedia, e o numero era o do `pubspec`.
+#
+# SAO DUAS VARIAVEIS, pela MESMA razao que `API_BASE_URL` tem duas desde
+# 03/11/2026 (PR #161, commit 9f8cb3b3fadb): `BUILD_NUMBER_ESPERADO` e o numero
+# que se ESPERA dentro do pacote, e e com ele que o valor lido pelo `aapt2` e
+# comparado; `BUILD_NUMBER` e o que o build vai usar. Tirar a expectativa da
+# MESMA variavel que o build consumiu e comparar o valor com ele mesmo, e isso
+# aprova qualquer coisa -- foi literalmente o defeito do `API_BASE_URL`.
+#
+# O PADRAO SAI DO `pubspec`, e so ele: e a mesma fonte do `versionName`, e e o
+# que o Gradle estampa quando ninguem pede nada (`flutter.versionCode`, em
+# app/android/app/build.gradle.kts:37).
+#
+# Para pedir um numero DELIBERADAMENTE:
+#
+#   BUILD_NUMBER_ESPERADO=2002 BUILD_NUMBER=2002 \
+#     sh infra/verificacao/verificar-apk.sh
+#
+# Por `make`, que e o caminho do dia a dia:
+#
+#   make apk API_BASE_URL=https://hml.bichu.app BUILD_NUMBER=2002
+#
+# Na LINHA DE COMANDO, e nao no ambiente: o `Makefile` atribui com `:=`, e o
+# ambiente NAO sobrepoe -- o alvo `apk` recusa valor que chegue por ambiente,
+# em vez de ignora-lo em silencio.
+# ---------------------------------------------------------------------------
+# `version: 1.0.0+2002` -> `2002`. O que vem ANTES do `+` e o `versionName`, e
+# quem le aquele pedaco e o `BUILD_NAME` logo acima.
+BUILD_NUMBER_ESPERADO="${BUILD_NUMBER_ESPERADO:-$(sed -n 's/^version:[[:space:]]*[^+[:space:]]\{1,\}+\([0-9]\{1,\}\)[[:space:]]*$/\1/p' "$PUBSPEC" | head -1)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$BUILD_NUMBER_ESPERADO}"
+
+for par in "BUILD_NUMBER_ESPERADO=$BUILD_NUMBER_ESPERADO" "BUILD_NUMBER=$BUILD_NUMBER"; do
+  nome=${par%%=*}
+  valor=${par#*=}
+  if [ -z "$valor" ]; then
+    echo "REPROVA: \`$nome\` ficou VAZIO. Nao achei \`version: <nome>+<numero>\` em $PUBSPEC e ninguem declarou o numero. Seguir daqui compilaria com o \`versionCode\` que o Gradle inventar, e foi um desses que o cliente nao consegue instalar" >&2
+    exit 1
+  fi
+  case "$valor" in
+    *[!0-9]*)
+      echo "REPROVA: \`$nome=$valor\` nao e um inteiro. O \`versionCode\` do Android e inteiro, e valor nao numerico aqui viraria build com numero que ninguem pediu" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$valor" -le 0 ]; then
+    echo "REPROVA: \`$nome=$valor\` nao e positivo. \`versionCode\` comeca em 1" >&2
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# O QUE E "O ULTIMO APK ENTREGUE", E POR QUE ELE MORA NUM REGISTRO VERSIONADO.
+#
+# A regra nova e: o `versionCode` do artefato novo tem de ser MAIOR que o do
+# ultimo APK entregue. Para cobra-la, o portao precisa saber qual e aquele
+# numero -- e ele nao pode sair do `pubspec`, por tudo que esta escrito acima.
+#
+# A FONTE E UM REGISTRO VERSIONADO cujo numero so entra MEDIDO de dentro de um
+# APK, por `--registrar-entrega <apk>`. Duas razoes:
+#
+#   1. a pasta de entregas (`workspace/artefatos-app*`) NAO esta no git, nao
+#      existe na esteira e nem no worktree de quem compila -- uma fonte que nao
+#      existe nos lugares onde o portao roda e uma fonte que nao reprova nada;
+#   2. numero DIGITADO a mao e a origem do 2001. O subcomando mede com
+#      `aapt2 dump badging` e escreve o que mediu, com o nome do arquivo que
+#      mediu ao lado.
+#
+# E O DIRETORIO DE ENTREGAS AINDA CONTA, quando declarado: `ENTREGUES_EM=<dir>`
+# faz o portao MEDIR todo `*.apk` de la e levar o MAIOR para a linha de base.
+# Assim a realidade do disco nao fica abaixo do registro, e um registro
+# atrasado e ANUNCIADO em vez de silenciosamente obedecido.
+#
+# AUSENCIA NAO E APROVACAO, e os desfechos sao SEPARADOS de proposito -- cada
+# um com uma etiqueta propria entre colchetes, e o autoteste cobra as
+# etiquetas. Esse colapso ja aconteceu nesta esteira no portao de contrato, em
+# que "a base nao existe" e "o arquivo nao existe na base" davam o mesmo
+# `exit 0`:
+#
+#   [registro-ausente]       o registro nao esta no disco            -> REPROVA
+#   [registro-ilegivel]      esta la e nao da um inteiro             -> REPROVA
+#   [sem-diretorio]          ninguem declarou ENTREGUES_EM           -> segue, DITO
+#   [diretorio-inexistente]  declarou e o diretorio nao existe       -> REPROVA
+#   [diretorio-vazio]        declarou, existe e nao tem APK          -> segue, DITO
+#   [registro-atrasado]      ha APK no disco acima do registro       -> segue, DITO
+# ---------------------------------------------------------------------------
+REGISTRO_DA_ENTREGA="${REGISTRO_DA_ENTREGA:-infra/verificacao/versioncode-entregue.json}"
+ENTREGUES_EM="${ENTREGUES_EM:-}"
+# Preenchidas por `resolver_linha_de_base`. Comecam VAZIAS, e nao em zero: zero
+# seria uma linha de base que aprova qualquer coisa, e a diferenca entre "nao
+# resolvi" e "resolvi e deu zero" e precisamente o que nao pode se perder.
+BASE_VERSIONCODE=""
+BASE_DE=""
+
+# ---------------------------------------------------------------------------
 # A conferencia. Fica numa funcao so para que o autoteste exercite EXATAMENTE a
 # mesma, e nao uma reescrita parecida dela.
 # ---------------------------------------------------------------------------
@@ -364,6 +482,291 @@ conferir_destino_do_build() {
   echo "  Se isto veio de \`make\` sem \`API_BASE_URL=\` na LINHA DE COMANDO, o valor e o \`http://localhost:<porta>\` do proprio Makefile: ele atribui com \`:=\`, e o ambiente NAO sobrepoe. Rode \`make apk API_BASE_URL=https://hml.bichu.app\`." >&2
   echo "  Se o desvio for DELIBERADO, declare os dois: \`API_BASE_URL_ESPERADO=<destino> API_BASE_URL=<destino>\`. Duas declaracoes para um desvio e de proposito -- o desvio fica escrito." >&2
   return 1
+}
+
+# ---------------------------------------------------------------------------
+# O `aapt2`: QUEM LE O `versionCode` DE DENTRO DO PACOTE.
+#
+# `versionCode` vive no `AndroidManifest.xml` BINARIO dentro do APK, e e o
+# unico numero que o Android compara na hora de instalar por cima. Numero
+# passado em `--build-number` NAO aparece no `pubspec`: quem olhasse o `pubspec`
+# em 28/10 leria `+1` e concluiria que o APK daquele dia tinha 1 -- ele tinha
+# 2001. Por isso a medida sai do BINARIO, sempre.
+#
+# O `aapt2` nao esta no PATH por padrao: ele mora no SDK do Android. A busca
+# cobre o PATH, as duas variaveis do SDK, o `sdk.dir` que o PROPRIO build do
+# projeto le (`app/android/local.properties`) e os dois caminhos padrao de
+# macOS e de Linux. Na esteira ele vem de `build-tools;37.0.0`, instalado pelo
+# job `apk`. Nao achar e REPROVA, e nunca "pula a conferencia".
+# ---------------------------------------------------------------------------
+AAPT2_ACHADO=""
+achar_aapt2() {
+  if [ -n "$AAPT2_ACHADO" ]; then
+    printf '%s' "$AAPT2_ACHADO"
+    return 0
+  fi
+  if command -v aapt2 >/dev/null 2>&1; then
+    AAPT2_ACHADO=$(command -v aapt2)
+    printf '%s' "$AAPT2_ACHADO"
+    return 0
+  fi
+  sdk_do_projeto=$(sed -n 's/^sdk\.dir=//p' app/android/local.properties 2>/dev/null | head -1 || true)
+  for raiz in "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}" "$sdk_do_projeto" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    [ -n "$raiz" ] || continue
+    # A MAIOR versao de build-tools, e nao a primeira que a expansao devolver:
+    # `sort -V` ordena por numero, e `37.0.0` vem depois de `36.1.0` (ordem
+    # alfabetica tambem acertaria aqui, e erraria no dia em que houver `9.x`).
+    candidato=$(ls -1 "$raiz"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1 || true)
+    if [ -n "$candidato" ] && [ -x "$candidato" ]; then
+      AAPT2_ACHADO="$candidato"
+      printf '%s' "$AAPT2_ACHADO"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Imprime o `versionCode` do pacote, ou REPROVA dizendo QUAL dos tres jeitos de
+# nao conseguir medir aconteceu.
+medir_versioncode() {
+  arquivo="$1"
+
+  aapt=$(achar_aapt2) || {
+    echo "REPROVA [aapt2-ausente]: nao achei \`aapt2\` (PATH, ANDROID_SDK_ROOT, ANDROID_HOME, o \`sdk.dir\` de app/android/local.properties, ~/Library/Android/sdk, ~/Android/Sdk). E ele que le o \`versionCode\` DENTRO do pacote; sem ele este portao nao sabe se o APK instala por cima do que o cliente ja tem, e portao que nao consegue medir nao pode aprovar" >&2
+    return 1
+  }
+  if [ ! -f "$arquivo" ]; then
+    echo "REPROVA [apk-ausente]: nao existe $arquivo, e nao ha versionCode para medir" >&2
+    return 1
+  fi
+
+  # SEM CANO, para que o estado de saida seja o do `aapt2`: `cmd | head` devolve
+  # o `$?` do `head`. MEDIDO nesta maquina em 04/11/2026 --
+  # `aapt2 dump badging <zip qualquer> | head -1` sai 0 imprimindo `error:`.
+  saida=$("$aapt" dump badging "$arquivo" 2>&1) || {
+    echo "REPROVA [badging-falhou]: \`aapt2 dump badging $arquivo\` falhou -- o arquivo nao e um APK legivel. O que o aapt2 disse:" >&2
+    printf '%s\n' "$saida" | sed 's/^/    /' >&2
+    return 1
+  }
+
+  numero=$(printf '%s\n' "$saida" | sed -n "s/^package:.*versionCode='\([0-9]\{1,\}\)'.*/\1/p" | head -1)
+  if [ -z "$numero" ]; then
+    echo "REPROVA [sem-versioncode]: $arquivo nao declara \`versionCode\` no manifesto -- o aapt2 imprimiu \`versionCode=''\` ou nao imprimiu a linha \`package:\`. Pacote sem versionCode nao tem como ser comparado com o que esta no aparelho" >&2
+    return 1
+  fi
+  printf '%s' "$numero"
+}
+
+# Le o inteiro do registro versionado. `python3` e nao `grep`: o arquivo e JSON,
+# e reconhecer JSON por expressao regular e como o portao volta a aprovar lixo.
+ler_registro_da_entrega() {
+  python3 - "$REGISTRO_DA_ENTREGA" <<'PYREGISTRO'
+import json
+import sys
+
+caminho = sys.argv[1]
+try:
+    dados = json.load(open(caminho, encoding='utf-8'))
+except Exception as erro:
+    print("  %s nao e JSON valido: %s" % (caminho, erro), file=sys.stderr)
+    sys.exit(1)
+if not isinstance(dados, dict):
+    print("  %s nao tem um objeto no topo" % caminho, file=sys.stderr)
+    sys.exit(1)
+valor = dados.get('versionCode')
+if isinstance(valor, bool) or not isinstance(valor, int) or valor < 0:
+    print("  `versionCode` de %s esta ausente ou nao e um inteiro >= 0 (li %r)"
+          % (caminho, valor), file=sys.stderr)
+    sys.exit(1)
+sys.stdout.write(str(valor))
+PYREGISTRO
+}
+
+# ---------------------------------------------------------------------------
+# A LINHA DE BASE. Preenche `BASE_VERSIONCODE` e `BASE_DE`, ou REPROVA.
+#
+# Cada desfecho tem etiqueta propria, e o autoteste cobra a etiqueta -- e ela,
+# e nao a boa intencao, que impede "nao achei a base" de virar "aprovado".
+# ---------------------------------------------------------------------------
+resolver_linha_de_base() {
+  BASE_VERSIONCODE=""
+  BASE_DE=""
+
+  command -v python3 >/dev/null 2>&1 || {
+    echo "REPROVA: \`python3\` nao existe nesta maquina, e e ele que le o registro da ultima entrega" >&2
+    return 1
+  }
+  if [ ! -f "$REGISTRO_DA_ENTREGA" ]; then
+    echo "REPROVA [registro-ausente]: nao existe $REGISTRO_DA_ENTREGA, que e o registro do \`versionCode\` do ULTIMO APK ENTREGUE." >&2
+    echo "  Isto NAO e o mesmo que \"nao houve entrega anterior\", e nao pode virar aprovacao: sem a base, um APK que regride instala-se como se estivesse tudo bem -- e foi assim que o artefato de 04/11/2026 (versionCode=1) passou por este portao com 2001 no aparelho do cliente." >&2
+    echo "  Se o APK que voce esta compilando e DE FATO o primeiro, crie o registro com o numero que o antecede, MEDIDO de um APK:" >&2
+    echo "      sh infra/verificacao/verificar-apk.sh --registrar-entrega <apk ja entregue>" >&2
+    return 1
+  fi
+  valor_do_registro=$(ler_registro_da_entrega) || {
+    echo "REPROVA [registro-ilegivel]: $REGISTRO_DA_ENTREGA existe e nao da um inteiro (motivo acima). Registro que nao se le e pior que registro ausente, porque parece presente" >&2
+    return 1
+  }
+  BASE_VERSIONCODE="$valor_do_registro"
+  BASE_DE="o registro $REGISTRO_DA_ENTREGA"
+  echo "linha de base: versionCode=$BASE_VERSIONCODE, de $BASE_DE"
+
+  # O REFORCO PELO DISCO. Opcional, e quando declarado ele MEDE.
+  if [ -z "$ENTREGUES_EM" ]; then
+    echo "  [sem-diretorio] ninguem declarou \`ENTREGUES_EM=<dir>\`, entao a base vem SO do registro. Para medir tambem os APKs ja entregues no disco: ENTREGUES_EM=../artefatos-app"
+    return 0
+  fi
+  if [ ! -d "$ENTREGUES_EM" ]; then
+    echo "REPROVA [diretorio-inexistente]: \`ENTREGUES_EM=$ENTREGUES_EM\` foi DECLARADO e nao e um diretorio. Declaracao que nao resolve em nada e pedido de medicao que nao aconteceu, e aqui ela reprova em vez de ser ignorada" >&2
+    return 1
+  fi
+
+  achados=0
+  maior="$BASE_VERSIONCODE"
+  maior_de="$BASE_DE"
+  for apk_entregue in "$ENTREGUES_EM"/*.apk; do
+    [ -f "$apk_entregue" ] || continue
+    achados=$((achados + 1))
+    numero_entregue=$(medir_versioncode "$apk_entregue") || return 1
+    echo "  medido no disco: $apk_entregue -> versionCode=$numero_entregue"
+    if [ "$numero_entregue" -gt "$maior" ]; then
+      maior="$numero_entregue"
+      maior_de="o APK $apk_entregue, medido com aapt2"
+    fi
+  done
+
+  if [ "$achados" -eq 0 ]; then
+    echo "  [diretorio-vazio] \`ENTREGUES_EM=$ENTREGUES_EM\` existe e nao tem nenhum \`*.apk\`. A base continua sendo a do registro ($BASE_VERSIONCODE), e isto esta DITO em vez de passar como se o disco concordasse"
+    return 0
+  fi
+  if [ "$maior" -gt "$BASE_VERSIONCODE" ]; then
+    echo "  [registro-atrasado] o disco tem versionCode=$maior, acima do registro ($BASE_VERSIONCODE). A base passa a ser $maior -- e o registro precisa ser atualizado com \`--registrar-entrega\`, porque e ele que a esteira le"
+    BASE_VERSIONCODE="$maior"
+    BASE_DE="$maior_de"
+  else
+    echo "  o disco ($achados APK) nao passa do registro: base segue $BASE_VERSIONCODE"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# O NUMERO PEDIDO, ANTES DE GASTAR UM BUILD.
+#
+# Duas conferencias de TEXTO, na ordem em que custam menos: o numero que o build
+# vai usar tem de ser o DECLARADO como esperado, e o declarado tem de passar da
+# linha de base. Descobrir a segunda depois do build custa o build inteiro --
+# 40 minutos na esteira, e um artefato que ninguem pode instalar.
+# ---------------------------------------------------------------------------
+conferir_numero_do_build() {
+  if [ "$BUILD_NUMBER" = "$BUILD_NUMBER_ESPERADO" ]; then
+    echo "APROVA: o build vai pedir versionCode=$BUILD_NUMBER, que e o numero ESPERADO declarado"
+    return 0
+  fi
+  echo "REPROVA [numero-divergente]: o build ia pedir BUILD_NUMBER=$BUILD_NUMBER, e o ESPERADO declarado e BUILD_NUMBER_ESPERADO=$BUILD_NUMBER_ESPERADO." >&2
+  echo "  A expectativa e o que este portao vai COBRAR dentro do pacote, e ela nao pode sair da mesma variavel que o build usou -- tirada de la, a conferencia compara o valor com ele mesmo e aprova qualquer coisa (foi o defeito do \`API_BASE_URL\`, fechado no PR #161)." >&2
+  echo "  Se o desvio for DELIBERADO, declare os dois: \`BUILD_NUMBER_ESPERADO=<n> BUILD_NUMBER=<n>\`. Duas declaracoes para um desvio e de proposito -- o desvio fica escrito." >&2
+  return 1
+}
+
+conferir_numero_pedido_contra_a_base() {
+  if [ -z "$BASE_VERSIONCODE" ]; then
+    echo "REPROVA: \`resolver_linha_de_base\` nao foi chamada antes desta conferencia. Comparar com uma base vazia e o jeito de aprovar tudo" >&2
+    return 1
+  fi
+  if [ "$BUILD_NUMBER_ESPERADO" -gt "$BASE_VERSIONCODE" ]; then
+    echo "APROVA: o numero pedido ($BUILD_NUMBER_ESPERADO) passa da linha de base ($BASE_VERSIONCODE)"
+    return 0
+  fi
+  echo "REPROVA [regressao-pedida]: o build ia pedir versionCode=$BUILD_NUMBER_ESPERADO, e o ultimo APK entregue tem $BASE_VERSIONCODE ($BASE_DE)." >&2
+  echo "  O Android recusa instalar por cima com \`INSTALL_FAILED_VERSION_DOWNGRADE\`, e a unica saida do cliente passaria a ser DESINSTALAR o aplicativo -- perdendo a sessao e os dados locais dele. Numero IGUAL tambem reprova aqui: dois artefatos diferentes com o mesmo numero nao se distinguem no aparelho." >&2
+  echo "  Peca um numero maior: \`make apk API_BASE_URL=<destino> BUILD_NUMBER=$((BASE_VERSIONCODE + 1))\`" >&2
+  echo "  Se o numero padrao vem do \`pubspec\` e ele ficou para tras, suba o \`+N\` de $PUBSPEC -- o \`1.0.0\` do produto NAO muda nisso, quem muda e o numero depois do \`+\`." >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# A CONFERENCIA DO `versionCode` DENTRO DO PACOTE. Duas perguntas, e as duas
+# sobre o BINARIO:
+#
+#   1. o numero que entrou e o que foi PEDIDO? (bandeira perdida em silencio --
+#      a familia do `--dart-define-from-file` de 19/10/2026);
+#   2. ele passa do ultimo entregue? (a regressao de 04/11/2026).
+# ---------------------------------------------------------------------------
+conferir_versioncode_no_apk() {
+  alvo="$1"
+
+  medido=$(medir_versioncode "$alvo") || return 1
+
+  if [ "$medido" != "$BUILD_NUMBER_ESPERADO" ]; then
+    echo "REPROVA [valor-divergente]: $alvo tem versionCode=$medido DENTRO do pacote, e o numero esperado e $BUILD_NUMBER_ESPERADO." >&2
+    echo "  Ou o \`--build-number\` se perdeu no caminho -- e bandeira que se perde em silencio ja aconteceu aqui em 19/10/2026 --, ou este pacote nao e o desta execucao." >&2
+    return 1
+  fi
+  echo "APROVA: $alvo tem versionCode=$medido dentro do pacote, igual ao pedido (medido com aapt2 dump badging, nao deduzido do comando)"
+
+  if [ -z "$BASE_VERSIONCODE" ]; then
+    echo "REPROVA: \`resolver_linha_de_base\` nao foi chamada antes desta conferencia. Comparar com uma base vazia e o jeito de aprovar tudo" >&2
+    return 1
+  fi
+  if [ "$medido" -gt "$BASE_VERSIONCODE" ]; then
+    echo "APROVA: versionCode=$medido passa do ultimo APK entregue ($BASE_VERSIONCODE, de $BASE_DE), entao ele instala por cima do que esta no aparelho"
+    return 0
+  fi
+  echo "REPROVA [regressao-de-versioncode]: $alvo tem versionCode=$medido, e o ultimo APK entregue tem $BASE_VERSIONCODE ($BASE_DE)." >&2
+  echo "  Instalar este pacote por cima falha com \`INSTALL_FAILED_VERSION_DOWNGRADE\`, e sair dessa exige DESINSTALAR o aplicativo do aparelho do cliente -- com a sessao e os dados locais dele. Numero IGUAL tambem reprova: dois artefatos diferentes com o mesmo numero nao se distinguem no aparelho." >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# AS ISCAS SAO APKs DE VERDADE, montados com `aapt2 link`.
+#
+# Um numero de brinquedo comparado num `if` provaria a aritmetica e nada mais.
+# O que precisa ser provado e a LEITURA: `aapt2 link` monta, de um manifesto de
+# texto, um pacote com `AndroidManifest.xml` BINARIO -- 700 bytes --, e e dele
+# que `aapt2 dump badging` tira o `versionCode`, exatamente como fara no APK de
+# release. Se a extracao cegar, a isca cega com ela e o autoteste acusa.
+#
+# Precisa do `android.jar` da plataforma, que na esteira vem de
+# `platforms;android-37.0` (job `apk`) e aqui vem do SDK local.
+# ---------------------------------------------------------------------------
+achar_android_jar() {
+  aapt=$(achar_aapt2) || return 1
+  raiz_derivada=${aapt%/build-tools/*}
+  sdk_do_projeto=$(sed -n 's/^sdk\.dir=//p' app/android/local.properties 2>/dev/null | head -1 || true)
+  for raiz in "$raiz_derivada" "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}" "$sdk_do_projeto" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    [ -n "$raiz" ] || continue
+    jar=$(ls -1 "$raiz"/platforms/*/android.jar 2>/dev/null | sort -V | tail -1 || true)
+    if [ -n "$jar" ] && [ -f "$jar" ]; then
+      printf '%s' "$jar"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# `montar_isca_de_apk <destino> <versionCode>`; com o numero VAZIO monta um
+# pacote sem `versionCode` nenhum, que e um desfecho proprio.
+montar_isca_de_apk() {
+  destino="$1"
+  numero="$2"
+  aapt=$(achar_aapt2) || return 1
+  jar=$(achar_android_jar) || return 1
+  manifesto="$destino.AndroidManifest.xml"
+  if [ -n "$numero" ]; then
+    atributos="android:versionCode=\"$numero\" android:versionName=\"1.0.0\""
+  else
+    atributos=""
+  fi
+  # Heredoc SEM aspas no marcador, de proposito: `$atributos` tem de expandir.
+  cat > "$manifesto" <<XMLDAISCA
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.bichu.isca" $atributos>
+    <application android:label="isca"/>
+</manifest>
+XMLDAISCA
+  "$aapt" link --manifest "$manifesto" -I "$jar" -o "$destino" >/dev/null 2>&1 || return 1
+  [ -f "$destino" ] || return 1
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -503,6 +906,7 @@ conferir_literalidade() {
   # aprovasse. Erro barato de escrever e caro de perceber.
   vistos=0
   achou_versao=0
+  achou_numero=0
   problema=""
   # `set -f` porque a divisao de palavras abaixo e de proposito, e a expansao
   # de `*` nao e: um argumento com `*` viraria lista de arquivos do diretorio.
@@ -515,6 +919,9 @@ conferir_literalidade() {
       vistos=$((vistos + 1))
       case "$arg" in
         --dart-define=APP_VERSION=*) achou_versao=1 ;;
+      esac
+      case "$arg" in
+        --build-number=*) achou_numero=1 ;;
       esac
       case "$arg" in
         --*) ;;
@@ -534,15 +941,19 @@ conferir_literalidade() {
     return 1
   fi
   if [ "$vistos" -lt 2 ]; then
-    echo "REPROVA: so achei $vistos argumento(s) no comando de build de $arquivo. O comando passa oito; este portao parou de enxergar e nao pode aprovar" >&2
+    echo "REPROVA: so achei $vistos argumento(s) no comando de build de $arquivo. O comando passa dez; este portao parou de enxergar e nao pode aprovar" >&2
     return 1
   fi
   if [ "$achou_versao" -ne 1 ]; then
     echo "REPROVA: o comando de build em $arquivo nao passa \`--dart-define=APP_VERSION=\`. Sem ela o app nao manda a propria versao, \`PortaoDeVersao\` nao pergunta nada, e o bloqueio por versao minima fica desligado em silencio -- com o build saindo 0" >&2
     return 1
   fi
+  if [ "$achou_numero" -ne 1 ]; then
+    echo "REPROVA: o comando de build em $arquivo nao passa \`--build-number=\`. Sem ela o \`versionCode\` do pacote e o do \`pubspec\`, qualquer numero pedido na linha de comando se perde em silencio, e o artefato pode sair ABAIXO do que o cliente tem instalado -- foi o que aconteceu em 04/11/2026, com o build saindo 0" >&2
+    return 1
+  fi
 
-  echo "APROVA: os $vistos argumentos do comando de build sao literais, e \`--dart-define=APP_VERSION\` esta entre eles"
+  echo "APROVA: os $vistos argumentos do comando de build sao literais, e \`--dart-define=APP_VERSION\` e \`--build-number\` estao entre eles"
   return 0
 }
 
@@ -713,8 +1124,221 @@ autoteste() {
     '--dart-define=APP_VERSION="$BUILD_NAME"' >/dev/null
   esperar_reprova_literal "comando com um argumento so (o portao parou de enxergar)" "$tmp/um-argumento.sh"
 
+  # --- as iscas do NUMERO DO BUILD (versionCode) -------------------------
+  #
+  # Elas sao APKs DE VERDADE, e nao numeros inventados num `if`: `aapt2 link`
+  # monta um pacote de 700 bytes com `AndroidManifest.xml` BINARIO a partir de
+  # um manifesto de texto, e e dele que `aapt2 dump badging` le o
+  # `versionCode`. Assim a isca exercita a MESMA leitura que o APK de release
+  # vai receber -- se a extracao cegar, estas iscas cegam com ela.
+  echo "--- iscas da conferencia do versionCode (a regressao de 04/11/2026) ---"
+
+  esperar_etiqueta_de_versioncode() {
+    motivo="$1"
+    caminho="$2"
+    etiqueta="$3"
+    if saida_da_isca=$(conferir_versioncode_no_apk "$caminho" 2>&1); then
+      echo "REPROVA: a isca '$motivo' PASSOU. A conferencia do versionCode parou de enxergar esta familia, e e ela que decide se o pacote INSTALA" >&2
+      falhou=1
+    else
+      case "$saida_da_isca" in
+        *"$etiqueta"*)
+          echo "isca reprovada como deveria, com a etiqueta $etiqueta: $motivo"
+          ;;
+        *)
+          echo "REPROVA: a isca '$motivo' reprovou, mas NAO com a etiqueta $etiqueta -- os desfechos colapsaram num so, que e o defeito que a esteira ja teve no portao de contrato. O que saiu:" >&2
+          printf '%s\n' "$saida_da_isca" | sed 's/^/    /' >&2
+          falhou=1
+          ;;
+      esac
+    fi
+  }
+
+  if caminho_do_jar=$(achar_android_jar); then
+    echo "  (iscas montadas com aapt2 link, contra $caminho_do_jar)"
+
+    base_salva="$BASE_VERSIONCODE"
+    de_salvo="$BASE_DE"
+    esperado_salvo="$BUILD_NUMBER_ESPERADO"
+    # O 2001 nao e numero redondo escolhido a esmo: e o que o cliente tem no
+    # aparelho desde 29/10/2026, medido com aapt2 em
+    # `bichu-hml-arm64-0399da80.apk`.
+    BASE_VERSIONCODE=2001
+    BASE_DE="a isca da base (o 2001 que estava no aparelho do cliente em 04/11/2026)"
+
+    # A ISCA QUE PRECISA APROVAR. Sem ela, uma conferencia que reprovasse tudo
+    # passaria no resto deste bloco e derrubaria a esteira para sempre.
+    BUILD_NUMBER_ESPERADO=2002
+    if montar_isca_de_apk "$tmp/vc-2002.apk" 2002; then
+      if conferir_versioncode_no_apk "$tmp/vc-2002.apk" >/dev/null 2>&1; then
+        echo "isca aprovada como deveria: versionCode 2002, acima da base 2001"
+      else
+        echo "REPROVA: a isca do versionCode MAIOR foi REPROVADA. A conferencia reprova tudo, e portao assim nao diz nada sobre o APK de verdade" >&2
+        falhou=1
+      fi
+    else
+      echo "REPROVA: nao consegui montar a isca de APK com aapt2 link. Sem as iscas esta conferencia vale pela confianca do dia em que foi escrita" >&2
+      falhou=1
+    fi
+
+    # IGUAL reprova: dois artefatos diferentes com o mesmo numero nao se
+    # distinguem no aparelho.
+    BUILD_NUMBER_ESPERADO=2001
+    montar_isca_de_apk "$tmp/vc-2001.apk" 2001 || falhou=1
+    esperar_etiqueta_de_versioncode "versionCode IGUAL ao ultimo entregue (2001)" \
+      "$tmp/vc-2001.apk" "[regressao-de-versioncode]"
+
+    # O DEFEITO LITERAL DE 04/11/2026: pacote com 1, aparelho com 2001.
+    BUILD_NUMBER_ESPERADO=1
+    montar_isca_de_apk "$tmp/vc-1.apk" 1 || falhou=1
+    esperar_etiqueta_de_versioncode "versionCode 1 com 2001 no aparelho (o APK de 04/11/2026)" \
+      "$tmp/vc-1.apk" "[regressao-de-versioncode]"
+
+    # A BANDEIRA PERDIDA: o pacote tem 2002 e pediram 2003. E a familia do
+    # `--dart-define-from-file` de 19/10/2026, agora no `--build-number`.
+    BUILD_NUMBER_ESPERADO=2003
+    esperar_etiqueta_de_versioncode "numero pedido (2003) que NAO entrou no pacote (2002)" \
+      "$tmp/vc-2002.apk" "[valor-divergente]"
+
+    # SEM versionCode nenhum: o aapt2 imprime `versionCode=''`, e cadeia vazia
+    # nao pode ser comparada com numero.
+    BUILD_NUMBER_ESPERADO=2002
+    montar_isca_de_apk "$tmp/vc-sem-numero.apk" "" || falhou=1
+    esperar_etiqueta_de_versioncode "APK sem versionCode no manifesto" \
+      "$tmp/vc-sem-numero.apk" "[sem-versioncode]"
+
+    # NAO E APK: o `aapt2` morre, e o estado de saida tem de chegar. Esta isca
+    # tambem e o controle de que a medicao nao casa qualquer coisa.
+    esperar_etiqueta_de_versioncode "2 MB que nao sao um APK" \
+      "$tmp/lixo.apk" "[badging-falhou]"
+
+    BUILD_NUMBER_ESPERADO=2002
+    esperar_etiqueta_de_versioncode "arquivo inexistente" \
+      "$tmp/nao-existe-mesmo.apk" "[apk-ausente]"
+
+    BASE_VERSIONCODE="$base_salva"
+    BASE_DE="$de_salvo"
+    BUILD_NUMBER_ESPERADO="$esperado_salvo"
+  else
+    echo "REPROVA: nao achei o \`android.jar\` do SDK (platforms/*/android.jar), e sem ele nao da para MONTAR as iscas de APK que provam a conferencia do versionCode nos dois sentidos. Na esteira ele vem de \`platforms;android-37.0\`, instalado pelo job \`apk\`; aqui, instale a plataforma do SDK. Portao que nao consegue se autotestar nao pode aprovar" >&2
+    falhou=1
+  fi
+
+  # --- as iscas da LINHA DE BASE: os seis desfechos, separados -----------
+  #
+  # AUSENCIA NAO PODE VIRAR APROVACAO EM SILENCIO, e o jeito de garantir isso
+  # nao e a boa intencao: e cobrar a ETIQUETA de cada desfecho. Foi o colapso
+  # entre "a base nao existe" e "o arquivo nao existe na base" que deixou um
+  # `exit 0` passar no portao de contrato desta mesma esteira.
+  echo "--- iscas da linha de base do versionCode (os desfechos separados) ---"
+
+  registro_salvo="$REGISTRO_DA_ENTREGA"
+  entregues_salvo="$ENTREGUES_EM"
+
+  # ARQUIVO, E NAO `$(...)`: `resolver_linha_de_base` PREENCHE
+  # `BASE_VERSIONCODE`, e command substitution roda em SUBCASCA -- a variavel
+  # voltaria vazia e a isca mediria a base errada (ou nenhuma). E a mesma
+  # cicatriz que o `while` deste arquivo ja registra duas vezes.
+  esperar_base_reprova() {
+    motivo="$1"
+    etiqueta="$2"
+    if resolver_linha_de_base > "$tmp/saida-da-base.txt" 2>&1; then
+      saida_da_base=$(cat "$tmp/saida-da-base.txt")
+      echo "REPROVA: a isca de linha de base '$motivo' PASSOU. Falta de base virou aprovacao, que e exatamente o desfecho proibido" >&2
+      falhou=1
+    else
+      saida_da_base=$(cat "$tmp/saida-da-base.txt")
+      case "$saida_da_base" in
+        *"$etiqueta"*) echo "isca reprovada como deveria, com a etiqueta $etiqueta: $motivo" ;;
+        *)
+          echo "REPROVA: a isca de base '$motivo' reprovou sem a etiqueta $etiqueta -- desfechos colapsados. O que saiu:" >&2
+          printf '%s\n' "$saida_da_base" | sed 's/^/    /' >&2
+          falhou=1
+          ;;
+      esac
+    fi
+  }
+
+  esperar_base_aprova() {
+    motivo="$1"
+    etiqueta="$2"
+    valor_esperado="$3"
+    if resolver_linha_de_base > "$tmp/saida-da-base.txt" 2>&1; then
+      saida_da_base=$(cat "$tmp/saida-da-base.txt")
+      case "$saida_da_base" in
+        *"$etiqueta"*)
+          if [ "$BASE_VERSIONCODE" = "$valor_esperado" ]; then
+            echo "isca aprovada como deveria, com a etiqueta $etiqueta e base $BASE_VERSIONCODE: $motivo"
+          else
+            echo "REPROVA: a isca de base '$motivo' aprovou com a etiqueta certa e a base ficou $BASE_VERSIONCODE em vez de $valor_esperado" >&2
+            falhou=1
+          fi
+          ;;
+        *)
+          echo "REPROVA: a isca de base '$motivo' aprovou e NAO disse $etiqueta. Desfecho que nao se anuncia e desfecho silencioso. O que saiu:" >&2
+          printf '%s\n' "$saida_da_base" | sed 's/^/    /' >&2
+          falhou=1
+          ;;
+      esac
+    else
+      echo "REPROVA: a isca de base '$motivo' foi REPROVADA, e ela precisa passar" >&2
+      sed 's/^/    /' "$tmp/saida-da-base.txt" >&2
+      falhou=1
+    fi
+  }
+
+  REGISTRO_DA_ENTREGA="$tmp/registro-que-nao-existe.json"
+  ENTREGUES_EM=""
+  esperar_base_reprova "registro da entrega AUSENTE" "[registro-ausente]"
+
+  printf 'isto nao e json\n' > "$tmp/registro-invalido.json"
+  REGISTRO_DA_ENTREGA="$tmp/registro-invalido.json"
+  esperar_base_reprova "registro que nao e JSON" "[registro-ilegivel]"
+
+  printf '{"apk": "sem o numero"}\n' > "$tmp/registro-sem-numero.json"
+  REGISTRO_DA_ENTREGA="$tmp/registro-sem-numero.json"
+  esperar_base_reprova "registro JSON SEM \`versionCode\`" "[registro-ilegivel]"
+
+  printf '{"versionCode": "2001"}\n' > "$tmp/registro-com-texto.json"
+  REGISTRO_DA_ENTREGA="$tmp/registro-com-texto.json"
+  esperar_base_reprova "registro com \`versionCode\` em TEXTO" "[registro-ilegivel]"
+
+  printf '{"versionCode": 2001}\n' > "$tmp/registro-bom.json"
+  REGISTRO_DA_ENTREGA="$tmp/registro-bom.json"
+  ENTREGUES_EM=""
+  esperar_base_aprova "registro bom e nenhum diretorio declarado" "[sem-diretorio]" 2001
+
+  ENTREGUES_EM="$tmp/diretorio-que-nao-existe"
+  esperar_base_reprova "ENTREGUES_EM declarado e inexistente" "[diretorio-inexistente]"
+
+  mkdir -p "$tmp/entregues-vazio"
+  ENTREGUES_EM="$tmp/entregues-vazio"
+  esperar_base_aprova "diretorio declarado, existente e SEM APK" "[diretorio-vazio]" 2001
+
+  if [ -f "$tmp/vc-2002.apk" ]; then
+    mkdir -p "$tmp/entregues-com-apk"
+    cp "$tmp/vc-2002.apk" "$tmp/entregues-com-apk/entregue.apk"
+    ENTREGUES_EM="$tmp/entregues-com-apk"
+    esperar_base_aprova "disco com APK ACIMA do registro" "[registro-atrasado]" 2002
+  fi
+
+  # O CONTROLE POSITIVO DO ARQUIVO DE VERDADE: o registro que esta no
+  # repositorio tem de se ler. Sem este caso, o arquivo poderia estar quebrado
+  # e as iscas acima -- todas com arquivos de brinquedo -- diriam que esta tudo
+  # bem, com a esteira reprovando so na hora do build.
+  REGISTRO_DA_ENTREGA="$registro_salvo"
+  ENTREGUES_EM=""
+  if resolver_linha_de_base > "$tmp/saida-da-base.txt" 2>&1; then
+    echo "isca aprovada como deveria: o registro versionado do repositorio ($registro_salvo) le em $BASE_VERSIONCODE"
+  else
+    echo "REPROVA: o registro versionado do repositorio nao se le. Sem ele a esteira reprova todo build do APK, e a causa nao e o build" >&2
+    sed 's/^/    /' "$tmp/saida-da-base.txt" >&2
+    falhou=1
+  fi
+  ENTREGUES_EM="$entregues_salvo"
+
   [ "$falhou" -eq 0 ] || exit 1
-  echo "autoteste: a conferencia do APK, a do valor da versao e a de literalidade enxergam nos dois sentidos"
+  echo "autoteste: a conferencia do APK, a do valor da versao, a de literalidade, a do versionCode e a da linha de base enxergam nos dois sentidos"
 }
 
 # ---------------------------------------------------------------------------
@@ -728,6 +1352,83 @@ autoteste() {
 if [ "${1:-}" = "--imprimir-versao-dos-termos" ]; then
   printf '%s\n' "$TERMS_VERSION"
   exit 0
+fi
+
+# `--medir-versioncode <apk>`: imprime o `versionCode` que esta DENTRO do
+# pacote, sem veredito nenhum. Existe para medir um artefato ja entregue sem
+# pedir ao portao que o julgue contra a arvore de hoje -- e e o que
+# `--registrar-entrega` usa.
+if [ "${1:-}" = "--medir-versioncode" ]; then
+  alvo_para_medir="${2:-}"
+  if [ -z "$alvo_para_medir" ]; then
+    echo "REPROVA: \`--medir-versioncode\` sem caminho de APK. Sem alvo nao ha o que medir" >&2
+    exit 1
+  fi
+  medido_agora=$(medir_versioncode "$alvo_para_medir") || exit 1
+  printf '%s\n' "$medido_agora"
+  exit 0
+fi
+
+# `--registrar-entrega <apk>`: anota no registro versionado o `versionCode` do
+# APK que foi ENTREGUE ao cliente -- MEDIDO de dentro dele, nunca digitado.
+#
+# Rode isto DEPOIS de mandar um APK para o aparelho do cliente. E este numero
+# que a conferencia de regressao cobra, e ele desatualizado e a unica forma de
+# o portao aprovar um pacote que nao instala.
+if [ "${1:-}" = "--registrar-entrega" ]; then
+  apk_entregue="${2:-}"
+  if [ -z "$apk_entregue" ]; then
+    echo "REPROVA: \`--registrar-entrega\` sem caminho de APK. O numero do registro sai MEDIDO de um pacote, e nunca digitado -- foi numero digitado a mao que produziu o 2001 de 28/10/2026" >&2
+    exit 1
+  fi
+  numero_entregue=$(medir_versioncode "$apk_entregue") || exit 1
+  python3 - "$REGISTRO_DA_ENTREGA" "$numero_entregue" "$apk_entregue" <<'PYGRAVAREGISTRO'
+import json
+import os
+import sys
+import subprocess
+
+caminho, numero, apk = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+anterior = {}
+if os.path.exists(caminho):
+    try:
+        anterior = json.load(open(caminho, encoding='utf-8'))
+    except Exception:
+        anterior = {}
+if isinstance(anterior.get('versionCode'), int) and anterior['versionCode'] > numero:
+    print("REPROVA: o registro ja esta em %d, e o APK oferecido tem %d. Registrar isto "
+          "ABAIXARIA a linha de base, que e o unico jeito de este portao voltar a aprovar "
+          "um pacote que nao instala. Se o numero menor e o certo, apague o registro e "
+          "explique no commit."
+          % (anterior['versionCode'], numero), file=sys.stderr)
+    sys.exit(1)
+try:
+    commit = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+except Exception:
+    commit = ''
+dados = {
+    "versionCode": numero,
+    "apk": os.path.basename(apk),
+    # O commit de QUEM REGISTRA, e nao o que produziu o APK: este processo nao
+    # tem como saber o segundo. Quem diz o do pacote e o `BUILD_COMMIT` medido
+    # dentro dele por `verificar_versao_no_apk.py`.
+    "commitDoRegistro": commit,
+    # UTC, e nao a hora local: portao de data local ja discordou da esteira por 3 horas
+    "medidoEm": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%d'),
+    "comoFoiMedido": "aapt2 dump badging (infra/verificacao/verificar-apk.sh --registrar-entrega)",
+    "porque": (
+        "Este numero e a linha de base da conferencia de regressao de versionCode. "
+        "Ele sai MEDIDO de dentro do APK entregue, e nunca do pubspec: numero passado "
+        "em --build-number nao aparece no pubspec, e foi por isso que a regressao de "
+        "04/11/2026 (pacote com 1, aparelho do cliente com 2001) ficou invisivel."
+    ),
+}
+with open(caminho, 'w', encoding='utf-8') as saida:
+    json.dump(dados, saida, ensure_ascii=True, indent=2)
+    saida.write('\n')
+print("registrado em %s: versionCode=%d, medido em %s" % (caminho, numero, os.path.basename(apk)))
+PYGRAVAREGISTRO
+  exit $?
 fi
 
 if [ "${1:-}" = "--autoteste" ]; then
@@ -759,6 +1460,12 @@ if [ "${1:-}" = "--conferir" ]; then
   conferir_literalidade "$0"
   conferir_apk "$alvo_dado"
   conferir_versao_no_binario "$alvo_dado"
+  # O `versionCode` TAMBEM aqui, e com a linha de base resolvida: e esta a
+  # pergunta "este artefato instala por cima do que o cliente tem?". Apontar
+  # para um APK antigo reprova de proposito -- e e assim que se ve o que o
+  # artefato ja distribuido carrega.
+  resolver_linha_de_base
+  conferir_versioncode_no_apk "$alvo_dado"
   exit 0
 fi
 
@@ -775,9 +1482,17 @@ conferir_literalidade "$0"
 # O DESTINO ANTES DO BUILD: compilar um APK de 75 MB para o endereco errado e
 # so depois reprovar seria o portao certo na hora errada.
 conferir_destino_do_build
+
+# O NUMERO DO BUILD ANTES DO BUILD, e pela mesma razao do destino: descobrir
+# depois que o pacote nao instala custa o build inteiro -- 40 minutos na
+# esteira -- e devolve um artefato que o aparelho do cliente recusa.
+conferir_numero_do_build
+resolver_linha_de_base
+conferir_numero_pedido_contra_a_base
+
 conferir_versao_dos_termos
 
-echo "compilando o APK de release de $ENVIRONMENT, versao $BUILD_NAME (de $PUBSPEC)..."
+echo "compilando o APK de release de $ENVIRONMENT, versao $BUILD_NAME (de $PUBSPEC), versionCode $BUILD_NUMBER..."
 
 # O `cd app` e o mesmo do comando do cliente. `rm` antes para que um APK de uma
 # execucao anterior nao seja confundido com o desta: o portao conferiria um
@@ -789,6 +1504,7 @@ rm -f "$APK"
   # mova nem renomeie estes comentarios sem ler `conferir_literalidade`)
   cd app && flutter build apk --release \
     --build-name="$BUILD_NAME" \
+    --build-number="$BUILD_NUMBER" \
     --dart-define=APP_VERSION="$BUILD_NAME" \
     --dart-define=API_BASE_URL="$API_BASE_URL" \
     --dart-define=ENVIRONMENT="$ENVIRONMENT" \
@@ -810,3 +1526,9 @@ conferir_apk "$APK"
 # nele. Em 19/10/2026 o script terminava na linha de cima, com `exit 0`, e o
 # APK saia sem a versao -- com o mecanismo de bloqueio desligado em silencio.
 conferir_versao_no_binario "$APK"
+
+# A ULTIMA PALAVRA DE TODAS E A DO `versionCode` MEDIDO DENTRO DO PACOTE: e o
+# unico numero que decide se o APK instala por cima do que esta no aparelho do
+# cliente. Em 04/11/2026 este script terminava na linha de cima, com `exit 0`, e
+# o artefato saia com `versionCode=1` contra 2001 instalado.
+conferir_versioncode_no_apk "$APK"

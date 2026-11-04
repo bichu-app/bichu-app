@@ -2,9 +2,28 @@ name: bichu
 description: "Bichu — identidade digital do pet, tag QR e rede local de perdido e achado."
 publish_to: 'none'
 
-# versionName / versionCode. O build da esteira sobrescreve com
-# --build-name e --build-number.
-version: 1.0.0+1
+# versionName / versionCode.
+#
+# O `+N` NAO E ENFEITE, E ELE SUBIU DE `+1` PARA `+2003` EM 04/11/2026.
+#
+# `1.0.0` e a versao do PRODUTO e nao muda aqui. O numero depois do `+` e o
+# `versionCode` do Android: o unico que o aparelho compara na hora de instalar
+# por cima. Ele ficou em `+1` enquanto APKs entregues em 28 e 29/10 saiam com
+# `versionCode=2001` -- numero passado A MAO, por fora dos portoes --, e o
+# artefato de 04/11, compilado sem numero nenhum, saiu com 1. O Android recusou
+# com `INSTALL_FAILED_VERSION_DOWNGRADE`.
+#
+# Entao este valor e o PROXIMO NUMERO LIVRE, e nao um numero qualquer: o 2002
+# foi entregue em 04/11/2026 e esta registrado em
+# `infra/verificacao/versioncode-entregue.json`, que e a linha de base que
+# `verificar-apk.sh` cobra. Quem entregar um APK novo registra o numero dele
+# (`--registrar-entrega`) e sobe este `+N` acima do registrado -- o portao
+# reprova antes de compilar quando os dois saem de ordem.
+#
+# O build dos portoes sobrescreve os dois com `--build-name` e `--build-number`
+# (`verificar-apk.sh` e `verificar-ios.sh`), e `BUILD_NUMBER=` na linha de
+# comando do `make` e o que pede um numero diferente deste.
+version: 1.0.0+2003
 
 environment:
   sdk: ^3.13.3
