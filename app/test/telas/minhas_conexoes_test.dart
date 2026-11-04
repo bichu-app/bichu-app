@@ -20,6 +20,7 @@ import 'dart:convert';
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/conexoes_api.dart';
+import 'package:bichu/api/modelos_conexao.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
@@ -44,7 +45,10 @@ http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
 /// mais**. Escrito por extenso de propósito — um ajudante que montasse o corpo
 /// a partir do modelo do app mediria o app contra si mesmo.
 Map<String, dynamic> _pessoa({
-  required String apelido,
+  /// **ANULAVEL desde 03/11/2026**: `ConnectedPerson.handle` passou a ser
+  /// anulavel no contrato, e e com nulo que a massa reproduz a conta que nao
+  /// escolheu apelido -- 22 das 61 de homologacao.
+  required String? apelido,
   String? nome,
   int pets = 0,
   int conexoes = 0,
@@ -130,16 +134,22 @@ Future<void> _montar(
       }
       if (listaFalha) return _json(<String, dynamic>{}, status: 500);
       final pagina = int.tryParse(pedido.url.queryParameters['page'] ?? '1') ?? 1;
-      // **200 FORA DO CONTRATO**, e nao 4xx/5xx: `handle` chega nulo onde o
-      // modelo faz `json['handle'] as String`, e o cast estoura `TypeError` --
+      // **200 FORA DO CONTRATO**, e nao 4xx/5xx: `pets_count` chega nulo onde o
+      // modelo faz `json['pets_count'] as int`, e o cast estoura `TypeError` --
       // que NAO e `FalhaDeChamada`. E o 200 desviado que o repositorio nao
       // confere em portao nenhum.
+      //
+      // **ERA `handle` NULO ATE 03/11/2026**, e deixou de servir: naquela data
+      // `ConnectedPerson.handle` passou a ser ANULAVEL no contrato (conserto da
+      // conexao aceita que desaparecia), e um corpo com apelido nulo passou a
+      // estar DENTRO do contrato. O campo trocado e `pets_count`, que continua
+      // obrigatorio e inteiro -- e o caso volta a medir o que ele diz medir.
       if ((pagina == 1 && corpoForaDoContrato) || (pagina == 2 && paginaDoisForaDoContrato)) {
         return _json(_pagina(<Map<String, dynamic>>[
           <String, dynamic>{
-            'handle': null,
+            'handle': 'ana-do-bairro',
             'display_name': 'Ana',
-            'pets_count': 0,
+            'pets_count': null,
             'connections_count': 0,
             'photo_icon_url': null,
           },
@@ -429,6 +439,80 @@ void main() {
     ]);
 
     expect(find.bySemanticsLabel('Abrir o perfil de Ana'), findsOneWidget);
+  });
+
+  /// **A CONEXÃO SEM APELIDO É ESCRITA, E NÃO É UMA PORTA** (03/11/2026).
+  ///
+  /// O cliente relatou que uma conexão aceita não aparecia na lista; a causa
+  /// era um filtro de apelido no servidor, e 22 das 61 contas de homologação
+  /// estavam sem apelido. Agora o corpo traz `handle` nulo, e a tela:
+  ///
+  /// - **escreve o nome de exibição** — a linha existe, que é o conserto;
+  /// - **não oferece a porta do perfil**: nem o rótulo de controle, nem a seta,
+  ///   porque o endereço do perfil é o apelido e não há para onde levar;
+  /// - **não inventa rótulo**: não há "perfil incompleto" na linha.
+  ///
+  /// A asserção é o par — a pessoa COM apelido na mesma página continua sendo
+  /// um controle. Sem o par, uma tela que tivesse perdido o `InkWell` das duas
+  /// passaria.
+  testWidgets('conexão SEM apelido é escrita, e NÃO é a porta do perfil', (tester) async {
+    await _montar(tester, primeiraPagina: <Map<String, dynamic>>[
+      _pessoa(apelido: 'ana-do-bairro', nome: 'Ana', pets: 1, conexoes: 2),
+      _pessoa(apelido: null, nome: 'Josi', pets: 3, conexoes: 4),
+    ]);
+
+    // 1. AS DUAS SAEM, e a sem apelido escreve o nome de exibicao.
+    expect(find.text('Ana'), findsOneWidget);
+    expect(
+      find.text('Josi'),
+      findsOneWidget,
+      reason: 'a conexao aceita sem apelido DESAPARECIA da lista antes de 03/11/2026',
+    );
+    expect(find.text('3 pets · 4 conexões'), findsOneWidget);
+
+    // 2. SO A COM APELIDO E UM CONTROLE.
+    expect(find.bySemanticsLabel('Abrir o perfil de Ana'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Abrir o perfil de Josi'),
+      findsNothing,
+      reason: 'sem apelido nao ha endereco de perfil, e um controle que nao leva a '
+          'lugar nenhum e pior que a ausencia dele',
+    );
+
+    // 3. A SETA E A AFFORDANCE DA PORTA: uma linha, uma seta.
+    expect(
+      find.byIcon(Icons.chevron_right),
+      findsOneWidget,
+      reason: 'a seta acompanha a porta, e so uma das duas linhas tem porta',
+    );
+
+    // 4. NENHUM ROTULO NOVO. "Perfil incompleto" seria decisao de produto.
+    for (final inventado in <String>['perfil incompleto', 'Perfil incompleto', 'sem apelido']) {
+      expect(
+        find.text(inventado),
+        findsNothing,
+        reason: 'a tela nao inventa rotulo para a linha sem apelido: "$inventado"',
+      );
+    }
+    expect(
+      find.text(PessoaConectada.semNome),
+      findsNothing,
+      reason: 'ha nome de exibicao, entao o texto de ultima instancia nao entra',
+    );
+  });
+
+  /// **SEM NOME E SEM APELIDO, a linha ainda é escrita** — com o texto de
+  /// última instância, o mesmo da caixa de pedidos e da lista de bloqueados.
+  /// Sem este caso, `nomeParaLer` poderia devolver `@null` e ninguém veria.
+  testWidgets('sem nome E sem apelido, a linha cai para o texto de última instância',
+      (tester) async {
+    await _montar(tester, primeiraPagina: <Map<String, dynamic>>[
+      _pessoa(apelido: null, pets: 1, conexoes: 1),
+    ]);
+
+    expect(find.text(PessoaConectada.semNome), findsOneWidget);
+    expect(find.text('@null'), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
   });
 
   /// **A foto é a derivada `thumb`, e quem não tem foto pronta fica com a
