@@ -893,7 +893,36 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # `src/tools/sou-eu-decidido-num-lugar-so.test.ts` a raiz e tambem NAO toca este
 # arquivo. A contagem e recontada e corrigida lá, que e a ultima entrada a tocar
 # a arvore medida.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (875 arquivos), do painel (146) e do site (49), tres processos; `workspace/**` fora do escopo
+# RECONTA FINAL, EM 04/11/2026, na entrada 8 de 8 (#169) -- a ULTIMA entrada da
+# integracao que toca a arvore medida, e por isso a unica hora em que o numero
+# vale de verdade. O git tambem NAO conflitou aqui (o #169 nao toca o
+# `Makefile`), entao sem esta recontagem o numero ficaria defasado EM SILENCIO
+# pela terceira vez nesta mesma integracao.
+#
+# `eslint . -f json` nas TRES arvores, em worktree FORA do repositorio, por DOIS
+# caminhos independentes que CONCORDARAM (a CLI com formatador json e a API de
+# Node `ESLint().lintFiles`), com as LISTAS de arquivo IDENTICAS entre os dois:
+#
+#   raiz   876  (era 875: +1)
+#   painel 146  (nao se moveu nesta entrada; LISTAS IDENTICAS)
+#   site    49  (nao se moveu nesta entrada; LISTAS IDENTICAS)
+#
+# CENSO POR LISTA, nunca pelo digito. UM entrou e NENHUM saiu:
+#   raiz + src/tools/sou-eu-decidido-num-lugar-so.test.ts
+# ZERO erros e ZERO avisos nas tres arvores.
+#
+# O CAMINHO INTEIRO DO NUMERO NESTA INTEGRACAO, cada degrau MEDIDO sobre a
+# arvore mesclada daquela entrada e nenhum deduzido do anterior:
+#   870  o que a linha DIZIA na base (e ja estava errado)
+#   871  o que a base MEDIA de verdade -- +1 por
+#        `tests/integration/caso-de-perdido-sem-foto.test.ts`, que chegou com a
+#        mescla do PR #164 sem que a linha fosse atualizada
+#   875  entrada 4 (#165): +4 na raiz e +2 no site
+#   146  entrada 7 (#168): +1 no painel
+#   876  entrada 8 (#169): +1 na raiz  <- FINAL
+# Somar deltas de arvores diferentes seria palpite, e foi por isso que cada
+# degrau saiu de uma medicao propria.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (876 arquivos), do painel (146) e do site (49), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

@@ -56,6 +56,9 @@ Map<String, dynamic> _perfil({
     'pets_count': 2,
     'connections_count': 38,
     'connection_state': estado,
+    // Os tres caminhos de conexao sao todos sobre TERCEIRO: nao existe
+    // caminho de conexao consigo mesmo -- o servidor o recusa com 404.
+    'is_self': false,
   };
 }
 

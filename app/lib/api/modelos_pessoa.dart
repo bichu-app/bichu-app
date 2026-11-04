@@ -43,6 +43,7 @@ class PerfilDePessoa {
     required this.connectionState,
     required this.connectionRef,
     required this.canalConfirmado,
+    required this.souEu,
     required this.vitrine,
   });
 
@@ -59,6 +60,7 @@ class PerfilDePessoa {
           : EstadoDaConexao.porCodigo(json['connection_state'] as String?),
       connectionRef: json['connection_ref'] as String?,
       canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
+      souEu: json['is_self'] as bool,
       vitrine: fotos
           ?.cast<Map<String, dynamic>>()
           .map(FotoDoPerfil.doJson)
@@ -92,7 +94,29 @@ class PerfilDePessoa {
   /// 21/10/2026, decisão do cliente.
   final bool canalConfirmado;
 
+  /// `is_self`: **este perfil é de quem está olhando**.
+  ///
+  /// **Lido sem admitir nulo de propósito.** O campo é `required` no contrato, e
+  /// `?? false` aqui reporia o defeito em silêncio no dia em que o servidor
+  /// parasse de mandá-lo: a tela voltaria a oferecer `Pedir conexão` no próprio
+  /// perfil e nada acusaria. O portão `verificar-conformidade-do-app` cobra
+  /// exatamente esta correspondência — o que o Dart lê sem nulo tem de estar em
+  /// `required`.
+  ///
+  /// **Por que vem do servidor e não de comparar o apelido aqui:** não há
+  /// identificador imutável em comum. `Usuario` traz `id` (uuid) e `apelido`;
+  /// este perfil traz `publicRef` e `handle` — a interseção é só o apelido, que
+  /// muda. E o erro de comparar apelido tem a direção ruim: sessão com apelido
+  /// velho que hoje é de outra pessoa esconderia `Denunciar` e `Bloquear` do
+  /// perfil de um estranho de verdade.
+  final bool souEu;
+
   /// As fotos, ou **nulo quando quem olha não pode vê-las**.
+  ///
+  /// **São duas as condições que a abrem** (emenda de 03/11/2026): conexão
+  /// aceita, ou [souEu]. A segunda entrou porque consigo mesmo nunca há aresta,
+  /// então ela vinha sempre nula e a tela dizia a frase de estranho sobre as
+  /// fotos de quem estava olhando.
   final List<FotoDoPerfil>? vitrine;
 
   /// Já é conexão aceita?

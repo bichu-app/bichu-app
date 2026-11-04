@@ -33,6 +33,13 @@ function montar(opcoes: { conviteResolve: boolean; pessoaExiste?: boolean }) {
         opcoes.pessoaExiste !== false && apelido === APELIDO ? ANA_VISIVEL : undefined,
       ),
     vitrineDeConexao: () => Promise.resolve([]),
+    // Este arquivo mede o CAMINHO do convite (que ele resolve no mesmo perfil),
+    // e nunca pede o perfil proprio: quem resolve um convite esta olhando o
+    // perfil de QUEM EMITIU. O duble lanca em vez de devolver `[]` porque `[]`
+    // aqui aprovaria uma chamada que nao deveria acontecer.
+    vitrinePropria: () => {
+      throw new Error('o caminho do convite nao pede a vitrine propria');
+    },
   };
   const conexoes: LeitorDeConexao = {
     estaConectado: () => Promise.resolve(false),

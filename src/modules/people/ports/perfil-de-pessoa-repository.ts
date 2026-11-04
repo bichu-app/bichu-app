@@ -47,4 +47,26 @@ export interface PerfilDePessoaRepository {
     dono: UserId,
     quemOlha: UserId,
   ): Promise<readonly FotoDoPerfilDeOutraPessoa[]>;
+
+  /**
+   * **A PRÓPRIA VITRINE, quando o perfil pedido é o de quem está olhando**
+   * (decisão do cliente de 03/11/2026, *"pode corrigir isso também"*).
+   *
+   * Ela existe porque [vitrineDeConexao] exige aresta `accepted` no `WHERE` e
+   * **ninguém tem aresta consigo mesmo**: no próprio perfil a vitrine vinha
+   * vazia, e a tela lia "vazia" como "você não é conexão dela" e dizia a frase
+   * de estranho sobre as fotos de quem estava olhando.
+   *
+   * **A ASSINATURA É A DEFESA, e por isso ela recebe UM id só.** Ela não aceita
+   * um `dono` separado de um `quemOlha`, então **não existe forma de pedir por
+   * ela a vitrine de terceiro** -- a pior coisa que uma chamada errada pode
+   * fazer é devolver as fotos de quem chamou, que ele já pode ver. A variante
+   * `(dono, quemOlha)` com um booleano de dispensa seria a forma que vaza.
+   *
+   * **QUEM DECIDE QUAL DAS DUAS CHAMAR NÃO É ELA.** A decisão é a comparação
+   * única de `PerfilDePessoa.porApelido`, e escrever aqui um segundo
+   * `dono === quemOlha` seria a segunda noção de "sou eu" -- a classe de
+   * defeito que o predicado da audiência do Mural já pagou em quatro cópias.
+   */
+  vitrinePropria(quemOlha: UserId): Promise<readonly FotoDoPerfilDeOutraPessoa[]>;
 }

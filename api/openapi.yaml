@@ -20897,11 +20897,39 @@ components:
           connections_count,
           connection_state,
           contact_channel_verified,
+          is_self,
         ]
       additionalProperties: false
       description: |
         O perfil de OUTRA pessoa, no recorte que quem chama pode ver (emenda 2
         do ADR-0010, decisao do cliente de 19/10/2026).
+
+        **`is_self` ENTROU EM 03/11/2026, E ELE E A SEGUNDA EMENDA A LISTA
+        FECHADA** -- pela mesma forma da primeira, e nao por alguem ter achado
+        que faltava um campo. A decisao do cliente foi literal: *"quando o
+        proprio usuario clica no perfil que esta no post, ele nao deve ter um
+        botao para adicionar conexao, sendo que ele e ele mesmo"*, e depois
+        *"pode corrigir isso tambem"* sobre a galeria.
+
+        **POR QUE ISTO PRECISOU DE CONTRATO, e nao de uma comparacao na tela:**
+        o aplicativo NAO TEM identificador imutavel em comum com este schema.
+        `Me` entrega `id` (o uuid de `users.id`) e `handle`; este schema entrega
+        `public_ref` (22 simbolos) e `handle`. A INTERSECAO DOS DOIS E SO O
+        `handle` -- exatamente o campo que a pessoa pode trocar --, porque
+        `Me` nao expoe `public_ref` e este schema nao expoe o uuid (item 6 do
+        ADR-0010, e ele nao se reabre). Comparar apelido no cliente erraria nas
+        duas direcoes, e a direcao ruim e a de FALSO POSITIVO: sessao com
+        apelido velho que hoje pertence a outra pessoa esconderia `Denunciar` e
+        `Bloquear` do perfil de um estranho de verdade.
+
+        **E O SERVIDOR NAO APRENDEU UM CONCEITO NOVO AQUI.** Ele ja recusa tudo
+        que e sobre si mesmo, em tres pontos de execucao: a busca de pessoas
+        exclui quem chama (`u.id <> ${quemBusca}`), `requestConnection` lanca
+        404 quando o alvo e o proprio chamador, e `blockUser` e
+        `reportUserProfile` devolvem erro de campo com a mensagem *"Este perfil
+        e seu."*. **Esta projecao era o UNICO lugar que guardava o segredo**, e
+        era por isso que a tela desenhava tres portas que o servidor ja
+        recusava.
 
         **`contact_channel_verified` ENTROU EM 21/10/2026, E ELE E UMA EMENDA A
         LISTA FECHADA** -- nao uma omissao que alguem preencheu. A lista abaixo
@@ -21019,7 +21047,57 @@ components:
             chama nao pode ver. Vitrine vazia de uma conexao **tambem** chega
             como `[]`, e a tela distingue os dois pelo estado e nao pelo
             tamanho da lista.
+
+            **EMENDA DE 03/11/2026 -- SAO DUAS CONDICOES, E NAO UMA.** O
+            paragrafo acima continua valendo para TERCEIRO, e e so ele que o
+            item do ADR-0010 cobre. O que mudou e que `is_self: true` ABRE a
+            vitrine tambem, e a razao e que a regra antiga era IMPOSSIVEL de
+            satisfazer no proprio perfil: `connection_state` consigo mesmo e
+            sempre `none`, porque nao existe aresta de uma conta para ela
+            mesma. O resultado media era absurdo -- a pessoa abria o proprio
+            perfil e lia *"As fotos aparecem para quem e conexao."* SOBRE AS
+            FOTOS DELA.
+
+            Entao a leitura correta e: **presente quando `is_self` e `true`, OU
+            quando `connection_state` e `connected`**. Com `is_self: true` a
+            lista chega mesmo vazia (`[]`), e ai `[]` NAO e a afirmacao proibida
+            acima -- "voce nao publicou fotos" e uma afirmacao que quem olha
+            pode fazer sobre si.
+
+            **PARA ESTRANHO NADA AFROUXOU, e a ordem de teste no servidor e
+            parte disso**: `is_self` e testado PRIMEIRO, e o ramo de terceiro
+            continua exigindo aresta `accepted` no `WHERE`. A consulta da
+            vitrine propria recebe UM id so -- o de quem olha --, entao nao
+            existe forma de pedir por ela a vitrine de outra pessoa.
           items: { $ref: '#/components/schemas/PersonShowcasePhoto' }
+        is_self:
+          type: boolean
+          description: |
+            **ESTE PERFIL E DE QUEM ESTA CHAMANDO**, derivado no servidor por
+            `pessoa.userId === quemOlha` e nunca recebido de quem chama.
+
+            **UMA comparacao, num lugar so** (`PerfilDePessoa.porApelido`), e
+            tudo que depende dela le dali: este campo e a escolha da vitrine.
+            Nao ha segundo predicado -- nem no `WHERE`, nem na borda, nem na
+            tela, que recebe o booleano pronto. Um interruptor em duas copias
+            nao e um interruptor, e o predicado da audiencia do Mural ja custou
+            quatro copias a esta casa.
+
+            **O QUE A TELA FAZ COM `true`**, e e tudo ESCONDER e nada criar:
+            nenhuma acao de conexao em nenhum dos quatro estados (pedir,
+            aceitar, recusar, cancelar, e nem as frases que narram o estado), e
+            nenhum `⋮` -- o menu de denunciar, bloquear e desfazer conexao e
+            sobre terceiro. Nao ha tela nova de perfil proprio: e a MESMA tela,
+            exibindo voce, com o que nao faz sentido retirado.
+
+            **NAO E PERMISSAO E NAO E CAPACIDADE.** Ele nao libera nada que a
+            pessoa FAZ -- as tres recusas do servidor continuam de pe e
+            continuam sendo a trava de verdade. Ele so diz de quem e o perfil,
+            para a tela parar de oferecer o que o servidor ja recusava.
+
+            **Nao anulavel, e `false` e informacao:** `false` e o caso comum (o
+            perfil de outra pessoa) e e o que mantem a porta de pedir conexao e
+            o `⋮` onde eles sempre estiveram.
         contact_channel_verified:
           type: boolean
           description: |
@@ -21050,6 +21128,15 @@ components:
         **O recorte e LIMITE e nao escolha de tela**, e cada ausencia tem dono.
         Compare com `PersonProfile`, que tem sete campos: as tres diferencas
         sao deliberadas.
+
+        **EMENDA DE 03/11/2026:** `PersonProfile` passou a ter OITO campos --
+        `is_self` entrou la. **Ele nao entra aqui, e a ausencia tem o mesmo dono
+        das outras tres**: a busca de pessoas JA EXCLUI quem chama no `WHERE`
+        (`u.id <> ${quemBusca}`), entao a propria conta nunca aparece numa
+        pagina de resultado e um campo que seria `false` em toda linha nao
+        informa nada. O perfil precisa dele porque ele e enderecado pelo
+        apelido e PODE ser o seu; a busca nao precisa porque ela nunca o
+        devolve.
 
         | Falta aqui | Esta em `PersonProfile` porque |
         |---|---|

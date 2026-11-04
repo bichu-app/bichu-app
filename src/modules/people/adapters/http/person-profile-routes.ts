@@ -102,6 +102,10 @@ export function comoResposta(
     contact_channel_verified: perfil.canalVerificado,
     connection_state: perfil.connectionState,
     connection_ref: perfil.connectionRef,
+    // **SAI SEMPRE, e `false` é informação e não ausência**: o aplicativo lê
+    // este campo sem admitir nulo, e o portão `verificar-conformidade-do-app`
+    // cobra que o que o Dart lê sem nulo esteja em `required` no contrato.
+    is_self: perfil.souEu,
     ...(perfil.vitrine === undefined
       ? {}
       : { showcase: perfil.vitrine.map((foto) => comoRespostaDaFoto(foto, baseDeMidia)) }),

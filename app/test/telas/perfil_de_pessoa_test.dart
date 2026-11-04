@@ -74,6 +74,10 @@ Map<String, dynamic> _perfil({
   // nao mencionou nao e perfil validado, e um padrao `true` faria a isca do selo
   // ausente ficar verde sem medir nada.
   bool validado = false,
+  // **`is_self`, e o padrao `false` e pela MESMA razao do `validado` acima**:
+  // todo caso que este arquivo ja tinha fala do perfil de OUTRA pessoa, e um
+  // padrao `true` apagaria de uma vez as portas que a metade deles mede.
+  bool souEu = false,
 }) {
   return <String, dynamic>{
     'handle': _apelido,
@@ -83,6 +87,7 @@ Map<String, dynamic> _perfil({
     'connections_count': conexoes,
     'connection_state': estado,
     'contact_channel_verified': validado,
+    'is_self': souEu,
     'connection_ref': ref,
     // `?vitrine` OMITE a chave quando nula -- que e exatamente o que a borda
     // faz com `showcase` para quem nao e conexao. Ausente e `[]` sao estados
@@ -1023,5 +1028,250 @@ void main() {
     // exibicao pode ter confirmado o e-mail.
     await _montar(tester, perfil: _perfil(estado: 'none', nome: null, validado: true));
     expect(find.byType(SeloDeValidado), findsOneWidget);
+  });
+
+  // ------------------------------------------------------------------
+  // O PRÓPRIO PERFIL — `is_self`
+  // ------------------------------------------------------------------
+  //
+  // Pedido do cliente, 03/11/2026, literal: *"quando o próprio usuário clica no
+  // perfil que está no post, ele não deve ter um botão para adicionar conexão,
+  // sendo que ele é ele mesmo. No máximo mostrar a página do perfil com a
+  // galeria de fotos dele."*, e em seguida, sobre a galeria, *"pode corrigir
+  // isso também"*.
+  //
+  // **O BOTÃO NÃO ERA SÓ DESLOCADO: ELE NÃO TINHA COMO FUNCIONAR.** Tocá-lo
+  // mandava `pedirPorApelido` com o PRÓPRIO apelido, e o servidor recusa isso
+  // com 404 (`conexao-entre-pessoas.ts`: `if (alvo === contexto.userId) throw
+  // problemas.naoEncontrado()`). O 404 cai no ramo `_perdeuOAlvo` de `_agir`, e
+  // a tela TROCAVA o próprio perfil pela frase `Não encontramos este usuário.`
+  // — uma afirmação falsa sobre a própria conta.
+  //
+  // **O `⋮` era pior em quantidade, e não em consequência**, e isso foi medido
+  // e não suposto: o servidor TAMBÉM recusa bloquear e denunciar a própria
+  // conta (`kysely-safety-repository.ts`: `if (idDoAlvo === chamador) return
+  // 'eu_mesmo'`, que a borda devolve como erro de campo com a mensagem *"Este
+  // perfil é seu."*). Então não dava para se bloquear nem para se denunciar de
+  // verdade — davam-se TRÊS becos sem saída em vez de um.
+  //
+  // **A GALERIA ERA IMPOSSÍVEL DE ABRIR, e não é detalhe de consulta:** o
+  // `WHERE` da vitrine exige aresta `accepted`, e ninguém tem aresta consigo
+  // mesmo. `showcase` vinha sempre ausente, e esta tela lia a ausência como
+  // "você não é conexão dela" — dizendo `As fotos aparecem para quem é
+  // conexão.` SOBRE AS FOTOS DE QUEM ESTAVA OLHANDO.
+  //
+  // **POR QUE O SINAL VEM DO SERVIDOR** e não de comparar o apelido aqui: não
+  // há identificador imutável em comum. `Me` traz `id` (uuid) e `handle`;
+  // `PersonProfile` traz `public_ref` e `handle`. A interseção é só o `handle`,
+  // que é o que muda. E o erro de comparar apelido tem a direção ruim: sessão
+  // com apelido velho que hoje é de outra pessoa esconderia `Denunciar` e
+  // `Bloquear` do perfil de um estranho de verdade.
+
+  testWidgets('PRÓPRIO PERFIL: nenhuma porta de conexão, em NENHUM estado', (tester) async {
+    for (final estado in <String>['none', 'pending_sent', 'pending_received', 'connected']) {
+      await _montar(tester, perfil: _perfil(estado: estado, ref: 'r1', souEu: true));
+
+      expect(
+        find.text(TelaDePerfilDePessoa.pedirConexao),
+        findsNothing,
+        reason: 'REPROVA: o próprio perfil ofereceu `${TelaDePerfilDePessoa.pedirConexao}` '
+            'no estado `$estado`. Pedir conexão consigo mesmo é 404 no servidor, e o '
+            '404 troca o próprio perfil pela frase de alvo perdido.',
+      );
+      // ANCORADO NO WIDGET, e não só no literal: `findsNothing` sobre um texto
+      // que a tela deixou de dizer é vacuamente verdadeiro.
+      expect(
+        find.byType(BotaoPrimario),
+        findsNothing,
+        reason: 'REPROVA: sobrou botão primário no próprio perfil, estado `$estado`',
+      );
+      for (final rotulo in <String>[
+        TelaDePerfilDePessoa.aceitar,
+        TelaDePerfilDePessoa.recusar,
+        TelaDePerfilDePessoa.cancelarPedido,
+      ]) {
+        expect(
+          find.text(rotulo),
+          findsNothing,
+          reason: 'REPROVA: `$rotulo` no próprio perfil, estado `$estado`. Nenhum '
+              'dos quatro estados da relação faz sentido sobre si mesmo.',
+        );
+      }
+      // E nem a FRASE de estado, que narra uma relação que não existe.
+      expect(find.text(TelaDePerfilDePessoa.pedidoRecebido), findsNothing);
+      expect(find.text(TelaDePerfilDePessoa.pedidoEnviado), findsNothing);
+    }
+  });
+
+  testWidgets('PRÓPRIO PERFIL: nenhum `⋮` — não se denuncia nem se bloqueia', (tester) async {
+    for (final estado in <String>['none', 'pending_sent', 'pending_received', 'connected']) {
+      await _montar(tester, perfil: _perfil(estado: estado, ref: 'r1', souEu: true));
+
+      expect(
+        find.byType(MenuDoPerfil),
+        findsNothing,
+        reason: 'REPROVA: o `⋮` de OUTRA pessoa apareceu no próprio perfil (estado '
+            '`$estado`). Ele hospeda denunciar, bloquear e desfazer conexão, e os '
+            'três são sobre terceiro.',
+      );
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+    }
+  });
+
+  testWidgets('PRÓPRIO PERFIL: a GALERIA aparece, com a derivada de 320', (tester) async {
+    // O pedido do cliente de 03/11: *"no máximo mostrar a página do perfil com
+    // a galeria de fotos dele"*, e depois *"pode corrigir isso também"*. O
+    // servidor passou a servir `showcase` quando `is_self`, pela porta própria.
+    await _montar(
+      tester,
+      perfil: _perfil(estado: 'none', souEu: true, vitrine: _duasFotos),
+    );
+
+    final imagens = tester.widgetList<ImagemDaRede>(find.byType(ImagemDaRede)).toList();
+    expect(
+      imagens.length,
+      2,
+      reason: 'REPROVA: o próprio perfil não desenhou a galeria que o servidor mandou',
+    );
+    // A MESMA régua da vitrine de conexão: a grade pede `grid_url`, nunca
+    // `open_url` — a de 1024 px é 1,6x mais dado do que a célula pinta.
+    expect(imagens.first.url, _urlDaGrade);
+    // E nenhuma das duas frases de terceiro sobrou.
+    expect(find.text(TelaDePerfilDePessoa.fotosSoParaConexao), findsNothing);
+    expect(find.text(TelaDePerfilDePessoa.conexaoSemFoto), findsNothing);
+  });
+
+  testWidgets('PRÓPRIO PERFIL: vitrine VAZIA tem frase própria, na segunda pessoa', (
+    tester,
+  ) async {
+    // `[]` no próprio perfil é "você não publicou fotos", que é uma afirmação
+    // que quem olha pode fazer sobre si. As outras duas frases mentiriam:
+    // `fotosSoParaConexao` porque conexão não abre nada aqui, e `conexaoSemFoto`
+    // porque ela fala de você na terceira pessoa (`Este usuário...`).
+    await _montar(
+      tester,
+      perfil: _perfil(estado: 'none', souEu: true, vitrine: <Map<String, dynamic>>[]),
+    );
+
+    expect(find.text(TelaDePerfilDePessoa.aindaSemFoto), findsOneWidget);
+    expect(
+      find.text(TelaDePerfilDePessoa.fotosSoParaConexao),
+      findsNothing,
+      reason: 'REPROVA: a tela disse que as fotos aparecem para quem é conexão — no '
+          'próprio perfil isso é falso, porque ninguém tem aresta consigo mesmo.',
+    );
+    expect(
+      find.text(TelaDePerfilDePessoa.conexaoSemFoto),
+      findsNothing,
+      reason: 'REPROVA: `${TelaDePerfilDePessoa.conexaoSemFoto}` fala de quem está '
+          'olhando na terceira pessoa',
+    );
+  });
+
+  testWidgets('PRÓPRIO PERFIL: `showcase` AUSENTE não volta a dizer a frase de estranho', (
+    tester,
+  ) async {
+    // Defesa de borda: depois do conserto o servidor manda sempre a lista para
+    // `is_self`, mas se ela faltasse a tela NÃO pode cair na frase de estranho
+    // — que é exatamente o defeito relatado. Para si mesmo, ausente e vazio
+    // significam a mesma coisa.
+    await _montar(tester, perfil: _perfil(estado: 'none', souEu: true));
+
+    expect(find.text(TelaDePerfilDePessoa.fotosSoParaConexao), findsNothing);
+    expect(find.text(TelaDePerfilDePessoa.aindaSemFoto), findsOneWidget);
+  });
+
+  testWidgets('PRÓPRIO PERFIL: a página NÃO fica vazia — nome, apelido e contagens ficam', (
+    tester,
+  ) async {
+    // Sem este caso, os de cima passariam num mundo em que o próprio perfil não
+    // desenha NADA — que é a forma mais fácil de uma isca de ausência ficar
+    // verde sem ter medido nada. O cliente pediu *"no máximo mostrar a página
+    // do perfil"*, e página é o que tem de sobrar.
+    await _montar(tester, perfil: _perfil(estado: 'none', souEu: true));
+
+    expect(find.text('Marina'), findsWidgets);
+    expect(find.text('@$_apelido'), findsOneWidget);
+    expect(find.text(TelaDePerfilDePessoa.rotuloDePets(3)), findsOneWidget);
+    expect(find.text(TelaDePerfilDePessoa.rotuloDeConexoes(12)), findsOneWidget);
+    // E a barra continua sendo a desta tela: não há tela nova de perfil próprio.
+    expect(find.text(TelaDePerfilDePessoa.tituloDaBarra), findsOneWidget);
+  });
+
+  // ------------------------------------------------------------------
+  // CONTRAPESO: O PERFIL DE OUTRA PESSOA NÃO PERDEU NADA
+  // ------------------------------------------------------------------
+  //
+  // Esta é a isca do sentido CONTRÁRIO, e ela existe porque consertar o próprio
+  // perfil afrouxando o de terceiro seria VAZAMENTO e não conserto. Decisão do
+  // cliente de 19/10/2026, que não foi reaberta: *"ele pode ver nome,
+  // quantidade de pets, conexões, mas não as fotos publicadas e nem a timeline
+  // do usuário"*. Sem estes casos, apagar o botão e o menu da tela inteira
+  // passaria em todos os de cima.
+
+  testWidgets('CONTRAPESO: `is_self` FALSO mantém a porta de pedir E o `⋮`', (tester) async {
+    await _montar(tester, perfil: _perfil(estado: 'none'));
+
+    expect(
+      find.text(TelaDePerfilDePessoa.pedirConexao),
+      findsOneWidget,
+      reason: 'REPROVA: o conserto do próprio perfil levou embora a porta de pedir '
+          'conexão do perfil de OUTRA pessoa.',
+    );
+    expect(find.byType(MenuDoPerfil), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Denunciar este perfil'),
+      findsOneWidget,
+      reason: 'REPROVA: denunciar sumiu do perfil de outra pessoa',
+    );
+    expect(
+      find.text('Bloquear'),
+      findsOneWidget,
+      reason: 'REPROVA: bloquear sumiu do perfil de outra pessoa',
+    );
+  });
+
+  testWidgets('CONTRAPESO: `is_self` FALSO e SEM conexão continua sem ver foto', (tester) async {
+    // A isca de vazamento. `showcase` ausente, e a frase tem de ser a de
+    // estranho — a mesma que o próprio perfil deixou de dizer.
+    await _montar(tester, perfil: _perfil(estado: 'none'));
+
+    expect(find.byType(ImagemDaRede), findsNothing);
+    expect(find.byType(GridView), findsNothing);
+    expect(
+      find.text(TelaDePerfilDePessoa.fotosSoParaConexao),
+      findsOneWidget,
+      reason: 'REPROVA: a frase de estranho saiu do perfil de estranho. O conserto '
+          'era para o caso "o alvo sou eu", e não para afrouxar este.',
+    );
+    expect(find.text(TelaDePerfilDePessoa.aindaSemFoto), findsNothing);
+  });
+
+  testWidgets('CONTRAPESO: `is_self` FALSO e conexão aceita continua vendo a vitrine', (
+    tester,
+  ) async {
+    await _montar(
+      tester,
+      perfil: _perfil(estado: 'connected', ref: 'r1', vitrine: _duasFotos),
+    );
+    expect(
+      tester.widgetList<ImagemDaRede>(find.byType(ImagemDaRede)).length,
+      2,
+      reason: 'REPROVA: a guarda do próprio perfil apagou a vitrine de quem É conexão',
+    );
+  });
+
+  testWidgets('CONTRAPESO: `is_self` FALSO e conexão SEM foto mantém a frase da conexão', (
+    tester,
+  ) async {
+    await _montar(
+      tester,
+      perfil: _perfil(estado: 'connected', ref: 'r1', vitrine: <Map<String, dynamic>>[]),
+    );
+    expect(find.text(TelaDePerfilDePessoa.conexaoSemFoto), findsOneWidget);
+    expect(find.text(TelaDePerfilDePessoa.aindaSemFoto), findsNothing);
   });
 }

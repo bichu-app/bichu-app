@@ -43,6 +43,35 @@
 // | `Perto` / pagina do local | nao -- "outras" sao AVALIACOES, nao pessoas | — | — |
 // | diretorio de profissionais | nao -- `Indicar`, e indicar nao e conectar | — | — |
 //
+// ## A EMENDA DE 03/11/2026: A LINHA DO PERFIL GANHOU UMA CONDICAO
+//
+// A linha `perfil de pessoa` da tabela acima continua verdadeira **para o
+// perfil de OUTRA pessoa**, e e so disso que ela falava quando foi escrita. O
+// que faltava nela era a coluna que ninguem tinha medido: **o alvo pode ser
+// VOCE**, e ai ela nao oferece nada.
+//
+// | Superficie | Oferece adicionar? | O `⋮`? | De onde vem |
+// |---|---|---|---|
+// | perfil de pessoa, alvo = outra pessoa | **SIM** (como antes) | **SIM** (como antes) | `PersonProfile.connection_state` |
+// | perfil de pessoa, alvo = VOCE | **nao** -- nenhum dos quatro estados | **nao** -- os tres itens sao sobre terceiro | `PersonProfile.is_self` |
+//
+// **O cliente relatou o botao, e o botao era o menor dos tres.** Pedir conexao
+// consigo mesmo e 404 no servidor, e o 404 TROCAVA o proprio perfil pela frase
+// `Nao encontramos este usuario.`. O `⋮` oferecia denunciar e bloquear a
+// propria conta, que o servidor tambem recusa (`eu_mesmo`, *"Este perfil e
+// seu."*) -- tres becos sem saida. E a vitrine dizia `As fotos aparecem para
+// quem e conexao.` sobre as fotos de quem estava olhando, porque o `WHERE` dela
+// exige aresta `accepted` e ninguem tem aresta consigo mesmo.
+//
+// **E A FRASE ABAIXO DEIXOU DE VALER, e e por isso que ela nao foi apagada:**
+// esta superficie PRECISOU de mudanca de contrato. A razao esta escrita em
+// `PersonProfile.is_self` e e medida: nao existe identificador imutavel em
+// comum entre `Me` e `PersonProfile` -- a intersecao dos dois e so o `handle`,
+// que muda --, entao a tela nao tinha como derivar "sou eu" sozinha.
+//
+// **A BUSCA NAO ENTRA NA EMENDA**, e isso foi medido: ela ja exclui quem chama
+// no `WHERE` (`u.id <> quemBusca`), entao a propria conta nunca aparece la.
+//
 // **Nenhuma superficie precisa de mudanca de CONTRATO.** `ConnectedPerson`,
 // `ConnectionPerson` e `BlockedPerson` nao trazem `connection_state`, e
 // nenhuma das tres precisa: na lista de conexoes o estado seria a constante
