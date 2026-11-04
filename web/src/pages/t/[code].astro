@@ -9,11 +9,17 @@ import RegistrarAchado from '../../componentes/RegistrarAchado.astro';
 import ProcurarCodigo from '../../componentes/ProcurarCodigo.astro';
 import Lojas from '../../componentes/Lojas.astro';
 import ScriptDeEnvio from '../../componentes/ScriptDeEnvio.astro';
+import ContatoDoAchador from '../../componentes/ContatoDoAchador.astro';
 import { clienteDaApi, executar } from '../../api/chamar.ts';
 import { telaAoAbrir, telaAoAvisar, type TelaAoAbrir, type TelaAoAvisar } from '../../dominio/telas-da-tag.ts';
 import { descricaoDoPet, desde, espera, frase } from '../../dominio/texto-do-pet.ts';
 import { origemDaMidia, fotoPermitida } from '../../dominio/midia.ts';
-import { TAG } from '../../conteudo/tag.ts';
+import {
+  lerContatoDoAchador,
+  type CamposDoContato,
+  type ErroDoContato,
+} from '../../dominio/contato-do-achador.ts';
+import { TAG, CONSENTIMENTO_DO_ACHADOR } from '../../conteudo/tag.ts';
 import { AVISO_RECOMPENSA } from '../../conteudo/comum.ts';
 import { COMUM_PUBLICO } from '../../conteudo/conta.ts';
 
@@ -40,18 +46,63 @@ let aoAbrir: TelaAoAbrir | null = null;
 let aoAvisar: TelaAoAvisar | null = null;
 let chave: string = crypto.randomUUID();
 
+/** O contato de quem achou, quando a tela volta de uma recusa de validação. */
+let erros: readonly ErroDoContato[] = [];
+let preenchido: CamposDoContato | null = null;
+/**
+ * `true` quando o contato foi divulgado, `false` quando o consentimento foi dado
+ * e o enriquecimento falhou, `null` quando não havia contato a divulgar.
+ */
+let contatoDivulgado: boolean | null = null;
+
 if (Astro.request.method === 'POST') {
   const formulario = await Astro.request.formData().catch(() => null);
   const enviada = formulario?.get('chave');
   if (typeof enviada === 'string' && enviada.length > 0) chave = enviada;
-  const r = await executar(() =>
-    api.POST('/tags/{code}/found-reports', {
-      params: { path: { code: codigo }, header: { 'Idempotency-Key': chave } },
-      body: {},
-    }),
-  );
-  aoAvisar = telaAoAvisar(r);
-  Astro.response.status = aoAvisar.http;
+  const contato = lerContatoDoAchador(formulario, CONSENTIMENTO_DO_ACHADOR.versao);
+
+  if (contato.erros.length > 0) {
+    /*
+     * A RECUSA NÃO CRIA NADA. `POST /tags/{code}/found-reports` cria o aviso e
+     * notifica o tutor: validar depois dele faria o conserto de um telefone
+     * digitado errado custar um SEGUNDO aviso, com o primeiro já tendo saído sem
+     * o contato. Então aqui a tela do pet é remontada com o erro e com o que a
+     * pessoa digitou, e o aviso continua por enviar.
+     */
+    erros = contato.erros;
+    preenchido = contato.campos;
+    const r = await executar(() => api.GET('/tags/{code}', { params: { path: { code: codigo } } }));
+    aoAbrir = telaAoAbrir(r);
+    Astro.response.status = aoAbrir.http === 200 ? 400 : aoAbrir.http;
+  } else {
+    const r = await executar(() =>
+      api.POST('/tags/{code}/found-reports', {
+        params: { path: { code: codigo }, header: { 'Idempotency-Key': chave } },
+        body: {},
+      }),
+    );
+    aoAvisar = telaAoAvisar(r);
+    Astro.response.status = aoAvisar.http;
+
+    /*
+     * O ENRIQUECIMENTO VEM DEPOIS, e com o `finder_token` que o aviso devolveu.
+     * Se ele falhar, o aviso já saiu e o tutor já foi notificado — a tela diz a
+     * verdade sobre o contato em vez de afirmar sucesso que não houve.
+     *
+     * Sem consentimento não há `share_consent` no corpo, e o servidor recusa
+     * telefone sem ele: a trava é dele, e esta tela não é a única guarda.
+     */
+    if (r.tipo === 'ok' && contato.enriquecimento !== null) {
+      const token = r.dados.finder_token;
+      const enriquecido = await executar(() =>
+        api.PATCH('/finder/found-report', {
+          headers: { Authorization: `Bearer ${token}` },
+          body: contato.enriquecimento ?? {},
+        }),
+      );
+      if (contato.divulgaContato) contatoDivulgado = enriquecido.tipo === 'ok';
+    }
+  }
 } else {
   const r = await executar(() => api.GET('/tags/{code}', { params: { path: { code: codigo } } }));
   aoAbrir = telaAoAbrir(r);
@@ -104,10 +155,19 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
         )}
       </section>
       {estaPerdido ? (
-        <div class="garantia-contato">
-          <Icone nome="lock" />
-          <p>{TAG.garantiaContato}</p>
-        </div>
+        <>
+          <div class="garantia-contato">
+            <Icone nome="lock" />
+            <p>{TAG.garantiaContato}</p>
+          </div>
+          {/*
+            Os campos moram AQUI, no corpo, e enviam pelo `<form>` da barra de
+            ação (`form="avisar"`): a barra é `sticky` e é do botão. Dentro do
+            ramo `estaPerdido` por construção — sem pet perdido não há aviso, e
+            os dois casos de e2e do PR 162 contam ZERO campos naquele estado.
+          */}
+          <ContatoDoAchador formulario="avisar" campos={preenchido} erros={erros} />
+        </>
       ) : (
         <div class="caixa">
           <h2 class="caixa__titulo">{TAG.naoPerdidoTitulo}</h2>
@@ -126,6 +186,13 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
     <>
       <Estado icone="check_circle" tom="sucesso" titulo={TAG.avisadoTitulo(tela.nome)}>
         <p class="estado__texto">{TAG.avisadoTexto}</p>
+        {/*
+          A verdade sobre o contato, e não "enviado" por otimismo. Não há
+          "desfazer": a mensagem que levou o contato é imutável e fica no
+          histórico da conversa, então a tela não oferece o que o produto não tem.
+        */}
+        {contatoDivulgado === true && <p class="estado__texto">{TAG.avisadoComContato}</p>}
+        {contatoDivulgado === false && <p class="estado__texto">{TAG.avisadoSemContato}</p>}
       </Estado>
       <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
       <div class="caixa convite-app">
@@ -195,7 +262,8 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
   <Fragment slot="acao">
     {tela.tela === 'pet' && estaPerdido && (
       <div class="acao">
-        <form method="post" data-envio>
+        {/* `id` para os campos do corpo (`form="avisar"`) chegarem neste envio. */}
+        <form method="post" data-envio id="avisar">
           <input type="hidden" name="chave" value={chave} />
           <BotaoEnviar rotulo={resolucao?.already_notified ? TAG.botaoAvisarDeNovo : TAG.botaoAvisar} enviando={TAG.enviando} />
         </form>

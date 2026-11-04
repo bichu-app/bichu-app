@@ -1,3 +1,19 @@
+import consentimento from './consentimento-do-achador.json';
+
+/**
+ * O texto do consentimento, e a versão dele, como a tela os exibe.
+ *
+ * **A FONTE é o servidor** (`src/modules/found/domain/consentimento-de-contato.ts`):
+ * é ele que grava o texto no registro, resolvendo-o a partir da versão que esta
+ * tela manda. Este arquivo é a cópia exibida, e
+ * `make verificar-texto-do-consentimento` prova que as duas são iguais byte a
+ * byte — se divergirem, o registro afirma que a pessoa leu o que ela não leu.
+ */
+export const CONSENTIMENTO_DO_ACHADOR = {
+  versao: consentimento.versao,
+  texto: consentimento.texto,
+};
+
 export const TAG = {
   tituloDaPagina: 'Avisar o tutor',
   descricaoDaPagina: 'Achou um pet com a plaquinha do Bichu? Avise o tutor com um toque.',
@@ -14,6 +30,40 @@ export const TAG = {
   botaoAvisarDeNovo: 'Avisar o tutor de novo',
   enviando: 'Avisando o tutor…',
   abaixoDoBotao: 'É um toque. Você não precisa se cadastrar.',
+
+  // O CONTATO DE QUEM ACHOU, sob consentimento (decisao do cliente, 03/11/2026).
+  //
+  // Tudo aqui vive DENTRO do ramo `estaPerdido`, junto do botao de avisar: sem
+  // pet perdido nao ha aviso, e sem aviso nao ha a quem mandar contato. Os dois
+  // casos de e2e do PR 162 afirmam que `input[type=email]`, `input[type=tel]` e
+  // `textarea` somam ZERO no estado nao perdido, e e assim que tem de continuar.
+  //
+  // O `<details>` e deliberado, e nao enfeite: ele fecha a secao SEM JavaScript,
+  // preservando "e um toque" para quem so quer avisar e ir embora. Quem quer ser
+  // chamado abre, preenche e marca -- e quem nao quer nem ve os campos.
+  contatoResumo: 'Quer que o tutor fale com você? (opcional)',
+  contatoTexto:
+    'Você não precisa deixar nada: o aviso chega ao tutor do mesmo jeito, e ele responde pela conversa do Bichu.',
+  campoNomeDoAchador: 'Seu nome',
+  campoEmailDoAchador: 'Seu e-mail',
+  campoTelefoneDoAchador: 'Seu telefone',
+  ajudaTelefoneDoAchador: 'Com DDD. Por exemplo: 11 91234-5678.',
+  campoRecado: 'Recado para o tutor',
+  ajudaRecado:
+    'Onde você está com ele e como ele está. Telefone, e-mail e endereço escritos aqui são retirados — para isso existem os campos acima.',
+  consentimentoRotulo: 'Aceito compartilhar meus dados com o tutor do pet',
+  // A finalidade, escrita junto da caixinha. Nao e o texto do registro -- o
+  // texto do registro e `CONSENTIMENTO_DO_ACHADOR.texto`, exibido logo abaixo.
+  consentimentoFinalidade: 'Para quê: o tutor entrar em contato com você e recuperar o pet. Mais nada.',
+  erroConsentimento:
+    'Marque "Aceito compartilhar meus dados com o tutor do pet" para ele receber seu e-mail e telefone — ou apague os dois campos e avise sem eles.',
+  erroTelefoneDoAchador: 'Confira o telefone: precisa do DDD e do número.',
+  erroContatoVazio: 'Preencha seu e-mail ou seu telefone, senão não há contato para o tutor usar.',
+  // Depois de avisar COM consentimento. Nao ha como desfazer, e a tela nao
+  // oferece um desfazer que o produto nao tem.
+  avisadoComContato: 'O tutor recebeu seu contato junto do aviso, e pode falar com você.',
+  avisadoSemContato:
+    'O tutor foi avisado, mas não conseguimos enviar o seu contato. Ele ainda pode responder pela conversa do Bichu.',
 
   // O pet existe, a tag vale, e o tutor NAO marcou o pet como perdido: aqui nao
   // ha aviso para enviar, e e por isso que o botao sai da pagina. Mas quem
