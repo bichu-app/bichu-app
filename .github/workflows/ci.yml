@@ -236,6 +236,26 @@ jobs:
       - name: as iscas do portao do commit de build reprovam
         run: make --no-print-directory verificar-commit-de-build-autoteste
 
+      # AS ISCAS DAS FUNCOES PURAS DO CD, E AQUI ELAS GANHARAM A CHAVE DE SITE
+      # (04/11/2026). `make verificar-cd-autoteste` ja existia e so rodava no
+      # laptop: `make verificar` nao e chamado por esta esteira, cada portao tem
+      # o passo dele, e este nao tinha nenhum. Entao as iscas do CD nunca viram
+      # um PR -- e as novas, da chave de site por destino, teriam nascido na
+      # mesma sombra.
+      #
+      # O defeito que elas guardam: ate 04/11 o portao do artefato do painel
+      # conferia que a chave de site do reCAPTCHA estava DENTRO da imagem
+      # tirando o esperado da MESMA variavel que o build usou -- controle
+      # positivo que sai do valor medido aprova qualquer valor. Seguir
+      # `infra/roteiro-provisionamento.md` ao pe da letra publicava o painel de
+      # HOMOLOGACAO com a chave de PRODUCAO, e nada reprovava. Mesma familia do
+      # #161 no `API_BASE_URL` do APK.
+      #
+      # Nao usa docker, nao usa rede e nao le chave nenhuma: as iscas inventam
+      # os valores e calculam as impressoes digitais na hora. Milissegundos.
+      - name: as iscas das funcoes puras do CD reprovam, chave de site por destino inclusa
+        run: make --no-print-directory verificar-cd-autoteste
+
       # BICHUS-219. O `portao` recusa `skipped` no nivel de JOB. Passo pulado
       # dentro de job que reporta sucesso nao passa por la -- e era assim que o
       # job `codigo` inteiro (lint, tipos, tipos gerados, suite unitaria) podia

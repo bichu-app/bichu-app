@@ -654,6 +654,25 @@ autoteste() {
   m="$(pilha_do_texto api "$H" | tail -2)"; m="$(sed -n '1p' <<<"$m" | cut -d'|' -f4)"
   verdade "a proxima reversao leva a X, e nao de volta a Z" '[[ "$m" == X ]]'
 
+  # --- AS ISCAS DA CHAVE DE SITE POR DESTINO (04/11/2026) ----------------
+  # Elas moram em `infra/cd/construir-imagem.sh`, junto da funcao que
+  # exercitam, e sao CHAMADAS daqui pelo mesmo motivo que as iscas do APK sao
+  # chamadas de dentro do `verificar-apk.sh`: alvo proprio e alvo que o
+  # fechamento esquece de rodar, e um portao sem as iscas dele volta a aprovar
+  # qualquer coisa. Este autoteste e o que `make verificar-cd-autoteste` roda, e
+  # ele entra em `make verificar` por ali -- sem editar o Makefile.
+  #
+  # Nao usa docker, nao usa rede e nao le a chave de ninguem: as iscas inventam
+  # os valores e calculam as impressoes na hora.
+  local construir; construir="$(dirname "${BASH_SOURCE[0]}")/construir-imagem.sh"
+  if [[ ! -f "$construir" ]]; then
+    isca REPROVA "infra/cd/construir-imagem.sh existe para o autoteste da chave de site poder rodar"
+  elif ACAO=autoteste bash "$construir"; then
+    isca ok "as iscas da chave de site por destino reprovam a chave do outro ambiente e aprovam a declarada"
+  else
+    isca REPROVA "as iscas da chave de site por destino nao passaram: o portao do painel voltou a aprovar qualquer chave"
+  fi
+
   (( erros == 0 )) || { printf '\nO PORTAO ESTA CEGO: %s isca(s) com resultado errado\n' "$erros"; exit 1; }
   printf '\nAUTOTESTE APROVADO\n'
 }

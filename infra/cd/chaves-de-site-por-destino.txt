@@ -1,0 +1,64 @@
+*** A CHAVE DE SITE QUE CADA DESTINO DEVE ASSAR NA IMAGEM DO PAINEL ***
+Declaracao lida por `infra/cd/construir-imagem.sh`. Criada em 04/11/2026.
+
+POR QUE ESTE ARQUIVO EXISTE. Ate 04/11/2026 o portao do artefato do painel
+conferia que a chave de site do reCAPTCHA que o build usou estava DENTRO da
+imagem -- e so isso. O controle positivo saia do proprio valor do build, entao
+ele comparava o valor com ele mesmo e APROVAVA qualquer valor. E a mesma classe
+de defeito que o #161 fechou no `API_BASE_URL` do APK, por outra porta: quem
+seguisse `infra/roteiro-provisionamento.md` ao pe da letra (`set -a; . .env;
+set +a`) publicaria o painel de HOMOLOGACAO com a chave de PRODUCAO, o captcha
+do painel pararia de funcionar, e nenhum portao diria nada.
+
+O ANCORA MUDOU DE LUGAR. A impressao digital esperada e DECLARADA aqui, fora do
+ambiente do build. O portao compara o valor do ambiente com esta declaracao
+ANTES de construir, e so depois cobra que ele esteja na imagem. As duas
+conferencias juntas fecham a cadeia: declarado == ambiente == assado.
+
+SO A IMPRESSAO DIGITAL, NUNCA O VALOR. A chave de SITE e publica por desenho
+(vai no HTML de qualquer pagina que usa o reCAPTCHA), mas ela nao precisa estar
+aqui para ser conferida: comparar impressoes digitais basta, e a mesma impressao
+ja e publica nas tags das imagens (`-k<12 do sha256>`). A chave SECRETA
+correspondente nao e publica e nao aparece em lugar nenhum deste repositorio.
+
+A impressao e os 12 primeiros digitos hexadecimais do sha256 do valor EXATO da
+variavel, sem nova linha no fim:
+
+    printf '%s' "$VITE_CAPTCHA_SITE_KEY" | shasum -a 256 | cut -c1-12
+
+DE ONDE SAI O VALOR NA HORA DE CONSTRUIR. Do PROVEDOR, pelo nome, e nunca de um
+arquivo copiado a mao -- o passo 7.2 do roteiro traz o comando. O nome no
+provedor esta na ultima coluna para que a leitura no provedor e a declaracao
+daqui sejam a MESMA coisa, conferivel por quem quiser:
+
+    gcloud recaptcha keys list --project=bichu-app-508914 \
+      --format='table(name,displayName,webSettings.allowedDomains)'
+
+O QUE NAO DISTINGUE OS DESTINOS, e esta escrito para ninguem se enganar: as duas
+chaves permitem o MESMO dominio (`bichu.app`, que no reCAPTCHA cobre os
+subdominios). O dominio nao separa `hml` de `prod`, e um portao que tentasse
+decidir por ele aprovaria as duas em qualquer lugar. Quem separa e esta
+declaracao, e o que a sustenta e a medicao de 04/11/2026 registrada no passo 7.2
+do roteiro: a API de homologacao de pe valida contra `-k7f62b3562293`, e o
+pacote servido em `admin-hml.bichu.app` carrega essa mesma chave.
+
+LINHA QUE FALTA NAO E LINHA QUE APROVA. Destino sem linha aqui, ou exigencia sem
+linha para aquele destino, REPROVA com motivo nomeado
+(`DESTINO_NAO_DECLARADO`, `EXIGENCIA_NAO_DECLARADA`). Duas linhas para o mesmo
+par reprovam tambem (`DECLARACAO_AMBIGUA`): declaracao ambigua nao e declaracao.
+
+A LINHA DE DECLARACAO COMECA COM `CHAVE`, e o resto deste arquivo e prosa. O
+marcador nao e enfeite: sem ele o leitor teria de adivinhar quais linhas sao
+declaracao, e qualquer paragrafo com quatro palavras viraria uma. Com ele, a
+regra e exata -- linha de declaracao e linha cujo PRIMEIRO campo e `CHAVE`, e
+mais nada neste arquivo pode ser lido como tal.
+
+#     destino  variavel                impressao     nome-no-provedor
+CHAVE hml      VITE_CAPTCHA_SITE_KEY   7f62b3562293  bichu-app-hml
+CHAVE prod     VITE_CAPTCHA_SITE_KEY   e7e002d715e9  bichu-app
+
+NOTA SOBRE `prod`, 04/11/2026. A linha de `prod` registra o que o provedor ja
+diz -- a chave de display name `bichu-app` e a de producao --, e NINGUEM a
+exercitou ainda: as seis tags de `bichu-admin-web` publicadas no registro nesta
+data sao todas `-k7f62b3562293`, isto e, todas de homologacao. Producao sobe no
+lancamento; quando subir, esta linha e o que o portao vai cobrar.
