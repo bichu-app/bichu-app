@@ -61,9 +61,11 @@ library;
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/mural_api.dart';
 import 'package:bichu/api/reautenticacao.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/telas/mural/tela_do_mural.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
@@ -75,6 +77,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+// `json200`, `problema` e `urlBaseDeTeste` vivem na ajuda de tela do pacote.
+// O caminho relativo atravessa o link simbolico `app/test/a11y`, que e como
+// `acao_de_controle_test.dart` ja importa a mesma ajuda.
+import '../telas/ajuda_de_tela.dart';
 
 /// A casca minima com o TEMA DO APP instalado.
 ///
@@ -322,4 +329,137 @@ Widget conviteDePasskeyReal({required bool escuro}) {
     escuro: escuro,
     child: const ConviteDePasskey(rotuloDoAparelho: 'Aparelho de medicao'),
   );
+}
+
+// ---------------------------------------------------------------------------
+// O MURAL (04/11/2026)
+// ---------------------------------------------------------------------------
+//
+// O defeito: o CORACAO de "curtido" da linha de acoes do cartao pintava
+// `cores.urgency` -- a tinta de PREENCHIMENTO do banner de pet perdido --
+// sobre `cores.surface`, que e o que o proprio cartao pinta
+// (`tela_do_mural.dart`, o `Container` do cartao). No tema escuro `urgency` e
+// `ember.800` (#6B220A) e `surface` e `bark.900` (#17150F): dois marrons
+// quase pretos, **1.62:1**, piso de 3.0 do SC 1.4.11 para icone. No claro o
+// mesmo par da 6.99:1 e passava -- de novo um tema so, de novo o acidente que
+// faz o defeito parecer intencional.
+//
+// E A MESMA CLASSE DE 03/11, pela terceira vez: tinta de um preenchimento
+// pintada sobre outra superficie. `urgency` tem a tinta dela, que e
+// `on-urgency`, e ela vale SOBRE `urgency` -- nao sobre a superficie do
+// cartao.
+//
+// POR QUE NENHUM PORTAO ALCANCAVA:
+//
+//   1. `widgets_reais.dart` nao montava o Mural. A galeria cobria os widgets
+//      COMPARTILHADOS (`widgets/`), e o coracao mora numa TELA
+//      (`telas/mural/`), que e justamente o que o cabecalho deste arquivo
+//      declarou fora de cobertura (BICHUS-322);
+//   2. dos 86 pares de `design/contrast-pairs.json`, `urgency` nao aparece
+//      como FRENTE em nenhum -- medido, com controle positivo: o filtro casou
+//      os 4 pares em que `urgency` aparece como FUNDO (`banner-perdido` e
+//      `selo-perdido`, nos dois temas) antes de a ausencia valer. Quem e
+//      medido como frente e `on-urgency`. Par que ninguem escreveu, lista a
+//      mao nao reprova.
+//
+// O CONSERTO usa um par QUE A TABELA JA PUBLICA, e a escolha nao e minha:
+// `icone-pet-selecionado-sobre-surface` ja declara `primary` sobre `surface`,
+// piso 3.0, razao 7.84 no claro e 8.59 no escuro, veredito `passa`. O coracao
+// e estruturalmente o MESMO objeto daquele par -- um icone de ESTADO
+// (selecionado / nao selecionado) sobre a superficie do cartao -- e o par do
+// nao-curtido, `text-secondary` sobre `surface`, e literalmente
+// `icone-pet-sobre-surface` (8.60 / 9.31). O app estava discordando da propria
+// tabela em UM dos dois ramos.
+//
+// `urgency` foi RECUSADA como frente, e nao por ser ilegivel so no escuro:
+// urgency e o vocabulario de PET PERDIDO no produto (banner, selo, faixa). Um
+// coracao de curtida vestindo a cor do pet perdido disputa aquele significado
+// na mesma lista onde os dois aparecem -- o cartao de pet perdido e a
+// publicacao do Mural convivem na timeline.
+
+/// Uma publicacao do Mural, com o coracao no estado que o caso pede.
+///
+/// `curtiEu` NAO E detalhe de fixture: e ele que escolhe o ramo do ternario
+/// `_curti ? cores.urgency : cores.textSecondary`. Montar um estado so
+/// deixaria metade do defeito fora da medicao, que e exatamente como ele
+/// chegou ao cliente.
+Map<String, dynamic> publicacaoDoMural({required bool curtida}) {
+  return <String, dynamic>{
+    'ref': 'AaBbCcDdEeFfGgHhIiJjK1',
+    'body': 'o Bidu no parque',
+    'created_at': '2026-10-20T12:00:00.000Z',
+    'image': null,
+    'like_count': curtida ? 3 : 0,
+    'comment_count': 2,
+    'liked_by_me': curtida,
+    'author': <String, dynamic>{
+      'handle': 'marina-vet',
+      'display_name': 'Marina',
+      'photo_icon_url': null,
+    },
+    'mine': false,
+  };
+}
+
+/// Monta O MURAL DE VERDADE (`CorpoDoMural` sobre `MuralApi` sobre
+/// `ApiClient`) com uma publicacao, e deixa o coracao no estado pedido.
+///
+/// A PORTA E A DE VERDADE pelo mesmo motivo de `folhaDeSenhaReal`: um duble de
+/// `InteracaoDoMural` devolveria qualquer coisa para qualquer rota e o estado
+/// `curtiEu` deixaria de vir do corpo da resposta -- o fixture passaria a
+/// afirmar o ramo em vez de produzi-lo. Aqui o `liked_by_me` atravessa o
+/// decodificador do app, como no aparelho.
+///
+/// A REDE RESPONDE 404 FORA DAS DUAS ROTAS DE LEITURA, de proposito: este caso
+/// mede cor e nao exerce fluxo nenhum. Um toque no coracao que escapasse para
+/// a rede apareceria como 404 e nao como sucesso silencioso.
+Future<void> montarOMural(
+  WidgetTester tester, {
+  required bool escuro,
+  required bool curtida,
+}) async {
+  // Janela alta: o `ListView` do Mural nao constroi o que esta fora da
+  // viewport, e a LINHA DE ACOES -- onde o coracao mora -- fica abaixo da
+  // dobra na janela padrao. Sem isto o coracao nunca entra na arvore e a
+  // medicao sai verde por nao ter olhado para nada.
+  tester.view.physicalSize = const Size(420, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+
+  final publicacao = publicacaoDoMural(curtida: curtida);
+  AppConfig.limparParaTeste();
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
+    cliente: MockClient((http.Request req) async {
+      final caminho = req.url.path;
+      if (caminho == '/v1/timeline' && req.method == 'GET') {
+        return json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[publicacao],
+          'next_cursor': null,
+        });
+      }
+      if (caminho == '/v1/me/publications' && req.method == 'GET') {
+        return json200(<String, dynamic>{
+          'items': <dynamic>[],
+          'next_cursor': null,
+        });
+      }
+      return problema('not-found', 404);
+    }),
+    tokenDeAcesso: () async => 'token-de-medicao',
+  );
+
+  await tester.pumpWidget(
+    cascaReal(
+      escuro: escuro,
+      child: SingleChildScrollView(
+        child: CorpoDoMural(
+          leitura: MuralApi(api),
+          interacao: MuralApi(api),
+          canalConfirmado: true,
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }

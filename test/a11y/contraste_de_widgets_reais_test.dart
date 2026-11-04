@@ -22,6 +22,7 @@
 //   flutter test test/a11y
 
 import 'package:bichu/theme/bichu_tokens.g.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures/isca_par_trocado.dart';
@@ -348,6 +349,111 @@ void main() {
             '${relatorio(v)}',
       );
     });
+
+    // -----------------------------------------------------------------------
+    // O MURAL (04/11/2026)
+    // -----------------------------------------------------------------------
+    //
+    // A PRIMEIRA TELA desta galeria, e por isso o cabecalho de
+    // `widgets_reais.dart` declarava as telas fora de cobertura: o coracao de
+    // "curtido" mora em `telas/mural/`, nao em `widgets/`. O defeito era o
+    // mesmo par trocado de 03/11, pela terceira vez -- `urgency`, tinta de
+    // PREENCHIMENTO do banner de pet perdido, por cima da superficie do
+    // cartao: **1.62:1 no escuro**, piso de 3.0 do SC 1.4.11.
+    //
+    // OS DOIS ESTADOS DO CORACAO SAO CASOS SEPARADOS, e nao um caso com dois
+    // ramos, porque sao dois PARES diferentes -- `primary` no curtido,
+    // `text-secondary` no nao-curtido -- e so um dos dois estava errado. Um
+    // caso que medisse os dois juntos nao diria qual.
+
+    for (final curtida in <bool>[true, false]) {
+      final estado = curtida ? 'CURTIDO' : 'nao curtido';
+
+      testWidgets('O MURAL, coracao $estado, tema $tema', (tester) async {
+        await montarOMural(tester, escuro: escuro, curtida: curtida);
+
+        // CONTROLE POSITIVO DA MONTAGEM: a publicacao chegou a arvore. O Mural
+        // come a falha de rede e desenha estado vazio, entao uma rota que
+        // mudasse de endereco devolveria uma tela SEM cartao -- zero icone,
+        // zero violacao, verde por cegueira. Este cheque e o que separa
+        // "aprovado" de "nao olhei".
+        expect(
+          find.text('o Bidu no parque'),
+          findsOneWidget,
+          reason:
+              'REPROVA: a publicacao do fixture nao esta na arvore. Ou a rota '
+              'de leitura mudou de endereco e o Mural caiu no estado vazio, ou '
+              'o cartao deixou de montar. Nos dois casos nao ha coracao a '
+              'medir e o resultado anterior era verde por nao estar olhando.',
+        );
+
+        // CONTROLE POSITIVO DO RAMO, e nao so da presenca do cartao. O
+        // coracao CHEIO (`Icons.favorite`) so e pintado quando `liked_by_me`
+        // atravessou a resposta; o vazado (`Icons.favorite_border`) e outro
+        // ponto de codigo. Sem isto, um `liked_by_me` que parasse de ser
+        // decodificado levaria o ramo do defeito para fora da medicao e este
+        // caso continuaria verde dizendo a mesma coisa.
+        //
+        // E E `byIcon`, NAO `find.text` do glifo: `Icon` monta um `RichText`
+        // direto, e `find.text` so casa `Text` (precisaria de
+        // `findRichText: true`). A primeira versao deste controle usou
+        // `find.text` e reprovou os dois casos CURTIDOS dizendo que o coracao
+        // nao estava na arvore -- ele estava; o finder e que nao o alcancava.
+        // Controle que erra para o lado de reprovar se denuncia; o perigoso
+        // seria o contrario.
+        expect(
+          find.byIcon(curtida ? Icons.favorite : Icons.favorite_border),
+          findsOneWidget,
+          reason: curtida
+              ? 'REPROVA: o coracao CHEIO nao esta na arvore. O `liked_by_me` '
+                'do fixture nao chegou ao estado da tela, e e o ramo marcado '
+                'que carregava o par de 1.62:1.'
+              : 'REPROVA: o coracao VAZADO nao esta na arvore num cartao que '
+                'o fixture declara nao curtido. O ramo errado foi pintado, e '
+                'o caso do estado curtido deixou de ser o unico que mede '
+                'aquele par.',
+        );
+
+        // E O OUTRO RAMO NAO PODE ESTAR NA ARVORE. Com um cartao so, os dois
+        // glifos juntos significariam que o fixture deixou de escolher o
+        // estado -- e entao os dois casos mediriam a mesma coisa e um deles
+        // estaria verde por redundancia, nao por conformidade.
+        expect(
+          find.byIcon(curtida ? Icons.favorite_border : Icons.favorite),
+          findsNothing,
+          reason:
+              'REPROVA: os DOIS estados do coracao estao na arvore ao mesmo '
+              'tempo. O fixture monta um cartao so, entao ou ele parou de '
+              'escolher o estado, ou o Mural passou a desenhar mais de uma '
+              'publicacao -- e nos dois casos este caso deixou de medir o '
+              'estado que o nome dele promete.',
+        );
+
+        final v = verificarContrasteDeTexto(
+          tester,
+          tela: 'mural/coracao-$estado',
+          tema: tema,
+          piso: 4.5,
+          isentarInativo: true,
+        );
+        expect(
+          v,
+          isEmpty,
+          reason:
+              'contraste abaixo do piso no Mural ($tema, coracao $estado). '
+              'Este e o defeito de 04/11/2026: o coracao de "curtido" pintava '
+              '`cores.urgency` sobre `cores.surface` -- 1.62:1 no tema escuro, '
+              'contra o piso de 3.0 do SC 1.4.11 para icone. No claro o mesmo '
+              'par dava 6.99:1 e passava, e e esse acidente de um tema so que '
+              'faz esta classe de defeito parecer intencional. A tinta de '
+              '`urgency` e `on-urgency`, e ela vale SOBRE `urgency`; sobre a '
+              'superficie do cartao quem a tabela publica para um icone de '
+              'estado e `primary` (7.84 / 8.59) e `text-secondary` '
+              '(8.60 / 9.31).\n'
+              '${relatorio(v)}',
+        );
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -394,6 +500,72 @@ void main() {
           'par exato que chegou ao cliente em 03/11/2026, e ela PRECISA '
           'reprovar. Se ela passou, os casos de widget real deste arquivo '
           'estao verdes por nao estarem medindo nada.',
+    );
+  });
+
+  testWidgets('ISCA o coracao com o par de 04/11 reprova a 1.62:1 no escuro', (
+    tester,
+  ) async {
+    await tester.pumpWidget(iscaDoCoracaoComParTrocado(escuro: true));
+    await tester.pumpAndSettle();
+
+    final medido = razaoMedidaDoTexto(tester, glifoDoCoracaoCurtido);
+    // O NUMERO E A ANCORA, e ele sai de dois tokens:
+    //   urgency (escuro) #6B220A  -- ember.800
+    //   surface (escuro) #17150F  -- bark.900
+    // 1.62:1 pela formula da WCAG 2.1. Se esta linha subir, ou `urgency`
+    // clareou ou `surface` escureceu -- e nos dois casos o que mudou foi um
+    // token, nunca a isca.
+    expect(medido, closeTo(1.62, 0.01));
+
+    // COM A ISENCAO LIGADA, de proposito, e pela mesma razao da isca da
+    // pastilha: o coracao e um controle ATIVO. Uma isencao que o dispensasse
+    // seria uma isencao que dispensa tudo.
+    final v = verificarContrasteDeTexto(
+      tester,
+      tela: 'isca-coracao',
+      tema: 'escuro',
+      piso: 4.5,
+      isentarInativo: true,
+    );
+    expect(
+      v.where((x) => x.tipo == TipoDeViolacao.contraste),
+      isNotEmpty,
+      reason:
+          'O VERIFICADOR PAROU DE MEDIR GLIFO DE ICONE. Esta isca pinta o '
+          'coracao com o par exato que o Mural montava em 04/11/2026, e ela '
+          'PRECISA reprovar. Se ela passou, os quatro casos do Mural deste '
+          'arquivo estao verdes por nao estarem medindo nada -- e o caminho '
+          'mais provavel para isso e alguem fazer `verificarContrasteDeTexto` '
+          'pular o glifo de icone, que NAO e texto legivel mas E o que o '
+          '`Icon` do Flutter renderiza.',
+    );
+
+    // E O PISO APLICADO TEM DE SER O DE ICONE, nao o de corpo. Sem este
+    // cheque a isca passaria a reprovar por 4.5 e continuaria verde no dia em
+    // que o glifo deixasse de ser classificado como objeto de interface -- o
+    // que silenciaria todo icone de 24px do app, que e a maioria deles.
+    final doIcone = v.firstWhere((x) => x.tipo == TipoDeViolacao.contraste);
+    expect(
+      doIcone.piso,
+      3.0,
+      reason:
+          'REPROVA: o piso aplicado ao glifo foi ${doIcone.piso} e nao 3.0. O '
+          'icone de 24px e objeto de interface (SC 1.4.11) e cai em "texto '
+          'grande" no `pisoEfetivo`. Um piso de 4.5 aqui reprovaria icone '
+          'legitimo; um piso mais alto que 3.0 some com a classe toda.',
+    );
+
+    // O ALVO TEM DE SE NOMEAR. A primeira versao deste portao reprovava com o
+    // alvo em branco (`::  ::`), porque o glifo vive na area de uso privado da
+    // fonte: numa tela com sete icones a reprovacao nao dizia qual deles era.
+    expect(
+      doIcone.alvo,
+      'icone U+${Icons.favorite.codePoint.toRadixString(16).toUpperCase()}',
+      reason:
+          'REPROVA: a reprovacao do glifo nao nomeia o alvo (veio '
+          '"${doIcone.alvo}"). Reprovacao que nao diz QUAL icone esta '
+          'ilegivel obriga quem le a adivinhar.',
     );
   });
 

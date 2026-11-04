@@ -306,7 +306,33 @@ List<String> isencoesEncontradas(WidgetTester tester) {
   return lista;
 }
 
-String _resumo(String t) => t.length <= 48 ? t : '${t.substring(0, 45)}...';
+/// O alvo, como ele aparece no relatorio.
+///
+/// GLIFO DE ICONE NAO E TEXTO LEGIVEL, e isso tinha consequencia pratica: o
+/// `Icon` do Flutter renderiza por `RichText`, entao ele CAI no verificador de
+/// texto (e bem: foi assim que o coracao do Mural, a 1.62:1, foi pego). Mas o
+/// caractere dele vive na area de uso privado da fonte, e `_resumo` o
+/// devolvia cru -- a reprovacao saia com o alvo em branco (`::  ::`), sem
+/// dizer QUAL icone da tela estava ilegivel. Reprovacao que nao nomeia o alvo
+/// obriga quem le a adivinhar, e numa tela com sete icones isso e quase o
+/// mesmo que nao reprovar.
+///
+/// O ponto de codigo identifica o glifo sem depender de tabela de nomes:
+/// `Icons.favorite` e U+E25B em toda versao do pacote de icones.
+String _resumo(String t) {
+  if (t.runes.length == 1) {
+    final ponto = t.runes.first;
+    // Area de uso privado do Unicode: E000-F8FF (BMP) e os dois planos
+    // suplementares, que e onde todo glifo de fonte de icone mora.
+    final usoPrivado = (ponto >= 0xE000 && ponto <= 0xF8FF) ||
+        (ponto >= 0xF0000 && ponto <= 0x10FFFD);
+    if (usoPrivado) {
+      final hex = ponto.toRadixString(16).toUpperCase().padLeft(4, '0');
+      return 'icone U+$hex';
+    }
+  }
+  return t.length <= 48 ? t : '${t.substring(0, 45)}...';
+}
 
 // ---------------------------------------------------------------------------
 // Alvo de toque e rotulo acessivel, pela arvore de semantica
