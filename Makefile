@@ -569,13 +569,20 @@ verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor
 #
 # A ARMADILHA QUE ELE FECHA, medida no banco de dados do `make` em 03/11/2026:
 #
-#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:3200
-#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:3200
+#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:<porta>
+#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:<porta>
 #   make -pn API_BASE_URL=... | grep '^API_BASE_URL'  -> o valor passado
+#
+# A PORTA NAO E FIXA, E ISSO REFORCA O CONSERTO. Ela vem de `portas.local.mk`,
+# gerado por `infra/escolher-portas.py`, e muda por maquina E por worktree --
+# MEDIDO em 03/11/2026, na mesma maquina e no mesmo dia: `3200` num worktree e
+# `3400` noutro. Um controle positivo tirado dessa variavel nao e so
+# autoaprovacao: ele concorda com um valor que nem e estavel entre duas copias
+# do mesmo repositorio.
 #
 # A atribuicao da linha 64 e `:=`, entao o AMBIENTE NAO SOBREPOE -- so a LINHA
 # DE COMANDO vence. Um alvo que herdasse o padrao compilaria o iOS apontado
-# para `http://localhost:3200`, que no aparelho do cliente nao fala com
+# para `http://localhost:<porta>`, que no aparelho do cliente nao fala com
 # servidor nenhum e nao tem como dizer isso: a tela so nao carrega.
 #
 # ELE RECUSA EM VEZ DE FORCAR O VALOR, e a escolha e deliberada. Forcar
@@ -600,7 +607,7 @@ verificar-apk-autoteste: ## as iscas das tres conferencias do APK (pacote, valor
 ios: verificar-ios-autoteste ## compila o iOS de release (--no-codesign), confere as chaves do Generated.xcconfig e o VALOR das dart-define dentro do binario; EXIGE API_BASE_URL= na linha de comando
 	@test '$(origin API_BASE_URL)' = 'command line' || { \
 	  echo 'REPROVA: `make ios` EXIGE `API_BASE_URL=` na LINHA DE COMANDO, e nao recebeu.' >&2; \
-	  echo '  MEDIDO em 03/11/2026: este Makefile atribui `API_BASE_URL := http://localhost:3200` com `:=`, entao o AMBIENTE NAO SOBREPOE e so a linha de comando vence. Herdar o padrao aqui compilaria o iOS apontado para a PROPRIA MAQUINA, e o aparelho do cliente nao tem como dizer isso -- a tela so nao carrega.' >&2; \
+	  echo '  MEDIDO em 03/11/2026: este Makefile atribui `API_BASE_URL := http://localhost:<porta>` com `:=`, entao o AMBIENTE NAO SOBREPOE e so a linha de comando vence. Herdar o padrao aqui compilaria o iOS apontado para a PROPRIA MAQUINA, e o aparelho do cliente nao tem como dizer isso -- a tela so nao carrega.' >&2; \
 	  echo '  Rode:  make ios API_BASE_URL=https://hml.bichu.app' >&2; \
 	  exit 1; }
 	API_BASE_URL='$(API_BASE_URL)' sh infra/verificacao/verificar-ios.sh

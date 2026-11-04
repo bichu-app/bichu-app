@@ -40,9 +40,16 @@
 #
 # MEDIDO em 03/11/2026 no banco de dados do `make` deste repositorio:
 #
-#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:3200
-#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:3200
+#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:<porta>
+#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:<porta>
 #   make -pn API_BASE_URL=... | grep '^API_BASE_URL'  -> o valor passado
+#
+# A PORTA NAO E FIXA, E ISSO REFORCA O CONSERTO. Ela vem de `portas.local.mk`,
+# gerado por `infra/escolher-portas.py`, e muda por maquina E por worktree --
+# MEDIDO em 03/11/2026, na mesma maquina e no mesmo dia: `3200` num worktree e
+# `3400` noutro. Um controle positivo tirado dessa variavel nao e so
+# autoaprovacao: ele concorda com um valor que nem e estavel entre duas copias
+# do mesmo repositorio.
 #
 # O `Makefile` atribui com `:=`, entao **o ambiente nao sobrepoe** e so a
 # LINHA DE COMANDO vence. Quem roda o alvo sem `API_BASE_URL=` ali compila um
@@ -51,8 +58,8 @@
 #
 # E ATE 03/11/2026 ESTE PORTAO APROVAVA ESSE BINARIO, por construcao: ele
 # montava a cadeia de CONTROLE POSITIVO a partir de `$API_BASE_URL`, a MESMA
-# variavel que o build usara. Com `localhost:3200` no ambiente, o controle
-# positivo que ele montava era `localhost:3200`, ele achava `localhost:3200`
+# variavel que o build usara. Com `localhost:<porta>` no ambiente, o controle
+# positivo que ele montava era `localhost:<porta>`, ele achava `localhost:<porta>`
 # no binario e aprovava. Controle que sai do valor medido nao e controle: e
 # autoaprovacao.
 #

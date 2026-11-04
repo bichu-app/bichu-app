@@ -48,9 +48,16 @@ A ARMADILHA DO `localhost`, E POR QUE ELA PRECISAVA DE DUAS TRAVAS
 
 MEDIDO em 03/11/2026 no banco de dados do `make` deste repositorio:
 
-    make -pn | grep '^API_BASE_URL'                -> http://localhost:3200
-    API_BASE_URL=... make -pn | grep '^API_BASE_URL' -> http://localhost:3200
+    make -pn | grep '^API_BASE_URL'                -> http://localhost:<porta>
+    API_BASE_URL=... make -pn | grep '^API_BASE_URL' -> http://localhost:<porta>
     make -pn API_BASE_URL=... | grep '^API_BASE_URL' -> o valor passado
+
+A PORTA NAO E FIXA, E ISSO REFORCA O CONSERTO: ela vem de
+`portas.local.mk`, gerado por `infra/escolher-portas.py`, e muda por
+maquina E por worktree -- MEDIDO em 03/11/2026, na mesma maquina e no
+mesmo dia: `3200` num worktree e `3400` noutro. Um controle positivo
+tirado dessa variavel nao e so autoaprovacao: ele concorda com um valor
+que nem e estavel entre duas copias do mesmo repositorio.
 
 Ou seja: o `Makefile` atribui com `:=`, entao **o ambiente nao sobrepoe** e so
 a LINHA DE COMANDO vence. Quem roda o alvo sem `API_BASE_URL=` na linha de
@@ -58,8 +65,8 @@ comando compila apontado para a propria maquina.
 
 E o portao antigo nao pegava isso, por construcao: ele montava a cadeia de
 CONTROLE POSITIVO a partir de `$API_BASE_URL`, a MESMA variavel que o build
-usara. Com `localhost:3200` no ambiente, o controle positivo que ele montava
-era `localhost:3200`, ele achava `localhost:3200` no binario e **APROVAVA** um
+usara. Com `localhost:<porta>` no ambiente, o controle positivo que ele montava
+era `localhost:<porta>`, ele achava `localhost:<porta>` no binario e **APROVAVA** um
 binario apontado para a maquina local. Controle que sai do valor medido nao e
 controle: e autoaprovacao.
 
@@ -531,6 +538,8 @@ def autoteste() -> int:
         # isso que acontece -- versao e commit certos, destino errado.
         com_endereco_local = _escrever(
             os.path.join(tmp, "com-endereco-local"),
+            # A porta e EXEMPLO: o portao casa o PREFIXO `http://localhost`,
+            # e a porta real varia por maquina e por worktree.
             _corpo_bom() + b"http://localhost:3200\x00",
         )
         # O FALSO POSITIVO QUE ESTA ISCA GUARDA. MEDIDO em 03/11/2026 no
