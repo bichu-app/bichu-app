@@ -61,10 +61,19 @@ const DO_ACHADOR = {
   email: `achador@${DOMINIO_DE_TESTE}`,
   telefone: '+5511900000001',
 };
-const DO_TUTOR = {
-  email: `tutor@${DOMINIO_DE_TESTE}`,
-  telefone: '+5511900000002',
-};
+/**
+ * O tutor é criado POR CENÁRIO, e por isso e-mail e telefone dele são únicos:
+ * `users_email_unico_ativo` recusa o segundo, e um valor fixo aqui fez os seis
+ * primeiros cenários desta suíte reprovarem por colisão — e não pelo que medem.
+ */
+let contaDeTutor = 0;
+function proximoTutor(): { readonly email: string; readonly telefone: string } {
+  contaDeTutor += 1;
+  return {
+    email: `tutor-${String(contaDeTutor)}@${DOMINIO_DE_TESTE}`,
+    telefone: `+55119220${String(10_000 + contaDeTutor)}`,
+  };
+}
 
 let banco: DbHandle;
 let db: Db;
@@ -98,8 +107,10 @@ async function cenario(): Promise<{
   readonly aviso: FoundReportId;
   readonly conversa: ConversationId;
   readonly token: string;
+  readonly doTutor: { readonly email: string; readonly telefone: string };
 }> {
-  const tutor = await criarConta('Tutor de Teste', DO_TUTOR.email, DO_TUTOR.telefone);
+  const doTutor = proximoTutor();
+  const tutor = await criarConta('Tutor de Teste', doTutor.email, doTutor.telefone);
   const pet = randomUUID() as PetId;
   await cliente.query(
     'INSERT INTO pets (id, owner_user_id, name, species_code, size_code) VALUES ($1,$2,$3,$4,$5)',
@@ -133,7 +144,19 @@ async function cenario(): Promise<{
     achadorComConta: null,
   });
 
-  return { aviso, conversa, token: bruto };
+  return { aviso, conversa, token: bruto, doTutor };
+}
+
+/**
+ * `count(*)` volta como NÚMERO neste projeto, e não como a string que o `pg`
+ * devolveria para `bigint` por padrão — há parser de `int8` configurado. Comparar
+ * contra `'0'` fez três casos desta suíte reprovarem com `0 !== '0'`, medindo o
+ * parser em vez do comportamento.
+ */
+function contagem(linhas: readonly { readonly n: string | number }[]): number {
+  const bruto = linhas[0]?.n;
+  assert.ok(bruto !== undefined, 'a consulta de contagem nao devolveu linha');
+  return Number(bruto);
 }
 
 interface Divulgavel {
@@ -262,11 +285,11 @@ void describe('o consentimento do contato do achador, contra Postgres de verdade
     // APENDA: um segundo consentimento do mesmo aviso ACRESCENTA linha, e nao
     // sobrescreve a primeira. O historico e a evidencia.
     await divulgar(alvo);
-    const { rows: depois } = await cliente.query<{ n: string }>(
+    const { rows: depois } = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM finder_contact_consents WHERE found_report_id = $1',
       [alvo.aviso],
     );
-    assert.equal(depois[0]?.n, '2', 'o segundo consentimento sobrescreveu o primeiro');
+    assert.equal(contagem(depois), 2, 'o segundo consentimento sobrescreveu o primeiro');
   });
 
   void it('CASO 4 — a leitura do achador nao traz telefone nem e-mail do TUTOR', async () => {
@@ -284,8 +307,8 @@ void describe('o consentimento do contato do achador, contra Postgres de verdade
     );
 
     const tudo = JSON.stringify(mensagens);
-    for (const doTutor of [DO_TUTOR.email, DO_TUTOR.telefone]) {
-      assert.ok(!tudo.includes(doTutor), `dado do TUTOR chegou ao achador: ${doTutor}`);
+    for (const valor of [alvo.doTutor.email, alvo.doTutor.telefone]) {
+      assert.ok(!tudo.includes(valor), `dado do TUTOR chegou ao achador: ${valor}`);
     }
   });
 
@@ -340,17 +363,17 @@ void describe('o consentimento do contato do achador, contra Postgres de verdade
       'texto em branco nao derrubou a divulgacao',
     );
 
-    const { rows: consentimentos } = await cliente.query<{ n: string }>(
+    const { rows: consentimentos } = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM finder_contact_consents WHERE found_report_id = $1',
       [alvo.aviso],
     );
-    const { rows: mensagens } = await cliente.query<{ n: string }>(
+    const { rows: mensagens } = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM conversation_messages WHERE conversation_id = $1 AND system_kind = $2',
       [alvo.conversa, ESPECIE_DA_DIVULGACAO],
     );
 
-    assert.equal(consentimentos[0]?.n, '0', 'a linha de consentimento ficou gravada');
-    assert.equal(mensagens[0]?.n, '0', 'a mensagem de divulgacao ficou gravada');
+    assert.equal(contagem(consentimentos), 0, 'a linha de consentimento ficou gravada');
+    assert.equal(contagem(mensagens), 0, 'a mensagem de divulgacao ficou gravada');
   });
 
   void it('sem contato nenhum para divulgar, nada e gravado', async () => {
@@ -360,11 +383,11 @@ void describe('o consentimento do contato do achador, contra Postgres de verdade
       'consentir em compartilhar NADA produziu registro',
     );
 
-    const { rows } = await cliente.query<{ n: string }>(
+    const { rows } = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM finder_contact_consents WHERE found_report_id = $1',
       [alvo.aviso],
     );
-    assert.equal(rows[0]?.n, '0');
+    assert.equal(contagem(rows), 0);
   });
 
   void it('`finder_contact` e valor aceito de `system_kind`, e `contato_do_achador` nao', async () => {

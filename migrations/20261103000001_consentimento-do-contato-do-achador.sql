@@ -80,9 +80,16 @@ CREATE TABLE finder_contact_consents (
   -- nao compilar e tambem nao gravar. Espelha
   -- `FinalidadeDoConsentimento` em
   -- `src/modules/found/domain/consentimento-de-contato.ts`.
+  --
+  -- `= ANY (ARRAY[...])` e nao `IN (...)` porque o valor e UM: o Postgres
+  -- normaliza `IN ('x')` para `= 'x'::text`, e com isso a restricao deixa de ser
+  -- legivel como lista fechada por `conjunto-exato-dos-checks` -- ela cairia na
+  -- gaveta de "CHECK com literal de texto" e a lista pararia de ser conferida.
+  -- Escrita assim, ela continua sendo uma LISTA, que e o que ela e: hoje com um
+  -- valor, e com a conferencia armada para o dia em que alguem tentar um segundo.
   purpose         text        NOT NULL
                               CONSTRAINT finder_contact_consents_finalidade_conhecida
-                              CHECK (purpose IN ('owner_contact')),
+                              CHECK (purpose = ANY (ARRAY['owner_contact'])),
 
   -- A VERSAO do texto exibido.
   consent_version text        NOT NULL
