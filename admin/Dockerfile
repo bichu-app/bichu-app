@@ -126,13 +126,19 @@ RUN node -e ' \
 # a conferencia nao depende do app.
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS commit
 ARG BUILD_COMMIT
+# A ARVORE de que a imagem saiu (02/11/2026). Vazio NAO reprova aqui: o build
+# pelo compose nao sabe a arvore do contexto, e so o CD exige o carimbo --
+# `infra/cd/construir-imagem.sh` sempre o passa e confere o artefato, e
+# `infra/cd/implantar.sh` recusa implantar imagem com a arvore vazia.
+ARG BUILD_TREE
 RUN set -eu; \
     if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
       echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
       echo "  Via compose: BUILD_COMMIT=\$(git rev-parse HEAD) docker compose build admin-web" >&2; \
       exit 1; \
     fi; \
-    printf '%s' "$BUILD_COMMIT" > /commit
+    printf '%s' "$BUILD_COMMIT" > /commit; \
+    printf '%s' "${BUILD_TREE:-}" > /arvore
 
 # --------------------------------------------------------------------------
 # ESTAGIO final: so o servidor estatico e os arquivos
@@ -156,6 +162,7 @@ RUN apk add --no-cache --virtual .setcap libcap \
     && apk del .setcap
 
 COPY --from=commit /commit /etc/bichu/commit
+COPY --from=commit /arvore /etc/bichu/arvore
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build --chown=root:root /saida /srv/admin
 

@@ -131,14 +131,31 @@ passa a afirmar em vez de calar. Para apontar um commit específico,
 | `make down` | derruba preservando o volume |
 | `make portas` | reescolhe o par de portas desta máquina |
 | `make verificar` | roda os portões locais, na ordem da esteira |
-| `make fechar-integracao` | **fecha uma integração**: `verificar` + Flutter + APK de verdade |
+| `make fechar-integracao API_BASE_URL_DO_APK=…` | **fecha uma integração**: `verificar` + Flutter + APK de verdade. O alvo **recusa** sem a variável |
 
 O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
 
 ### Fechamento de integração
 
-**Quem integra roda `make fechar-integracao`.** Não há mecanismo que substitua
-isso, e esta seção existe para que a obrigação tenha onde ser lida.
+**Quem integra roda isto:**
+
+```sh
+make fechar-integracao API_BASE_URL_DO_APK=https://hml.bichu.app
+```
+
+Não há mecanismo que substitua isso, e esta seção existe para que a obrigação
+tenha onde ser lida. **O alvo recusa sem a variável**, porque ele compila um APK
+de verdade e o `API_BASE_URL` padrão do `Makefile` é `http://localhost:<porta>`
+— atribuído com `:=`, então o ambiente não sobrepõe e só a linha de comando
+vence. Sem o valor, o fechamento carimbava um recibo **certificando um APK
+apontado para a máquina local**.
+
+**O nome da variável é próprio de propósito, e não o encurte:** `API_BASE_URL=`
+na linha de comando vazaria para os outros seis sub-makes do fechamento, que
+precisam da URL **local** — `verificar-portas` compararia a porta publicada pela
+borda com os 443 que o esquema de `https://` dá por padrão, e o `compose.yaml`
+subiria a pilha efêmera apontada para hml. Com o nome próprio, o valor chega só
+ao sub-make do APK.
 
 `make verificar` é o laço de quem desenvolve e **não compila um APK**, de
 propósito: `apk` precisa de JDK 17, do SDK do Android e da distribuição do

@@ -719,7 +719,19 @@ jobs:
       - name: a matriz de rastreabilidade concorda com o contrato
         run: node dist/tools/portao-rastreabilidade.js
 
-      - name: compatibilidade contra main
+      # 04/11/2026: ESTE PASSO SE CHAMAVA `compatibilidade contra main`, e o
+      # nome afirmava um mecanismo que nao existe. A base que ele mede e
+      # `origin/` + `github.base_ref` -- a branch de DESTINO do PR, que neste
+      # repositorio e a `development`, e nunca a `main`. Ver a linha `ref=`
+      # abaixo, que e de onde sai o veredito.
+      #
+      # O nome ERRADO JA ENSINOU A COISA ERRADA: uma frente foi instruida a
+      # medir quebra de contrato contra a `main`. E a mesma familia de defeito
+      # dos dois comentarios que este PR corrige -- prosa que afirma mecanismo
+      # ausente --, e por isso ela entra aqui junto.
+      #
+      # NENHUMA LINHA DE LOGICA MUDOU: so o nome do passo.
+      - name: compatibilidade contra a base do PR
         if: github.event_name == 'pull_request'
         run: |
           # ESTE TRECHO TINHA A MESMA FORMA DO DEFEITO DO SONARCLOUD, e por
@@ -1754,9 +1766,15 @@ jobs:
   #      imagem pelo compose, iscas de build, pilha isolada, restricoes no
   #      runtime e a sonda D33/D34/D41/D48 com eco no lugar da API.
   #
-  # NAO PUBLICA EM REGISTRY, pelo mesmo motivo da API e do site: o mecanismo de
-  # hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo 7), o
-  # repositorio vai para o host e o compose constroi la.
+  # NAO PUBLICA EM REGISTRY, pelo mesmo motivo da API e do site: quem publica e
+  # `infra/cd/construir-imagem.sh`, rodado do laptop, e o host puxa por DIGEST
+  # (`infra/cd/implantar.sh`). A esteira so verifica.
+  #
+  # O MOTIVO ANTIGO ERA OUTRO, e ficou errado: ate 02/11/2026 este comentario
+  # dizia que o repositorio ia para o host e o compose construia la, citando o
+  # passo 7 do roteiro. Aquele mecanismo CAIU -- construir na VM tirou o hml do
+  # ar em 27/10/2026 -- e o passo 7 foi reescrito. A conclusao (a esteira nao
+  # publica) continua valendo; so a razao mudou.
   #
   # SEM FILTRO DE CAMINHO: `skipped` e o que o `portao` recusa. Sem
   # `admin/package.json` o job REPROVA, e e para reprovar: o backoffice nao tem
@@ -1928,6 +1946,20 @@ jobs:
       # PRECISA reprovar. Isca que passa derruba o job com "o verificador parou
       # de verificar", porque a partir dali todo o resto esta verde por nao
       # estar olhando para nada (docs/06-design-system.md 18.2.1).
+      #
+      # DESDE 03/11/2026 ELE TAMBEM MEDE OS WIDGETS DO APP, e nao so as
+      # replicas. O que mudou e por que: este job estava VERDE no dia em que o
+      # cliente relatou que a pastilha de filtro marcada nao dava leitura --
+      # ela pintava `on-action-fill`, a tinta do preenchimento de ACAO, sobre
+      # `primary`, a 2.10:1 no tema claro. As duas travas nao a pegaram porque
+      # nenhuma das duas olhava para o app: a trava A renderiza as telas de
+      # `telas.dart`, que sao replicas escritas a mao, e a trava B mede uma
+      # LISTA de 86 pares mantida em `design/contrast-pairs.json`, na qual
+      # `on-action-fill` so e medido contra `action-fill`. Par que o app monta e
+      # que ninguem lembrou de escrever na lista nao reprovava em lugar nenhum.
+      # `test/a11y/contraste_de_widgets_reais_test.dart` monta os widgets de
+      # verdade, nos dois temas, ABRINDO a folha inferior onde a pastilha mora,
+      # e mede o par que saiu da arvore de renderizacao.
       - name: suite de acessibilidade e iscas
         working-directory: app
         run: flutter test test/a11y
@@ -2267,10 +2299,15 @@ jobs:
   # sobe com as MESMAS restricoes que o compose declara, porque restricao que so
   # vale no YAML e restricao que ninguem viu funcionar.
   #
-  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica. O
-  # mecanismo de hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo
-  # 7): o repositorio vai para o host e o compose constroi la. Inventar registry
-  # so para o site daria dois mecanismos de implantacao para uma maquina so.
+  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica.
+  # Quem publica e `infra/cd/construir-imagem.sh`, rodado do laptop, e o host
+  # puxa por DIGEST (`infra/cd/implantar.sh`). Publicar daqui daria dois
+  # mecanismos de implantacao para uma maquina so.
+  #
+  # O MOTIVO ANTIGO ERA OUTRO, e ficou errado: ate 02/11/2026 este comentario
+  # dizia que o repositorio ia para o host e o compose construia la, citando o
+  # passo 7 do roteiro. Construir na VM tirou o hml do ar em 27/10/2026, e o
+  # passo 7 foi reescrito. A conclusao nao mudou; a razao mudou.
   #
   # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
   # que o `portao` recusa.

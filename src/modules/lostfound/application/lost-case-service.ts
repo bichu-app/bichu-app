@@ -3,9 +3,11 @@ import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import {
   atingiuTetoDaConta,
+  avisosParaAbrirCaso,
   bloqueiosParaAbrirCaso,
   rotuloDaArea,
   temOndeSuficiente,
+  type Aviso,
   type Bloqueio,
 } from '../domain/abertura-do-caso.js';
 import {
@@ -102,6 +104,8 @@ export interface PreviaDoCaso {
   readonly raioEmMetros: number;
   readonly rotuloDaArea: string | null;
   readonly bloqueios: readonly Bloqueio[];
+  /** `warnings`: o tutor precisa saber, e **nada** aqui impede abrir. */
+  readonly avisos: readonly Aviso[];
 }
 
 export interface EntradaDoCaso {
@@ -133,12 +137,15 @@ export interface ContextoDoChamador {
   readonly ip: string | undefined;
 }
 
+/**
+ * **`pet_photo_missing` saiu daqui em 03/11/2026**, junto com a trava: o tipo
+ * [Bloqueio] encolheu, este `switch` é exaustivo e sem `default`, e por isso
+ * recolocar a foto como bloqueio não compila sem passar por este arquivo.
+ */
 function problemaDoBloqueio(bloqueio: Bloqueio): ReturnType<typeof problemas.naoEncontrado> {
   switch (bloqueio) {
     case 'contact_channel_unverified':
       return problemas.canalDeContatoNaoVerificado();
-    case 'pet_photo_missing':
-      return problemas.petSemFoto();
     case 'pet_already_lost':
       return problemas.petJaEstaPerdido();
   }
@@ -246,6 +253,7 @@ export class LostCaseService {
       raioEmMetros: RAIO_DO_ALERTA_EM_METROS,
       rotuloDaArea: centro === undefined ? rotuloDaArea(estado.areaDeReferenciaDoTutor) : null,
       bloqueios: bloqueiosParaAbrirCaso(estado),
+      avisos: avisosParaAbrirCaso(estado),
     };
   }
 

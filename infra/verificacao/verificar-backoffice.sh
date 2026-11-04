@@ -145,8 +145,21 @@ c=$(dc ps -q admin-web)
 chaves=$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' .env.example)
 [ -n "$chaves" ] || reprova "nao consegui ler as chaves do .env.example; sem lista a conferencia de segredo fica cega"
 ambiente=$(docker inspect "$c" --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1)
+# `grep -qx "$k" <<<"$ambiente"` e NAO `printf | grep -qx`. Sob `pipefail` o
+# `grep -q` sai no primeiro casamento, e o `printf` -- que e BUILTIN -- morre de
+# SIGPIPE levando a subshell, entao o pipeline devolve 141.
+#
+# MEDIDO em 02/11/2026, e o numero importa para nao exagerar: com casamento no
+# INICIO de um fluxo grande, 10 reprovacoes em 10; com a lista real do
+# `admin-web` (quatro ou cinco variaveis, uma escrita so), 0 em 20. Era LATENTE,
+# nao um defeito que acusava.
+#
+# Vale consertar por causa da DIRECAO: aqui o pipeline esta dentro de um `if`,
+# e pipeline com erro cai no ramo falso -- o portao deixaria de reprovar
+# exatamente no caso em que deveria, quando a chave ESTA no ambiente do painel.
+# Fail-open e pior que o fail-closed do `implantar.sh`, que so mentia o motivo.
 for k in $chaves; do
-  if printf '%s\n' "$ambiente" | grep -qx "$k"; then reprova "o admin-web recebeu \`$k\` do ambiente da API"; fi
+  if grep -qx "$k" <<<"$ambiente"; then reprova "o admin-web recebeu \`$k\` do ambiente da API"; fi
 done
 echo "  ambiente do admin-web: $(printf '%s\n' "$ambiente" | tr '\n' ' ')"
 echo "  limite: $(docker inspect "$c" --format '{{.HostConfig.Memory}}') bytes"

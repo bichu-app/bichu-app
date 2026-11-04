@@ -105,6 +105,87 @@ PADRAO_DO_LIBAPP = "libapp.so"
 MANIFESTO = "AndroidManifest.xml"
 
 
+# ---------------------------------------------------------------------------
+# A ARMADILHA DO `localhost` (03/11/2026), E AS DUAS PECAS QUE ELA EXIGIU AQUI
+# ===========================================================================
+#
+# Esta e a MESMA armadilha fechada no portao do iOS no mesmo dia, e ela estava
+# aberta aqui pelo mesmo motivo -- e com uma entrega errada no historico, nao
+# so com um risco teorico.
+#
+# MEDIDO em 03/11/2026 no banco de dados do `make` deste repositorio:
+#
+#   make -pn | grep '^API_BASE_URL'                  -> http://localhost:<porta>
+#   API_BASE_URL=... make -pn | grep '^API_BASE_URL'  -> http://localhost:<porta>
+#   make -pn API_BASE_URL=... | grep '^API_BASE_URL'  -> o valor passado
+#
+# A PORTA NAO E FIXA, E ISSO REFORCA O CONSERTO. Ela vem de `portas.local.mk`,
+# gerado por `infra/escolher-portas.py`, e muda por maquina E por worktree --
+# MEDIDO em 03/11/2026, na mesma maquina e no mesmo dia: `3200` num worktree e
+# `3400` noutro. Um controle positivo tirado dessa variavel nao e so
+# autoaprovacao: ele concorda com um valor que nem e estavel entre duas copias
+# do mesmo repositorio.
+#
+# O `Makefile` atribui com `:=`, entao o AMBIENTE NAO SOBREPOE e so a LINHA DE
+# COMANDO vence. E `verificar-apk.sh` montava a cadeia de CONTROLE POSITIVO a
+# partir de `$API_BASE_URL`, a MESMA variavel que o build usara: com
+# `localhost:<porta>` ali, o controle positivo era `localhost:<porta>`, ele era
+# achado no `libapp.so` e o portao APROVAVA um APK apontado para a maquina
+# local. Controle que sai do valor medido nao e controle: e autoaprovacao.
+#
+# AS DUAS PECAS NOVAS, e as duas precisam existir:
+#
+# `--controle-negativo` -- ele NAO EXISTIA neste portao. Sem ele, a hipotese "a
+#   minha busca casa qualquer coisa" nunca foi medida aqui, e e justamente ela
+#   que invalidaria todo achado de PRESENCA -- inclusive o de endereco
+#   proibido. A conferencia nova nao teria valor sem esta.
+#
+# `--proibido` -- mede o BINARIO e nao depende de variavel nenhuma. E a unica
+#   das duas travas que funciona em `--conferir <apk pronto>`, onde nao existe
+#   variavel de build para comparar com nada.
+#
+# A ORDEM, por `libapp.so`: NEGATIVO -> PROIBIDOS -> POSITIVO -> versao...
+#
+# Nenhuma conclusao de AUSENCIA vale antes do controle positivo -- essa regra
+# continua. Mas achado de PRESENCA nao precisa dele: encontrar bytes que ESTAO
+# no arquivo se valida sozinho, e o unico jeito de mentir e a busca casar o que
+# nao esta, que e o que o controle NEGATIVO mede.
+#
+# ISSO TROCA O DIAGNOSTICO NO CASO QUE IMPORTA. Um APK compilado para
+# `localhost` nao tem o host esperado dentro: na ordem antiga ele reprovava por
+# "a STRING DE CONTROLE nao esta em <libapp.so>", que diz "a medicao nao vale"
+# e manda procurar defeito na medicao. Agora reprova por endereco de maquina
+# local, que e o que realmente aconteceu.
+#
+# POR QUE A FORMA DE URL, E NUNCA A PALAVRA PELADA
+# ================================================
+#
+# MEDIDO em 03/11/2026 em `bichu-hml-fb8e5c2d-02-11.apk`, um APK CORRETO de
+# homologacao, nos TRES `libapp.so` (e nao num deles e extrapolado):
+#
+#   lib/arm64-v8a/libapp.so    (10.945.416 b): 'localhost' 1x, 'http://localhost' 0x
+#   lib/armeabi-v7a/libapp.so  (12.304.968 b): 'localhost' 1x, 'http://localhost' 0x
+#   lib/x86_64/libapp.so       (11.207.560 b): 'localhost' 1x, 'http://localhost' 0x
+#
+# A palavra pelada esta na tabela de simbolos do runtime do Dart (no binario de
+# iOS do mesmo commit ela aparece vizinha de `BackdropFilter` e `get:isEven`),
+# e nao e a URL do produto. `127.0.0.1` da 0x nos tres.
+#
+# Proibir a palavra pelada reprovaria TODOS os APKs corretos do projeto, nas
+# tres ABIs. Por isso o que se proibe e a FORMA DE URL, e existe uma isca que
+# guarda exatamente este falso positivo -- para que ninguem "conserte" o portao
+# proibindo a palavra.
+#
+# POR QUE SO UTF-8 AQUI, e nao UTF-8 + Latin-1 como no portao do iOS: os
+# enderecos proibidos sao ASCII puro, e ASCII tem os MESMOS bytes nas duas
+# codificacoes. Medir duas vezes daria o mesmo numero. O portao do iOS mede nas
+# duas porque la ha alvo ACENTUADO (o `MAP_USER_AGENT` da isca dele); aqui essa
+# diferenca de semantica de medicao ja existia antes deste conserto e NAO foi
+# mexida, porque mudar como o portao do APK conta e outro assunto, com outra
+# medicao.
+# ---------------------------------------------------------------------------
+
+
 class Reprova(Exception):
     """Reprovacao com motivo legivel. Quem chama imprime e sai 1."""
 
@@ -174,6 +255,9 @@ def conferir(
     mapa: str,
     chaves: tuple[str, ...] = (),
     valor_dos_termos: str = "",
+    *,
+    controle_negativo: str,
+    proibidos: tuple[str, ...],
 ) -> list[str]:
     """Mede os valores DENTRO do pacote. Devolve as linhas do laudo, ou levanta [Reprova]."""
     if not valor_dos_termos:
@@ -194,6 +278,21 @@ def conferir(
             "a string de controle chegou vazia. Sem controle o portao nao "
             "distingue 'o valor nao entrou' de 'a minha busca nao funciona'"
         )
+    if not controle_negativo or not controle_negativo.strip():
+        raise Reprova(
+            "o controle NEGATIVO chegou vazio. Ele e a cadeia inventada que NAO "
+            "pode existir no binario, e sem ela a hipotese 'a minha busca casa "
+            "qualquer coisa' nunca e medida -- e e ela que invalidaria todo "
+            "achado de presenca deste portao, inclusive o de endereco proibido"
+        )
+    proibidos = tuple(dict.fromkeys(p for p in proibidos if p and p.strip()))
+    if not proibidos:
+        raise Reprova(
+            "a lista de enderecos PROIBIDOS chegou vazia. Sem ela este portao "
+            "nao reprova APK apontado para `localhost`, e foi exatamente assim "
+            "que a armadilha de 03/11/2026 passou: portao que confere zero "
+            "coisas fica verde por vazio"
+        )
 
     libapps, manifesto = _bytes_do_zip(apk)
     do_mapa = _valores_do_mapa(mapa)
@@ -210,12 +309,57 @@ def conferir(
     alvo_versao = versao.encode("utf-8")
     alvo_controle = controle.encode("utf-8")
     alvo_termos = valor_dos_termos.encode("utf-8")
+    alvo_negativo = controle_negativo.encode("utf-8")
 
     for nome in sorted(libapps):
         corpo = libapps[nome]
 
-        # O CONTROLE PRIMEIRO. Se ele falta, nao se pode concluir nada sobre a
-        # versao: ou o binario nao e o que se pensa, ou a busca nao funciona.
+        # O CONTROLE NEGATIVO PRIMEIRO: ele e o que diz que a busca nao casa
+        # o que nao esta. Sem ele, todo achado de PRESENCA abaixo (endereco
+        # proibido, bandeira engolida) poderia ser um falso.
+        quantas_negativo = corpo.count(alvo_negativo)
+        if quantas_negativo != 0:
+            raise Reprova(
+                f"o CONTROLE NEGATIVO {controle_negativo!r} ESTA em {nome} "
+                f"({quantas_negativo}x, {len(corpo)} bytes). Ele foi inventado "
+                "para nao existir. Se ele aparece, a busca casa coisa que nao "
+                "esta la e TODO resultado deste portao sobre este binario e "
+                "falso. Nao conserte abaixando o controle: descubra por que a "
+                "busca casou"
+            )
+
+        # OS ENDERECOS PROIBIDOS, DEPOIS do negativo e ANTES do positivo.
+        # Achado de PRESENCA, e por isso nao depende do controle positivo --
+        # ver a nota de ordem no cabecalho deste arquivo.
+        for proibido in proibidos:
+            quantas_proibido = corpo.count(proibido.encode("utf-8"))
+            if quantas_proibido != 0:
+                raise Reprova(
+                    f"{nome} contem {quantas_proibido}x a cadeia {proibido!r}, "
+                    "que e endereco de maquina LOCAL. ISTO NAO E 'a medicao "
+                    "falhou': o controle NEGATIVO passou, entao a busca nao "
+                    "casa o que nao esta -- este endereco esta MESMO dentro do "
+                    "binario. Um APK apontado para `localhost` nao fala com "
+                    "servidor nenhum no aparelho de quem o instala, e o "
+                    "aparelho nao tem como dizer isso: a tela so nao carrega.\n"
+                    "  A CAUSA, MEDIDA EM 03/11/2026: o `Makefile` atribui "
+                    "`API_BASE_URL := http://localhost:<porta>` com `:=`, entao "
+                    "o AMBIENTE NAO SOBREPOE e so a LINHA DE COMANDO vence. "
+                    "Compilar sem `API_BASE_URL=` na linha de comando produz "
+                    "exatamente este APK -- e ate 03/11/2026 este portao o "
+                    "APROVAVA, porque montava o controle positivo a partir da "
+                    "MESMA variavel que o build usou.\n"
+                    "  Conserto: `make apk API_BASE_URL=https://hml.bichu.app`.\n"
+                    "  NAO conserte tirando este endereco de `--proibido`, e "
+                    "NAO o troque pela palavra `localhost` pelada: medido nos "
+                    "tres `libapp.so` de um APK CORRETO, a palavra aparece 1x em "
+                    "cada (simbolo do runtime do Dart) e `http://localhost` "
+                    "aparece 0x. Proibir a palavra reprovaria todo APK do projeto"
+                )
+
+        # O CONTROLE POSITIVO. Se ele falta, nao se pode concluir nada sobre a
+        # AUSENCIA de valor abaixo: ou o binario nao e o que se pensa, ou a
+        # busca nao funciona.
         quantas_controle = corpo.count(alvo_controle)
         if quantas_controle == 0:
             raise Reprova(
@@ -225,6 +369,10 @@ def conferir(
                 "repositorio, ou `--dart-define=API_BASE_URL` tambem se perdeu "
                 "-- e nos dois casos o resultado sobre a versao nao prova nada"
             )
+        laudo.append(
+            f"  {nome}: controle NEGATIVO ausente, os {len(proibidos)} enderecos "
+            "PROIBIDOS ausentes -- como tem de ser"
+        )
 
         quantas_versao = corpo.count(alvo_versao)
         if quantas_versao == 0:
@@ -388,6 +536,13 @@ _VERSAO = "9.9.9"
 _CONTROLE = "hml.bichu.app"
 _MAPA = {"MAP_TILES_URL": "https://exemplo/{z}.png", "MAP_USER_AGENT": "Isca/9.9"}
 _CHAVES = ("APP_VERSION", "API_BASE_URL", "ENVIRONMENT")
+_NEGATIVO = "api-de-producao-que-nunca-existiu.bichu.invalido"
+_PROIBIDOS = ("http://localhost", "https://localhost",
+              "http://127.0.0.1", "https://127.0.0.1", "http://0.0.0.0")
+# O endereco local da isca, na forma que `make apk` puro produz. A PORTA ALI E
+# EXEMPLO: o portao casa o PREFIXO `http://localhost`, e a porta real vem de
+# `portas.local.mk` e muda por maquina e por worktree.
+_ENDERECO_LOCAL = "http://localhost:3200"
 
 # A versao dos termos das iscas. Os NUMEROS sao os do defeito medido em
 # 01/11/2026 de proposito: `_TERMOS` e o que o site publicava e `_TERMOS_VELHA`
@@ -415,6 +570,9 @@ def _montar_apk(
     sem_libapp: bool = False,
     sem_manifesto: bool = False,
     termos: str | None = _TERMOS,
+    endereco_local_em: tuple[str, ...] = (),
+    simbolo_localhost: bool = False,
+    negativo: bool = False,
 ) -> str:
     with zipfile.ZipFile(destino, "w") as z:
         if not sem_libapp:
@@ -422,6 +580,14 @@ def _montar_apk(
                 corpo = b"\x7fELF" + os.urandom(64)
                 if controle:
                     corpo += b"\x00" + _CONTROLE.encode()
+                if abi in endereco_local_em:
+                    corpo += b"\x00" + _ENDERECO_LOCAL.encode()
+                if simbolo_localhost:
+                    # A VIZINHANCA MEDIDA, e nao a palavra solta: no binario
+                    # correto ela aparece na tabela de simbolos do runtime.
+                    corpo += b"\x00BackdropFilter\x00localhost\x00get:isEven"
+                if negativo:
+                    corpo += b"\x00" + _NEGATIVO.encode()
                 if versao_no_dart:
                     corpo += b"\x00" + versao_no_dart.encode()
                 if do_mapa:
@@ -448,11 +614,17 @@ def autoteste() -> int:
         json.dump(_MAPA, f)
 
     def esperar_reprova(
-        motivo: str, apk: str, versao: str = _VERSAO, termos: str = _TERMOS
+        motivo: str,
+        apk: str,
+        versao: str = _VERSAO,
+        termos: str = _TERMOS,
+        negativo: str = _NEGATIVO,
+        proibidos: tuple[str, ...] = _PROIBIDOS,
     ) -> None:
         nonlocal falhou
         try:
-            conferir(apk, versao, _CONTROLE, mapa, _CHAVES, termos)
+            conferir(apk, versao, _CONTROLE, mapa, _CHAVES, termos,
+                     controle_negativo=negativo, proibidos=proibidos)
         except Reprova as erro:
             print(f"isca reprovada como deveria: {motivo}")
             print(f"    motivo dado: {str(erro)[:120]}...")
@@ -575,7 +747,8 @@ def autoteste() -> int:
         versao_no_manifesto=_VERSAO,
     )
     try:
-        conferir(sem_controle, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS)
+        conferir(sem_controle, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS,
+                 controle_negativo=_NEGATIVO, proibidos=_PROIBIDOS)
         print(
             "REPROVA: a isca 'string de controle ausente' PASSOU. Sem controle "
             "a medicao nao vale e o portao tem de dizer isso",
@@ -675,12 +848,53 @@ def autoteste() -> int:
         z.writestr(MANIFESTO, _VERSAO.encode("utf-16-le"))
     esperar_reprova("so UMA das ABIs tem a versao dos termos", termos_uma_abi)
 
+    # --- iscas da ARMADILHA DO `localhost` (03/11/2026) --------------------
+
+    # A ISCA QUE DECIDE. O endereco local em UMA das tres ABIs: ela prova a
+    # conferencia E prova que ela e por `libapp.so`, e nao do pacote em bloco.
+    esperar_reprova(
+        "ENDERECO DE MAQUINA LOCAL (http://localhost:<porta>) em uma das tres ABIs",
+        _montar_apk(
+            os.path.join(tmp, "endereco-local.apk"),
+            versao_no_dart=_VERSAO,
+            controle=True,
+            do_mapa=True,
+            versao_no_manifesto=_VERSAO,
+            abis=("arm64-v8a", "armeabi-v7a", "x86_64"),
+            endereco_local_em=("armeabi-v7a",),
+        ),
+    )
+
+    # O CONTROLE NEGATIVO PRESENTE: a busca casa o que nao esta, e ai nada
+    # abaixo vale -- inclusive a conferencia de endereco proibido.
+    esperar_reprova(
+        "CONTROLE NEGATIVO presente (a busca casa o que nao esta)",
+        _montar_apk(
+            os.path.join(tmp, "com-negativo.apk"),
+            versao_no_dart=_VERSAO,
+            controle=True,
+            do_mapa=True,
+            versao_no_manifesto=_VERSAO,
+            negativo=True,
+        ),
+    )
+
+    # As duas listas vazias: portao que confere zero coisas fica verde por
+    # vazio, e foi assim que esta armadilha passou.
+    esperar_reprova(
+        "lista de enderecos PROIBIDOS vazia", completo, proibidos=()
+    )
+    esperar_reprova(
+        "controle NEGATIVO vazio", completo, negativo=""
+    )
+
     # --- isca que PRECISA ser aprovada -------------------------------------
     # Sem esta, uma conferencia que reprovasse tudo passaria no autoteste
     # inteiro e derrubaria a esteira para sempre, com as linhas acima dizendo
     # que estava tudo certo.
     try:
-        laudo = conferir(completo, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS)
+        laudo = conferir(completo, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS,
+                         controle_negativo=_NEGATIVO, proibidos=_PROIBIDOS)
         if len(laudo) < 3:
             print(
                 f"REPROVA: o pacote completo passou com laudo de {len(laudo)} "
@@ -695,6 +909,38 @@ def autoteste() -> int:
             "REPROVA: a isca do pacote completo foi REPROVADA "
             f"({erro}). A conferencia reprova tudo, e um portao assim nao diz "
             "nada sobre o APK de verdade",
+            file=sys.stderr,
+        )
+        falhou = True
+
+    # A ISCA DO FALSO POSITIVO, e ela guarda a medicao de 03/11/2026: nos TRES
+    # `libapp.so` de um APK correto a palavra `localhost` aparece 1x, na tabela
+    # de simbolos do runtime do Dart, e `http://localhost` aparece 0x. Um portao
+    # que proibisse a palavra pelada reprovaria TODO APK do projeto. Este pacote
+    # tem de APROVAR, nas tres ABIs.
+    simbolo = _montar_apk(
+        os.path.join(tmp, "simbolo-localhost.apk"),
+        versao_no_dart=_VERSAO,
+        controle=True,
+        do_mapa=True,
+        versao_no_manifesto=_VERSAO,
+        abis=("arm64-v8a", "armeabi-v7a", "x86_64"),
+        simbolo_localhost=True,
+    )
+    try:
+        conferir(simbolo, _VERSAO, _CONTROLE, mapa, _CHAVES, _TERMOS,
+                 controle_negativo=_NEGATIVO, proibidos=_PROIBIDOS)
+        print(
+            "isca aprovada como deveria: a palavra `localhost` solta (simbolo "
+            "do runtime) nas tres ABIs nao dispara a conferencia de endereco"
+        )
+    except Reprova as erro:
+        print(
+            "REPROVA: a isca do FALSO POSITIVO foi reprovada "
+            f"({erro}). A conferencia de endereco proibido esta casando a "
+            "palavra `localhost` pelada, e nessa forma ela reprova TODO APK "
+            "correto do projeto -- medido nos tres `libapp.so` de "
+            "`bichu-hml-fb8e5c2d-02-11.apk`",
             file=sys.stderr,
         )
         falhou = True
@@ -722,6 +968,22 @@ def main(argv: list[str]) -> int:
         "dentro do binario, que e a marca do amontoado por variavel de shell.",
     )
     p.add_argument(
+        "--controle-negativo",
+        dest="controle_negativo",
+        help="cadeia INVENTADA que nao pode existir no binario. OBRIGATORIA: e "
+        "ela que mede a hipotese 'a minha busca casa qualquer coisa', sem a "
+        "qual nenhum achado de PRESENCA deste portao vale.",
+    )
+    p.add_argument(
+        "--proibido",
+        action="append",
+        default=[],
+        help="endereco que NAO pode estar dentro do binario, em forma de URL "
+        "(`http://localhost`); repetivel e OBRIGATORIO. Nunca a palavra "
+        "`localhost` pelada: medido em 03/11/2026, ela aparece 1x em cada um "
+        "dos tres `libapp.so` de um APK correto, como simbolo do runtime.",
+    )
+    p.add_argument(
         "--valor-dos-termos",
         dest="valor_dos_termos",
         help="o valor de `--dart-define=TERMS_VERSION` que o comando de build "
@@ -736,7 +998,8 @@ def main(argv: list[str]) -> int:
 
     faltando = [
         nome
-        for nome in ("apk", "versao", "controle", "mapa", "valor_dos_termos")
+        for nome in ("apk", "versao", "controle", "mapa", "valor_dos_termos",
+                     "controle_negativo", "proibido")
         if not getattr(args, nome)
     ]
     if faltando:
@@ -757,6 +1020,8 @@ def main(argv: list[str]) -> int:
             args.mapa,
             tuple(args.chave),
             args.valor_dos_termos,
+            controle_negativo=args.controle_negativo,
+            proibidos=tuple(args.proibido),
         )
     except Reprova as erro:
         print(f"REPROVA: {erro}", file=sys.stderr)

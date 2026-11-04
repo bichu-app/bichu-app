@@ -386,6 +386,24 @@ class _BotaoDeConfirmar extends StatelessWidget {
 
     final VoidCallback? acao = carregando ? null : aoTocar;
 
+    // A TINTA DO ROTULO RESOLVIDA AQUI, pela MESMA regra que o `ButtonStyle`
+    // deste botao resolve o `foregroundColor`.
+    //
+    // POR QUE ELA NAO PODE SER HERDADA: `textos.labelLarge` NAO e um estilo sem
+    // cor. `BichuTheme` o constroi com `BichuTipografia.textTheme(c.textPrimary)`,
+    // entao ele CARREGA `text-primary`, e cor escrita no `TextStyle` do `Text`
+    // VENCE o `foregroundColor` do `ButtonStyle` -- o botao declarava a tinta
+    // certa e o rotulo a ignorava. Medido em 03/11/2026: o rotulo saiu `text-primary`
+    // sobre `primary` -- 2.10:1 no tema claro e 1.87:1 no escuro, os DOIS abaixo
+    // do piso de 4.5. Com `on-primary`: 7.84:1 e 8.59:1. **Esta e a folha das
+    // seis operacoes destrutivas**, exclusao de conta inclusive: o rotulo
+    // ilegivel e o da confirmacao da acao mais destrutiva do produto.
+    //
+    // Mesmo mecanismo e mesmo conserto de `widgets/botao_primario.dart`
+    // (03/11/2026). Achado pelo portao de contraste de widget real, nao pelo
+    // relato: o cliente viu a pastilha de filtro, nao este botao.
+    final Color tinta = acao == null ? cores.onDisabled : cores.onPrimary;
+
     return Semantics(
       button: true,
       enabled: acao != null,
@@ -427,7 +445,7 @@ class _BotaoDeConfirmar extends StatelessWidget {
               Flexible(
                 child: Text(
                   TextosDaFolhaDeSenha.confirmar,
-                  style: textos.labelLarge,
+                  style: textos.labelLarge?.copyWith(color: tinta),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

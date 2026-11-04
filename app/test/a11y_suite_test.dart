@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'a11y/acao_de_controle_test.dart' as acao_de_controle;
 import 'a11y/alvo_de_toque_test.dart' as alvo_de_toque;
+import 'a11y/contraste_de_widgets_reais_test.dart' as contraste_de_widgets_reais;
 import 'a11y/contraste_texto_test.dart' as contraste_texto;
 import 'a11y/contraste_tokens_test.dart' as contraste_tokens;
 import 'a11y/isca_test.dart' as isca;
@@ -31,6 +32,7 @@ import 'a11y/rotulo_acessivel_test.dart' as rotulo_acessivel;
 const List<String> _ligados = <String>[
   'acao_de_controle_test.dart',
   'alvo_de_toque_test.dart',
+  'contraste_de_widgets_reais_test.dart',
   'contraste_texto_test.dart',
   'contraste_tokens_test.dart',
   'isca_test.dart',
@@ -41,6 +43,7 @@ const List<String> _ligados = <String>[
 void main() {
   group('a11y/acao_de_controle', acao_de_controle.main);
   group('a11y/alvo_de_toque', alvo_de_toque.main);
+  group('a11y/contraste_de_widgets_reais', contraste_de_widgets_reais.main);
   group('a11y/contraste_texto', contraste_texto.main);
   group('a11y/contraste_tokens', contraste_tokens.main);
   group('a11y/isca', isca.main);
