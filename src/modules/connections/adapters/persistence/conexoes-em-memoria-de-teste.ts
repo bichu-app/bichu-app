@@ -245,16 +245,19 @@ export function conexoesEmMemoria(
         .filter((l) => l.pedinte === quemChama || l.destinatario === quemChama)
         .map((l) => estado.get(l.pedinte === quemChama ? l.destinatario : l.pedinte))
         .filter((pessoa): pessoa is PessoaDeTeste => pessoa !== undefined)
-        .filter((pessoa) => pessoa.apelido !== null)
+        // **SEM FILTRO DE APELIDO, e a ausência dele é o conserto de 03/11/2026**:
+        // a bancada reproduz o que o SQL faz, e o SQL deixou de filtrar. Ver o
+        // cabeçalho de `construtorDasConexoes`.
         .sort(
           (a, b) =>
             (a.nomeDeExibicao ?? '').localeCompare(b.nomeDeExibicao ?? '') ||
-            (a.apelido ?? '').localeCompare(b.apelido ?? ''),
+            (a.apelido ?? '').localeCompare(b.apelido ?? '') ||
+            a.id.localeCompare(b.id),
         );
       const inicio = (recorte.pagina - 1) * recorte.limite;
       return Promise.resolve({
         itens: todas.slice(inicio, inicio + recorte.limite).map((pessoa) => ({
-          apelido: pessoa.apelido as string,
+          apelido: pessoa.apelido,
           nomeDeExibicao: pessoa.nomeDeExibicao,
           petsCount: pessoa.pets ?? 0,
           connectionsCount: contarConexoesDe(pessoa.id),

@@ -243,7 +243,8 @@ interface Resposta {
 }
 
 interface PessoaDoCorpo {
-  readonly handle: string;
+  /** Anulável desde 03/11/2026 em `ConnectedPerson`; NÃO anulável na busca. */
+  readonly handle: string | null;
   readonly display_name: string | null;
   readonly pets_count: number;
   readonly connections_count: number;
@@ -350,7 +351,7 @@ function pessoas(corpo: Record<string, unknown>): readonly PessoaDoCorpo[] {
   return corpo['items'] as readonly PessoaDoCorpo[];
 }
 
-function apelidos(corpo: Record<string, unknown>): readonly string[] {
+function apelidos(corpo: Record<string, unknown>): readonly (string | null)[] {
   return pessoas(corpo).map((p) => p.handle);
 }
 
@@ -662,15 +663,39 @@ void describe('`GET /v1/connections` contra Postgres: a lista das PRÓPRIAS cone
   });
 
   /**
-   * **SEM APELIDO NÃO ENTRA**, e esta é a consequência do `IS NOT NULL` sobre a
-   * costura de JSON. Cada linha é uma porta para o perfil, e uma linha sem
-   * apelido seria uma porta que não abre.
+   * **O CASO QUE PROVA O CONSERTO DE 03/11/2026: conexão ACEITA com a outra
+   * ponta SEM APELIDO aparece na listagem.**
    *
-   * A asserção é o par: a conexão COM apelido aparece, a sem não — e o `total`
-   * conta o mesmo conjunto que a página devolve, então a tela nunca promete uma
-   * página que não existe.
+   * ## O relato e a medição
+   *
+   * O cliente relatou que uma conexão não aparecia no perfil da outra pessoa,
+   * embora as duas tivessem uma conexão. No banco de homologação a aresta
+   * estava `state = 'accepted'`, `origin = 'people_search'`, e a diferença
+   * entre quem aparecia e quem não aparecia era **uma só**: o apelido da que
+   * desaparecia era nulo. Eram **22 das 61 contas** sem apelido, porque
+   * `handle` não está em `required` de `RegisterRequest` e nenhum fluxo obriga a
+   * escolher depois.
+   *
+   * ## Por que este caso é de INTEGRAÇÃO, e não unitário
+   *
+   * Porque o filtro que escondia a pessoa era **uma linha de SQL** —
+   * `AND (to_jsonb(outro) ->> 'handle') IS NOT NULL` — e `IS NOT NULL` sobre a
+   * costura de JSON é exatamente o que nem o `tsc` nem a bancada em memória
+   * medem. O irmão unitário
+   * (`connections/application/lista-das-proprias-conexoes.test.ts`) reproduz a
+   * regra; **este arquivo mede o Postgres**.
+   *
+   * ## O que a asserção cobra, e por que o par
+   *
+   * A conexão COM apelido **e** a sem aparecem, e a sem vem com `handle` nulo
+   * **com a chave presente** — porque é a tela que decide o que fazer com o
+   * nulo (nome de exibição, sem a porta do perfil), e chave que aparece e
+   * desaparece faria o cliente distinguir ausência de nulo.
+   *
+   * E o `total` conta **as duas**: antes do conserto ele contava uma, e por isso
+   * divergia de `connected_count` do resumo, que nunca olhou apelido.
    */
-  void it('conexão SEM apelido não entra, e o `total` conta o mesmo conjunto', () => {
+  void it('conexão ACEITA com a outra ponta SEM APELIDO aparece, com `handle` nulo', () => {
     return (async () => {
       const dono = await criarConta('Dono Sem Apelido');
       const comApelido = await criarConta('Com Apelido');
@@ -681,12 +706,86 @@ void describe('`GET /v1/connections` contra Postgres: a lista das PRÓPRIAS cone
       await ligar(dono, semApelido, 'accepted');
 
       const r = await listar(dono);
-      assert.deepEqual([...apelidos(r.corpo)], [ap]);
+      assert.equal(r.status, 200, JSON.stringify(r.corpo));
+
+      const lista = pessoas(r.corpo);
+      assert.equal(
+        lista.length,
+        2,
+        'as DUAS conexões aceitas têm de sair. Até 03/11/2026 saía UMA, e a que ' +
+          'desaparecia era a da conta sem apelido — o defeito que o cliente relatou.',
+      );
+      assert.deepEqual(
+        [...apelidos(r.corpo)],
+        [ap, null],
+        'a ordem é por `display_name` ("Com Apelido" antes de "Sem Apelido"), e a ' +
+          'pessoa sem apelido sai com `handle` NULO em vez de não sair',
+      );
+
+      const semAp = lista[1] as PessoaDoCorpo;
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(semAp, 'handle'),
+        'a chave `handle` tem de vir, com nulo: é a tela que cai para o nome de exibição',
+      );
+      assert.equal(
+        semAp.display_name,
+        'Sem Apelido',
+        'é o nome de exibição que a linha sem apelido escreve',
+      );
+
       assert.equal(
         r.corpo['total'],
-        1,
+        2,
         'o total vem da MESMA consulta que a página: duas consultas seriam duas chances ' +
           'de os predicados divergirem sem nada acusar',
+      );
+
+      // **E A DIVERGÊNCIA COM O RESUMO FECHA.** `connected_count` nunca olhou
+      // apelido, então o filtro antigo fazia a mesma tela mostrar dois números
+      // diferentes para o mesmo conjunto.
+      const resumo = await pedir(dono, '/v1/connections/summary');
+      assert.equal(resumo.status, 200);
+      assert.equal(
+        resumo.corpo['connected_count'],
+        2,
+        'o resumo sempre contou as duas: era a LISTA que contava uma',
+      );
+      assert.equal(
+        r.corpo['total'],
+        resumo.corpo['connected_count'],
+        'a lista e o resumo contam o mesmo conjunto quando uma das pontas não tem apelido',
+      );
+    })();
+  });
+
+  /**
+   * **ISCA DO CASO DE CIMA.** Sem ela, aquele caso passaria no dia em que
+   * `darApelido` deixasse de gravar nada — e não por a lista saber mostrar quem
+   * não tem apelido. A isca lê a coluna e cobra que a massa seja a que o caso
+   * descreve: **uma** conta com apelido e **uma** sem.
+   */
+  void it('ISCA: a massa do caso de cima tem mesmo UMA conta sem `users.handle`', () => {
+    return (async () => {
+      const dono = await criarConta('Dono Isca Apelido');
+      const comApelido = await criarConta('Isca Com');
+      const semApelido = await criarConta('Isca Sem');
+      await darApelido(dono, 'dono-isca-ap');
+      await darApelido(comApelido, 'isca-com-ap');
+
+      const { rows } = await cliente.query<{ handle: string | null }>(
+        'SELECT handle FROM users WHERE id = ANY($1::uuid[]) ORDER BY display_name',
+        [[comApelido, semApelido]],
+      );
+      assert.equal(rows.length, 2);
+      assert.ok(
+        rows[0]?.handle !== null,
+        'a isca passou: `darApelido` não gravou `users.handle`, então o caso de cima ' +
+          'compararia duas contas sem apelido e não mediria a diferença',
+      );
+      assert.equal(
+        rows[1]?.handle,
+        null,
+        'a isca passou: a conta "sem apelido" tem apelido, e o caso de cima não mede nada',
       );
     })();
   });
