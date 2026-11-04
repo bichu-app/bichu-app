@@ -216,16 +216,22 @@ class _Conteudo extends StatelessWidget {
         ),
         const SizedBox(height: BichuEspaco.e6),
 
-        if (pet.urlDaFoto != null && pet.urlDaFoto!.trim().isNotEmpty) ...[
+        // **CASO SEM FOTO EXISTE DESDE 03/11/2026**, quando o cliente tirou a
+        // trava da abertura. Antes, o bloco inteiro desaparecia e esta pagina
+        // -- que existe para alguem reconhecer o animal -- ficava sem nenhuma
+        // pista visual, nem um icone. A moldura vazia do 11.4 e o mesmo
+        // tratamento que `CartaoDoPerdido` ja da ao mesmo estado.
+        if (pet.urlDaFoto != null && pet.urlDaFoto!.trim().isNotEmpty)
           Center(
             child: ImagemDaRede(
               url: pet.urlDaFoto!,
               descricao: 'Foto de ${pet.nome}',
               largura: BichuMoldura.larguraFotoLg,
             ),
-          ),
-          const SizedBox(height: BichuEspaco.e4),
-        ],
+          )
+        else
+          const Center(child: Moldura(largura: BichuMoldura.larguraFotoLg)),
+        const SizedBox(height: BichuEspaco.e4),
 
         Text(
           TelaDoPetDaTag.tituloDoAchadorDe(pet.nome),

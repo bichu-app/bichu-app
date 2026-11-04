@@ -73,6 +73,7 @@ export interface PreviaDeAlcance {
   readonly radius_m: number;
   readonly area_label: string | null;
   readonly blockers: readonly string[];
+  readonly warnings: readonly string[];
 }
 
 export interface Caso {

@@ -461,7 +461,9 @@ class DistintivoDaAba extends StatelessWidget {
               texto,
               textAlign: TextAlign.center,
               semanticsLabel: '',
-              style: textos.labelSmall?.copyWith(color: cores.onActionFill),
+              // `primary` pede `on-primary`: o distintivo pintava
+              // `on-action-fill` a 2.10:1 no claro (03/11/2026).
+              style: textos.labelSmall?.copyWith(color: cores.onPrimary),
             ),
           ),
         ),
@@ -764,7 +766,9 @@ class SinoDeNotificacoes extends StatelessWidget {
                   textAlign: TextAlign.center,
                   semanticsLabel: '',
                   style: textos.labelSmall?.copyWith(
-                    color: cores.onActionFill,
+                    // `primary` pede `on-primary`: o distintivo do sino
+                    // pintava `on-action-fill` a 2.10:1 no claro (03/11/2026).
+                    color: cores.onPrimary,
                   ),
                 ),
               ),

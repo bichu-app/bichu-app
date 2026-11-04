@@ -382,10 +382,28 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.acaoNaTela,
         estado: EstadoDoSubDestino.existe,
       ),
+      // **CONSTRUIDA EM 02/11/2026** (defeito de LGPD, art. 18): ela saiu de
+      // `planejada` porque a folha EXISTE -- `_ItemDeExcluirAConta` e
+      // `_FolhaDeExcluirAConta`, em `telas/abas.dart`, no fim do corpo da aba
+      // `Perfil`, ACIMA de `Sair da conta` (o cliente foi literal em
+      // 18/10/2026: o `Sair` e sempre a ultima opcao do menu, e ha portao de
+      // coordenada cobrando isso). A folha diz as consequencias nas palavras
+      // do contrato (exclusao logica imediata, expurgo em 30 dias, casos
+      // encerrados, tags revogadas).
+      //
+      // **O TOQUE FINAL FOI LIGADO NO MESMO DIA**, e a frase que dizia o
+      // contrario saiu: `DELETE /v1/me` exige `reauth` no escopo
+      // `account_deletion`, e a folha de senha (`widgets/folha_de_senha.dart`)
+      // passou a existir -- a folha pede a senha, gasta a janela no cabecalho
+      // `X-Reauth-Token` e so chama a exclusao quando a confirmacao vem. Esta
+      // e a PRIMEIRA das seis rotas de `x-reauth-scope` com chamador: as
+      // outras cinco continuam sem tela, e a ausencia delas e deliberada.
+      //
+      // A entrada NAO depende desta gaveta, que esta oculta desde 19/10/2026.
       SubDestino(
         rotulo: 'Excluir a conta',
         forma: FormaDoSubDestino.folhaInferior,
-        estado: EstadoDoSubDestino.planejada,
+        estado: EstadoDoSubDestino.existe,
       ),
     ],
   };
