@@ -636,7 +636,9 @@ class GatilhoDeRecorteNoCorpo extends StatelessWidget {
                     textAlign: TextAlign.center,
                     semanticsLabel: '',
                     style: textos.labelSmall?.copyWith(
-                      color: cores.onActionFill,
+                      // `primary` pede `on-primary`: o distintivo pintava
+                      // `on-action-fill` a 2.10:1 no claro (03/11/2026).
+                      color: cores.onPrimary,
                     ),
                   ),
                 ),
@@ -906,7 +908,9 @@ class BotaoDeAcaoDaListagem extends StatelessWidget {
                     textAlign: TextAlign.center,
                     semanticsLabel: '',
                     style: textos.labelSmall?.copyWith(
-                      color: cores.onActionFill,
+                      // `primary` pede `on-primary`: o distintivo pintava
+                      // `on-action-fill` a 2.10:1 no claro (03/11/2026).
+                      color: cores.onPrimary,
                     ),
                   ),
                 ),
@@ -1225,7 +1229,22 @@ class _Pastilha extends StatelessWidget {
               child: Text(
                 rotulo,
                 style: textos.labelLarge?.copyWith(
-                  color: marcada ? cores.onActionFill : cores.textPrimary,
+                  // **O PAR CERTO E `primary`/`on-primary`.** Era
+                  // `on-action-fill`, que e a tinta do preenchimento de ACAO
+                  // (a manteiga) e nao deste: 2.10:1 sobre o bordo no tema
+                  // claro, abaixo do piso de 4.5 e do de 3.0, relatado pelo
+                  // cliente em 03/11/2026 -- *"os filtros de comunidade e
+                  // eventos nao estao dando leitura"*. No tema escuro o mesmo
+                  // par dava 8.10:1 e passava POR ACIDENTE, porque la
+                  // `primary` e um rosa claro; o acidente e o que fez o
+                  // defeito chegar a producao parecendo intencional.
+                  //
+                  // A OUTRA SAIDA ERA PINTAR A PASTILHA DE MANTEIGA, e ela
+                  // foi recusada: `action-fill` daria 9.35:1, mas filtro
+                  // marcado e ESTADO e nao acao, e a manteiga e a cor da acao
+                  // primaria -- a pastilha passaria a competir com o botao de
+                  // `Aplicar` desta mesma folha.
+                  color: marcada ? cores.onPrimary : cores.textPrimary,
                 ),
               ),
             ),

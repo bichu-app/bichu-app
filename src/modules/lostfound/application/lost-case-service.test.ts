@@ -631,12 +631,20 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
     assert.equal(erro.problemType, 'open-case-limit-reached');
   });
 
-  void it('entre os bloqueios do pet, o canal de contato vem antes da foto', async () => {
+  void it('canal não verificado continua bloqueando, com a foto faltando ou não', async () => {
     const { casos } = servico({ abertura: { temCanalVerificado: false, temFotoPronta: false } });
 
     const erro = await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(DONO)));
 
     assert.equal(erro.problemType, 'contact-channel-unverified');
+  });
+
+  void it('SEM FOTO O CASO ABRE (03/11/2026): a trava virou aviso, e o aviso não recusa', async () => {
+    const { casos } = servico({ abertura: { temFotoPronta: false } });
+
+    const { caso } = await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.equal(caso.status, 'open');
   });
 
   void it('caso sem coordenada abre pela cidade, e diz que não tem ponto', async () => {
@@ -755,11 +763,8 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     const previa = await casos.previa(PET, undefined, chamador(DONO));
 
-    assert.deepEqual(previa.bloqueios, [
-      'contact_channel_unverified',
-      'pet_photo_missing',
-      'pet_already_lost',
-    ]);
+    assert.deepEqual(previa.bloqueios, ['contact_channel_unverified', 'pet_already_lost']);
+    assert.deepEqual(previa.avisos, ['pet_photo_missing']);
   });
 
   void it('a contagem exclui o próprio tutor e usa o raio de 5 km', async () => {
@@ -823,6 +828,7 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     assert.deepEqual(previa.bloqueios, []);
     assert.deepEqual(Object.keys(previa).sort(), [
+      'avisos',
       'bloqueios',
       'estadoDoAlcance',
       'raioEmMetros',

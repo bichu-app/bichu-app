@@ -202,11 +202,28 @@ void main() {
             'este numero mudou por uma linha NOVA, ela nao foi pedida; se '
             'mudou por uma que sumiu, alguma frente varreu demais.',
       );
+      // **UMA VIROU DUAS EM 02/11/2026, e a segunda TEM ENDERECO.** O cliente
+      // mediu que a exclusao da conta nao era alcancavel no app -- defeito de
+      // LGPD, art. 18 --, e `Excluir a conta` entrou como folha inferior do
+      // `Perfil`. Ela e `critico` por DEFINICAO da peca: `ItemDeMenu.critico`
+      // diz, por escrito, *"quando a acao e de saida ou destruicao"*, e apagar
+      // a conta e a destruicao mais completa que este menu oferece. Chamar de
+      // nao-critica para manter a cauda em 1 seria mentir na tinta para
+      // agradar um numero.
+      //
+      // O que a cauda NAO perdeu: `Sair da conta` continua a ULTIMA, e o
+      // portao de coordenada de `perfil_ordem_dos_itens_test.dart`
+      // (`exigirSairPorUltimo`) e quem cobra isso -- `Excluir a conta` entra
+      // ACIMA dela.
       expect(
         deSaida.length,
-        1,
-        reason: 'REPROVA: a cauda critica nao e uma linha so. `Sair da conta` '
-            'e a unica linha `critico` deste menu.',
+        2,
+        reason: 'REPROVA: a cauda critica nao tem duas linhas, e tem '
+            '${deSaida.length}: ${deSaida.map((i) => i.rotulo).join(', ')}. '
+            'As duas sao `Excluir a conta` (02/11/2026, LGPD art. 18) e '
+            '`Sair da conta`, nesta ordem. Se este numero mudou por uma linha '
+            'NOVA, ela nao foi pedida; se mudou por uma que sumiu, alguma '
+            'frente varreu demais.',
       );
       expect(
         _naAba(find.text('Sair da conta')),

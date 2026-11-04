@@ -106,7 +106,11 @@ class TelaCasoAberto extends StatelessWidget {
                 texto: avisoDaFila,
               ),
             ] else ...<Widget>[
-              _AlcanceDoCaso(caso: caso, nomeDoPet: resultado.pet.nome),
+              _AlcanceDoCaso(
+                caso: caso,
+                nomeDoPet: resultado.pet.nome,
+                comFoto: resultado.pet.fotoDeCapa != null,
+              ),
             ],
           ],
         ),
@@ -126,10 +130,18 @@ class TelaCasoAberto extends StatelessWidget {
 
 /// O alcance do caso que **existe**, lido do servidor e de mais lugar nenhum.
 class _AlcanceDoCaso extends StatelessWidget {
-  const _AlcanceDoCaso({required this.caso, required this.nomeDoPet});
+  const _AlcanceDoCaso({
+    required this.caso,
+    required this.nomeDoPet,
+    required this.comFoto,
+  });
 
   final CasoDePerdido caso;
   final String nomeDoPet;
+
+  /// Desde 03/11/2026 um caso pode nascer SEM foto, e dizer que o vizinho
+  /// "recebeu a foto" seria mentira na tela do tutor que acabou de avisar.
+  final bool comFoto;
 
   String get _texto {
     final alerta = caso.alerta;
@@ -142,7 +154,8 @@ class _AlcanceDoCaso extends StatelessWidget {
       EstadoDoAlcance.calculado =>
         'Avisamos ${alerta.destinatarios} '
             '${alerta.destinatarios == 1 ? 'tutor' : 'tutores'} num raio de '
-            '$km km. Eles receberam a foto de $nomeDoPet e os sinais.',
+            '$km km. Eles receberam ${comFoto ? 'a foto' : 'a descrição'} de '
+            '$nomeDoPet e os sinais.',
       EstadoDoAlcance.semLocalizacao => TelaCasoAberto.semLocalizacao,
       _ => 'Não conseguimos calcular quantos tutores estão por perto agora. O '
           'alerta vai sair mesmo assim.',

@@ -23,9 +23,13 @@ enum EstadoDoAlcance {
 
 /// `#/components/schemas/LostCaseReachPreview/properties/blockers/items` do
 /// contrato.
+///
+/// `pet_photo_missing` SAIU desta lista em 03/11/2026, por decisao do cliente:
+/// falta de foto deixou de IMPEDIR a abertura e virou [AvisoDoCaso]. Nao
+/// recoloque aqui: o botao de avisar e desabilitado por bloqueio, e a foto
+/// voltaria a travar.
 enum BloqueioDoCaso {
   canalDeContatoNaoVerificado('contact_channel_unverified'),
-  petSemFoto('pet_photo_missing'),
   petJaPerdido('pet_already_lost'),
   desconhecido('');
 
@@ -38,6 +42,28 @@ enum BloqueioDoCaso {
       if (b != BloqueioDoCaso.desconhecido && b.valor == valor) return b;
     }
     return BloqueioDoCaso.desconhecido;
+  }
+}
+
+/// `#/components/schemas/LostCaseReachPreview/properties/warnings/items` do
+/// contrato.
+///
+/// O que o tutor precisa SABER e que **nao impede** abrir o caso. A tela
+/// mostra como faixa informativa, nunca como erro, e **nunca** desabilita o
+/// envio por causa de um valor daqui.
+enum AvisoDoCaso {
+  petSemFoto('pet_photo_missing'),
+  desconhecido('');
+
+  const AvisoDoCaso(this.valor);
+
+  final String valor;
+
+  static AvisoDoCaso de(String? valor) {
+    for (final a in AvisoDoCaso.values) {
+      if (a != AvisoDoCaso.desconhecido && a.valor == valor) return a;
+    }
+    return AvisoDoCaso.desconhecido;
   }
 }
 
@@ -82,6 +108,7 @@ class PreviaDoAlcance {
     required this.estado,
     required this.raioEmMetros,
     required this.bloqueios,
+    this.avisos = const <AvisoDoCaso>[],
     this.tutoresAlcancaveis,
     this.rotuloDaArea,
   });
@@ -100,7 +127,13 @@ class PreviaDoAlcance {
 
   final List<BloqueioDoCaso> bloqueios;
 
+  /// `warnings`. **Nao bloqueia nada**: ver [bloqueado].
+  final List<AvisoDoCaso> avisos;
+
   bool get bloqueado => bloqueios.isNotEmpty;
+
+  /// O pet nao tem foto pronta. **Avisa, e nao impede.**
+  bool get semFotoPronta => avisos.contains(AvisoDoCaso.petSemFoto);
 
   factory PreviaDoAlcance.doJson(Map<String, dynamic> json) {
     return PreviaDoAlcance(
@@ -112,6 +145,11 @@ class PreviaDoAlcance {
           .whereType<String>()
           .map(BloqueioDoCaso.de)
           .where((b) => b != BloqueioDoCaso.desconhecido)
+          .toList(growable: false),
+      avisos: (json['warnings'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .map(AvisoDoCaso.de)
+          .where((a) => a != AvisoDoCaso.desconhecido)
           .toList(growable: false),
     );
   }

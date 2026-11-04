@@ -40,6 +40,31 @@ class BotaoPrimario extends StatelessWidget {
 
     final VoidCallback? acao = carregando ? null : aoTocar;
 
+    // A TINTA DO CONTEUDO RESOLVIDA AQUI, pela MESMA regra que
+    // `_filledButtonStyle` usa em `bichu_colors.dart`: `on-disabled` quando o
+    // botao esta desabilitado, `on-action-fill` quando esta ativo.
+    //
+    // POR QUE ELA PRECISA SER EXPLICITA, e nao herdada do botao -- os dois
+    // defeitos medidos em 03/11/2026:
+    //
+    //  1. **O ROTULO.** `textos.labelLarge` NAO e um estilo sem cor:
+    //     `BichuTheme` o constroi com `BichuTipografia.textTheme(c.textPrimary)`,
+    //     entao ele CARREGA `text-primary`, e cor escrita no `TextStyle` do
+    //     `Text` vence o `foregroundColor` do `ButtonStyle`. No tema claro
+    //     `text-primary` e `on-action-fill` tem o MESMO valor (#1C1B19) e o
+    //     rotulo saia certo por coincidencia, a 9.35:1. No escuro
+    //     `text-primary` e quase branco: 1.62:1 sobre a manteiga -- rotulo
+    //     ilegivel no botao de acao primaria do app, e nenhum portao olhava.
+    //  2. **O GIRO.** Ele pintava `on-action-fill` fixo, mas o botao fica
+    //     DESABILITADO enquanto carrega (`acao` e nulo acima), e aí o fundo
+    //     resolvido e `disabled-surface`: 1.02:1 no tema escuro, dois
+    //     quase-pretos um sobre o outro. `widgets/folha_de_senha.dart` ja
+    //     pintava o mesmo giro com `on-disabled`, que e o par certo daquele
+    //     fundo (3.62:1 no claro, 3.82:1 no escuro, acima do piso de 3:1 do
+    //     SC 1.4.11).
+    final Color tinta =
+        acao == null ? bichu.cores.onDisabled : bichu.cores.onActionFill;
+
     final String nome = nomeAcessivel ?? rotulo;
 
     return Semantics(
@@ -61,7 +86,7 @@ class BotaoPrimario extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
-                  color: bichu.cores.onActionFill,
+                  color: tinta,
                 ),
               ),
               const SizedBox(width: BichuEspaco.e3),
@@ -72,7 +97,7 @@ class BotaoPrimario extends StatelessWidget {
             Flexible(
               child: Text(
                 rotulo,
-                style: textos.labelLarge,
+                style: textos.labelLarge?.copyWith(color: tinta),
                 textAlign: TextAlign.center,
               ),
             ),
