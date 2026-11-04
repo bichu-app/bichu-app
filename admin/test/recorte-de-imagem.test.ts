@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { DIMENSAO_MINIMA, type Proposito } from '../src/componentes/envio-de-imagem.ts';
+import { DIMENSAO_MINIMA, LARGURA_MINIMA, alturaDoPiso, type Proposito } from '../src/componentes/envio-de-imagem.ts';
 import {
   ENQUADRAMENTO_INICIAL,
   formatosDeSaida,
@@ -79,7 +79,7 @@ describe('a moldura, por propósito', () => {
 });
 
 /**
- * ## O PISO TEM DE SER ALCANÇÁVEL NA PROPORÇÃO QUE A MOLDURA FORÇA
+ * ## O PISO É DERIVADO DA MOLDURA, E A LARGURA É A DECIDIDA
  *
  * O defeito de 02/11/2026, nas palavras do cliente: *"na recomendação dos
  * estabelecimentos, o upload da foto está diminuindo a foto para 578, mas o
@@ -89,15 +89,27 @@ describe('a moldura, por propósito', () => {
  * largura saía com 578 e era recusada por uma regra que o próprio recorte
  * não conseguia cumprir.
  *
- * **Nada comparava o piso com a proporção**, e foi por isso que o número da
- * logo (que É quadrada) vazou para a foto em 18/10/2026 e atravessou
- * typecheck, eslint e a suíte inteira. Este é o caso que faltava, e ele vale
- * para a CLASSE: todo propósito com proporção forçada, e todo propósito novo.
+ * Em 03/11/2026 ele travou igual na capa do encontro, e fixou a regra: *"sempre
+ * que estivermos falando de upload de imagem, isso deve ser tratado no mesmo
+ * lugar, e as correções devem ser realizadas em todos os lugares por ser o
+ * mesmo código"*. Então o piso deixou de ser uma tabela de PARES escritos à mão
+ * e passou a ser **derivado**: só a largura é decidida, e a altura sai da
+ * proporção da moldura.
  *
- * A aritmética, de uma vez: o maior recorte de proporção `r` que cabe numa
- * imagem `W × H` é `min(W, H·r) × min(H, W/r)`. Para ele alcançar `W × H` é
- * preciso `W/H = r`. Ou seja: **o piso tem a proporção da moldura, ou é
- * inalcançável** -- não existe piso quadrado numa moldura deitada.
+ * ## Por que estes três casos, e não um
+ *
+ * Recalcular a altura com a MESMA `alturaDoPiso` que monta a tabela e comparar
+ * seria **tautologia** -- o portão passaria com qualquer defeito. Então:
+ *
+ * | caso | o que desligar para ele reprovar |
+ * |---|---|
+ * | a largura de cada propósito é a DECIDIDA | mudar um número em `LARGURA_MINIMA` |
+ * | o par de cada propósito é o esperado, escrito aqui à mão de propósito | quebrar `alturaDoPiso` |
+ * | o piso é alcançável NA moldura, medido pelo recorte de verdade | pôr piso quadrado num propósito 16:9 |
+ *
+ * O terceiro é o que vale para a CLASSE, e ele não tem mais lista de exceção:
+ * `network_event` saiu dela em 03/11/2026 quando o cliente decidiu, e exceção
+ * que sobra aprova o furo quando ele voltar.
  */
 describe('o piso, contra a proporção da moldura', () => {
   /** O maior recorte que a moldura do propósito tira de uma imagem NO piso dele. */
@@ -113,15 +125,39 @@ describe('o piso, contra a proporção da moldura', () => {
     return saida.largura < piso.largura || saida.altura < piso.altura;
   }
 
-  /**
-   * **`network_event` espera DECISÃO DO CLIENTE, e não zelo meu.** Ele tem o
-   * defeito idêntico -- moldura 16:9 com piso 600 × 600 -- e em 02/11/2026 o
-   * cliente decidiu sobre a foto do ESTABELECIMENTO, com as três opções na
-   * mesa; a capa do encontro não estava na mesa, e consertá-la aqui seria
-   * decidir no lugar dele. A linha sai desta lista no dia em que ele decidir,
-   * e até lá o defeito está escrito em código, e não só num relatório.
-   */
-  const PISO_INALCANCAVEL_ESPERANDO_DECISAO: readonly Proposito[] = ['network_event'];
+  it('a LARGURA mínima de cada propósito é a decidida', () => {
+    expect(LARGURA_MINIMA).toEqual({
+      store_item: 800,
+      network_event: 600,
+      directory_logo: 256,
+      directory_photo: 1280,
+      directory_gallery: 1280,
+    });
+  });
+
+  it('o par de cada propósito é o que a moldura impõe à largura decidida', () => {
+    // Escritos à mão AQUI de propósito: é o controle independente da derivação.
+    expect(DIMENSAO_MINIMA).toEqual({
+      store_item: { largura: 800, altura: 800 },
+      network_event: { largura: 600, altura: 338 },
+      directory_logo: { largura: 256, altura: 256 },
+      directory_photo: { largura: 1280, altura: 720 },
+      directory_gallery: { largura: 1280, altura: 720 },
+    });
+  });
+
+  it('a altura NÃO é escrita ao lado da largura: ela sai da proporção', () => {
+    for (const proposito of Object.keys(LARGURA_MINIMA) as Proposito[]) {
+      expect(DIMENSAO_MINIMA[proposito].altura).toBe(
+        alturaDoPiso(LARGURA_MINIMA[proposito], PROPORCAO_DA_MOLDURA[proposito]),
+      );
+    }
+    // 600 em 16:9 cai no empate exato do arredondamento, e é o caso do cliente.
+    expect(alturaDoPiso(600, 16 / 9)).toBe(338);
+    expect(alturaDoPiso(1280, 16 / 9)).toBe(720);
+    expect(alturaDoPiso(256, 1)).toBe(256);
+    expect(alturaDoPiso(800, null)).toBe(800);
+  });
 
   it('o piso de todo propósito com moldura é alcançável NA moldura dele', () => {
     const comMoldura = (Object.keys(PROPORCAO_DA_MOLDURA) as Proposito[]).filter(
@@ -130,30 +166,45 @@ describe('o piso, contra a proporção da moldura', () => {
     // O filtro prova que casou antes de a contagem valer: filtro vazio aprovaria tudo.
     expect(comMoldura).toEqual(['network_event', 'directory_logo', 'directory_photo', 'directory_gallery']);
 
-    expect(comMoldura.filter(pisoInalcancavel)).toEqual(PISO_INALCANCAVEL_ESPERANDO_DECISAO);
+    // SEM lista de exceção: paga a dívida, a dispensa vai com ela.
+    expect(comMoldura.filter(pisoInalcancavel)).toEqual([]);
   });
 
-  it('a foto e a galeria do local: o piso É a faixa 1280 × 720, e o recorte nele passa inteiro', () => {
-    for (const proposito of ['directory_photo', 'directory_gallery'] as const) {
-      expect(DIMENSAO_MINIMA[proposito]).toEqual({ largura: 1280, altura: 720 });
-      // 1280 x 720 é a MAIOR derivada (`banner`): no piso nada é ampliado.
-      expect(recorteDeUmaImagemNoPiso(proposito)).toEqual({ largura: 1280, altura: 720 });
+  it('o piso derivado é PONTO FIXO: uma imagem no piso sai do recorte no piso', () => {
+    for (const proposito of Object.keys(DIMENSAO_MINIMA) as Proposito[]) {
+      expect(recorteDeUmaImagemNoPiso(proposito)).toEqual(DIMENSAO_MINIMA[proposito]);
     }
   });
 
-  it('a foto de 1028 × 578 do cliente continua recusada, e agora por uma regra alcançável', () => {
-    // O que a tela dele fez: 1028 de largura, moldura 16:9, altura 578.
+  it('a capa do encontro: a foto de 600 de largura e alta PASSA, e é o pedido do cliente', () => {
+    // Cliente, 03/11/2026: *"as vezes a foto ja tem 600px de largura e e muito
+    // grande na altura, ai precisa manter os 600px que e o minimo, mas realizar
+    // o crop na altura"*.
+    const recorte = tamanhoDoEnvio(emPixeis({ largura: 600, altura: 1200 }, PROPORCAO_DA_MOLDURA.network_event));
+    expect(recorte).toEqual({ largura: 600, altura: 338 });
+    expect(recorte.largura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.largura);
+    expect(recorte.altura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.altura);
+  });
+
+  it('a foto e a galeria do local FICAM em 1280 × 720: o número já era coerente', () => {
+    for (const proposito of ['directory_photo', 'directory_gallery'] as const) {
+      expect(DIMENSAO_MINIMA[proposito]).toEqual({ largura: 1280, altura: 720 });
+      expect(recorteDeUmaImagemNoPiso(proposito)).toEqual({ largura: 1280, altura: 720 });
+    }
+    // 1280/720 É exatamente 16/9, então a derivação não mexe neles.
+    expect(1280 / 720).toBe(16 / 9);
+  });
+
+  it('a foto de 1028 × 578 continua medida: ela é pequena para a faixa de 1280', () => {
     const recorte = tamanhoDoEnvio(emPixeis({ largura: 1028, altura: 1028 }, PROPORCAO_DA_MOLDURA.directory_photo));
     expect(recorte).toEqual({ largura: 1028, altura: 578 });
     expect(recorte.largura).toBeLessThan(DIMENSAO_MINIMA.directory_photo.largura);
-    // E 1067 x 600, que o piso velho dizia bastar, também não basta para a faixa.
-    expect(600).toBeLessThan(DIMENSAO_MINIMA.directory_photo.altura);
   });
 
-  it('`network_event` está medido, e não suposto: 600 × 600 em 16:9 sai com 338 de altura', () => {
-    expect(PROPORCAO_DA_MOLDURA.network_event).toBe(16 / 9);
-    expect(DIMENSAO_MINIMA.network_event).toEqual({ largura: 600, altura: 600 });
-    expect(recorteDeUmaImagemNoPiso('network_event')).toEqual({ largura: 600, altura: 338 });
+  it('imagem estreita continua RECUSADA: o piso não foi afrouxado', () => {
+    // 599 de largura falha por 1 pixel, e é o que separa conserto de afrouxamento.
+    const recorte = tamanhoDoEnvio(emPixeis({ largura: 599, altura: 1200 }, PROPORCAO_DA_MOLDURA.network_event));
+    expect(recorte.largura).toBeLessThan(DIMENSAO_MINIMA.network_event.largura);
   });
 });
 

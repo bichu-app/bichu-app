@@ -242,7 +242,9 @@ async function recusarFoto(ref: string, position: number): Promise<void> {
   await marcarImagemDeCatalogoRecusada(
     banco.db,
     imagemId,
-    'A imagem precisa ter pelo menos 600 x 600 pixels.',
+    // 600 x 338 desde 03/11/2026: a foto da indicacao reusa a faixa 16:9 de
+    // `DERIVADAS_DA_FOTO_DO_LOCAL`, e o piso quadrado era inalcancavel.
+    'A imagem precisa ter pelo menos 600 x 338 pixels.',
   );
 }
 

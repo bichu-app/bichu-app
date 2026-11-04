@@ -1,6 +1,7 @@
 /**
- * Dimensao minima da imagem de catalogo (01/10): 600 x 600 no encontro, 800 x
- * 800 na Loja. O painel confere antes, manda `width`/`height` no pedido da
+ * Dimensao minima da imagem de catalogo: 600 x 338 no encontro (a LARGURA
+ * decidida e 600 desde 01/10, e a altura passou a sair da moldura 16:9 em
+ * 03/11/2026) e 800 x 800 na Loja, que nao tem moldura. O painel confere antes, manda `width`/`height` no pedido da
  * intencao, e trata o 422 `image-too-small` com o minimo e o tamanho lido.
  *
  * A RECUSA MUDOU DE REDACAO em 02/11/2026, com o piso da foto do local: ela
@@ -24,21 +25,41 @@ afterEach(() => vi.unstubAllGlobals());
 const arquivo = () => new File([new Uint8Array(10)], 'foto.jpg', { type: 'image/jpeg' });
 
 describe('dimensao minima por proposito', () => {
-  it('encontro 600 x 600; Loja continua 800 x 800', () => {
-    expect(DIMENSAO_MINIMA.network_event).toEqual({ largura: 600, altura: 600 });
+  // A capa do encontro passou de 600 x 600 para 600 x 338 em 03/11/2026: a
+  // LARGURA decidida continua 600, e a altura agora e a que a moldura 16:9
+  // impoe. A Loja nao tem moldura (`fit: inside`), e segue quadrada.
+  it('encontro 600 x 338; Loja continua 800 x 800', () => {
+    expect(DIMENSAO_MINIMA.network_event).toEqual({ largura: 600, altura: 338 });
     expect(DIMENSAO_MINIMA.store_item).toEqual({ largura: 800, altura: 800 });
   });
 
-  it('700 x 700 passa no encontro e e recusada na Loja; 599 de altura e recusada no encontro', async () => {
+  it('700 x 700 passa no encontro e e recusada na Loja; 599 de LARGURA e recusada no encontro', async () => {
     comDimensao(700, 700);
     expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
     expect(await conferirDimensao(arquivo(), 'store_item')).toBe(
-      'A imagem precisa ter pelo menos 800 × 800 pixels. Esta tem 700 × 700. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
+      'A imagem precisa ter pelo menos 800 pixels de largura e 800 de altura. Esta tem 700 × 700. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
     );
+    // O que mudou de verdade: 1200 x 599 PASSA agora, porque 599 de altura ja
+    // cabe na faixa 16:9 de 1200 de largura. O que recusa e a LARGURA curta.
     comDimensao(1200, 599);
+    expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
+    comDimensao(599, 1200);
     expect(await conferirDimensao(arquivo(), 'network_event')).toBe(
-      'A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 1200 × 599. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
+      'A imagem precisa ter pelo menos 600 pixels de largura e 338 de altura. Esta tem 599 × 1200. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
     );
+  });
+
+  // O CASO DO CLIENTE, 03/11/2026: *"as vezes a foto ja tem 600px de largura e
+  // e muito grande na altura, ai precisa manter os 600px que e o minimo, mas
+  // realizar o crop na altura"*. Antes isto era recusado por 600 x 600.
+  it('a capa do encontro: 600 de largura e alta PASSA', async () => {
+    comDimensao(600, 1200);
+    expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
+    comDimensao(600, 600);
+    expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
+    // E o recorte 16:9 de uma foto de 600 de largura, que era o impasse.
+    comDimensao(600, 338);
+    expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
   });
 
   // O CASO DO CLIENTE, 02/11/2026, com os numeros dele: a foto saiu do recorte
@@ -48,7 +69,7 @@ describe('dimensao minima por proposito', () => {
   it('a foto do local: 1028 × 578 e recusada, e a frase diz o que fazer', async () => {
     comDimensao(1028, 578);
     expect(await conferirDimensao(arquivo(), 'directory_photo')).toBe(
-      'A imagem precisa ter pelo menos 1280 × 720 pixels. Esta tem 1028 × 578. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
+      'A imagem precisa ter pelo menos 1280 pixels de largura e 720 de altura. Esta tem 1028 × 578. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
     );
     // E 1280 x 720 EXATO passa: o piso e a maior derivada, e nada e ampliado.
     comDimensao(1280, 720);
@@ -80,7 +101,7 @@ describe('pedido da intencao', () => {
     const envio = enviarImagem(criarClienteDaApi({ fetch: servidor.fetch }), arquivo(), 'network_event', () => undefined);
     await expect(envio).rejects.toMatchObject({
       mensagem:
-        'A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 500 × 500. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
+        'A imagem precisa ter pelo menos 600 pixels de largura e 338 de altura. Esta tem 500 × 500. Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.',
     });
   });
 });

@@ -3,7 +3,17 @@ import { TIPOS_ACEITOS, comoObjectKey, type CategoriaDeCatalogo } from '../domai
 
 /** A ÚNICA porta pela qual outro módulo obtém a marca `ObjectKey`. */
 export { comoObjectKey };
-import { TETO_DE_BYTES_DO_ENVIO } from '../domain/derivadas.js';
+import {
+  DERIVADAS_DA_FOTO_DE_USUARIO,
+  DERIVADAS_DA_FOTO_DO_LOCAL,
+  DERIVADAS_DA_LOGO,
+  DERIVADAS_DA_PUBLICACAO,
+  DERIVADAS_DA_VITRINE_DO_USUARIO,
+  DERIVADAS_DO_ENCONTRO,
+  DERIVADAS_DO_PRODUTO,
+  TETO_DE_BYTES_DO_ENVIO,
+  type EspecificacaoDaDerivada,
+} from '../domain/derivadas.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
@@ -65,40 +75,120 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
 export const TETO_DE_BYTES_DO_CATALOGO = TETO_DE_BYTES_DO_ENVIO;
 
 /**
- * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`).
- *
- * ## O piso tem a proporcao da moldura, ou e inalcancavel
- *
- * `directory_photo` e `directory_gallery` passaram de 600 x 600 para
- * **1280 x 720** em 02/11/2026, por decisao do cliente. Os dois sao
- * enquadrados em 16:9 no painel (a moldura sai de `DERIVADAS_DA_FOTO_DO_LOCAL`
- * e de `DERIVADAS_DO_ENCONTRO`), e 600 x 600 e um piso QUADRADO: uma faixa
- * 16:9 so alcanca 600 de altura com 1067 de largura, entao a regra nao podia
- * ser cumprida pelo proprio recorte do produto -- o cliente mandou uma foto de
- * 1028 de largura, o recorte saiu com 578 de altura e foi recusado. O numero
- * 600 era o da LOGO, que e quadrada, e vazou para a foto em 18/10/2026.
- *
- * 1280 x 720 e o tamanho da MAIOR derivada (`banner`): no piso nada e
- * ampliado. E mais exigente em largura, e o custo foi aceito.
- *
- * **`network_event` continua em 600 x 600 com o defeito identico**, e isso nao
- * e descuido: a decisao de 02/11/2026 foi sobre a foto do estabelecimento, e
- * estender por conta propria seria decidir no lugar do cliente. O caso
- * `o piso de todo propósito com moldura é alcançável NA moldura dele`
- * (`admin/test/recorte-de-imagem.test.ts`) carrega essa pendencia escrita.
+ * As derivadas de cada proposito: o PONTO UNICO de onde sai tanto a geometria
+ * que o worker gera quanto a proporcao que o piso obedece.
  */
-export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
-  store_item: { largura: 800, altura: 800 },
-  network_event: { largura: 600, altura: 600 },
-  directory_logo: { largura: 256, altura: 256 },
-  directory_photo: { largura: 1280, altura: 720 },
-  directory_gallery: { largura: 1280, altura: 720 },
-  directory_suggestion_logo: { largura: 256, altura: 256 },
-  directory_suggestion_photo: { largura: 600, altura: 600 },
-  user_photo: { largura: 300, altura: 300 },
-  user_showcase: { largura: 600, altura: 600 },
-  user_publication: { largura: 600, altura: 600 },
+export const DERIVADAS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly EspecificacaoDaDerivada[]>> = {
+  network_event: DERIVADAS_DO_ENCONTRO,
+  store_item: DERIVADAS_DO_PRODUTO,
+  directory_logo: DERIVADAS_DA_LOGO,
+  directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
+  directory_gallery: DERIVADAS_DO_ENCONTRO,
+  directory_suggestion_logo: DERIVADAS_DA_LOGO,
+  directory_suggestion_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
+  user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
+  user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
+  user_publication: DERIVADAS_DA_PUBLICACAO,
 };
+
+/**
+ * A proporcao que o recorte FORCA no proposito, ou `null` quando ele e livre.
+ *
+ * Ela sai da MAIOR derivada que declara altura -- a `banner` quando existe --,
+ * e nao de uma tabela escrita a mao: a derivada e que manda, e o recorte do
+ * painel e do app so a espelha. A derivada sem `altura` (a Loja) nao corta:
+ * `sharp` usa `fit: 'inside'` e a imagem inteira passa.
+ *
+ * **A `thumb` do encontro e 480 x 360, que e 4:3 e nao 16:9**, e por isso a
+ * regra e "a maior com altura" e nao "todas concordam".
+ */
+export function proporcaoDaMoldura(purpose: PropositoDaImagem): number | null {
+  const comAltura = DERIVADAS_POR_PROPOSITO[purpose].filter((d) => d.altura !== undefined);
+  if (comAltura.length === 0) return null;
+  const maior = comAltura.reduce((a, b) => (b.largura > a.largura ? b : a));
+  return maior.largura / (maior.altura ?? maior.largura);
+}
+
+/**
+ * A LARGURA minima decidida de cada proposito -- o unico numero escrito a mao.
+ *
+ * ## Por que a altura nao esta aqui
+ *
+ * Em 02/11/2026 o cliente travou publicando: a moldura de `directory_photo` e
+ * 16:9 e o piso era 600 x 600, que e QUADRADO. Uma faixa 16:9 so alcanca 600
+ * de ALTURA com 1067 de largura, entao a foto dele (1028 x 578) era recusada
+ * por uma regra que o proprio recorte do produto nao conseguia cumprir. O 600
+ * era o numero da LOGO, que e quadrada, e vazou para a foto em 18/10/2026.
+ *
+ * Em 03/11/2026 ele travou de novo, agora na capa do encontro, e disse o que
+ * esperava: *"as vezes a foto ja tem 600px de largura e e muito grande na
+ * altura, ai precisa manter os 600px que e o minimo, mas realizar o crop na
+ * altura"*. E fixou a regra que decide este desenho: *"sempre que estivermos
+ * falando de upload de imagem, isso deve ser tratado no mesmo lugar, e as
+ * correcoes devem ser realizadas em todos os lugares por ser o mesmo codigo"*.
+ *
+ * Por isso **a altura e DERIVADA da proporcao**, e nao escrita ao lado da
+ * largura: par escrito a mao pode discordar da moldura outra vez, e foi
+ * exatamente assim que o defeito nasceu. O piso derivado e PONTO FIXO --
+ * medido: uma imagem 600 x 338 recortada em 16:9 sai 600 x 338.
+ *
+ * `1280` em `directory_photo` e `directory_gallery` e a decisao do cliente de
+ * 02/11/2026 e **fica**: `1280/720` e exatamente `16/9`, entao aquele piso
+ * sempre foi coerente. A premissa que escolheu o 1280 ("no piso nada e
+ * ampliado") era falsa -- `sharp` usa `withoutEnlargement: true` nas duas
+ * formas do `resize` (`sharp-image-processor.ts`, linhas 61 a 70), e o sistema
+ * nunca amplia --, mas o NUMERO continua coerente, e baixa-lo seria decisao
+ * nova que o cliente nao tomou.
+ */
+export const LARGURA_MINIMA: Readonly<Record<PropositoDaImagem, number>> = {
+  store_item: 800,
+  network_event: 600,
+  directory_logo: 256,
+  directory_photo: 1280,
+  directory_gallery: 1280,
+  directory_suggestion_logo: 256,
+  directory_suggestion_photo: 600,
+  user_photo: 300,
+  user_showcase: 600,
+  user_publication: 600,
+};
+
+/** A altura do piso: a que a moldura impoe a essa largura. */
+export function alturaDoPiso(largura: number, proporcao: number | null): number {
+  return proporcao === null ? largura : Math.round(largura / proporcao);
+}
+
+/**
+ * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`),
+ * **derivada** de [LARGURA_MINIMA] e da proporcao da moldura. Nenhum par e
+ * escrito a mao, e e isso que impede o terceiro proposito de nascer com o
+ * mesmo furo.
+ */
+export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> =
+  Object.freeze(
+    Object.fromEntries(
+      (Object.keys(LARGURA_MINIMA) as PropositoDaImagem[]).map((purpose) => {
+        const largura = LARGURA_MINIMA[purpose];
+        return [purpose, { largura, altura: alturaDoPiso(largura, proporcaoDaMoldura(purpose)) }];
+      }),
+    ) as Record<PropositoDaImagem, { largura: number; altura: number }>,
+  );
+
+/**
+ * A recusa do WORKER, que vai para `rejection_reason` e e o que o APP mostra.
+ *
+ * Ela mora aqui, junto do piso, para nao poder divergir dele: ate 03/11/2026
+ * a frase era montada dentro de `processar-imagem-de-catalogo.ts` e o numero
+ * era lido de `DIMENSAO_MINIMA` la, longe da tabela.
+ *
+ * A grafia `x` (e nao `×`) e a de hoje, de proposito: trocar o sinal mudaria
+ * tambem a recusa da vitrine e a da foto de pet, que nao mudaram de numero, e
+ * quebraria casos do app sem nenhum ganho para quem le.
+ */
+export function textoDaRecusaPorDimensao(purpose: PropositoDaImagem): string {
+  const minima = DIMENSAO_MINIMA[purpose];
+  return `A imagem precisa ter pelo menos ${String(minima.largura)} x ${String(minima.altura)} pixels.`;
+}
 
 /** Os campos da dimensao declarada que ficam abaixo da minima do proposito. */
 export function dimensaoDeclaradaAbaixoDaMinima(

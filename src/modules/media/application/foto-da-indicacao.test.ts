@@ -141,10 +141,13 @@ void describe('FotoDaIndicacao.autorizar', () => {
     assert.deepEqual(ordem, ['assinar', 'gravar']);
   });
 
-  void it('a minima e 600 x 600, e 512 x 512 -- que passa no logotipo -- reprova aqui', async () => {
+  // Em 03/11/2026 a foto da indicacao passou de 600 x 600 para 600 x 338: ela
+  // reusa `DERIVADAS_DA_FOTO_DO_LOCAL` (faixa 16:9) e tinha o MESMO piso
+  // quadrado impossivel da capa do encontro. A LARGURA decidida segue 600.
+  void it('a minima e 600 x 338, e 512 x 512 -- que passa no logotipo -- reprova aqui', async () => {
     assert.deepEqual(DIMENSAO_MINIMA[PROPOSITO_DA_FOTO_DA_INDICACAO], {
       largura: 600,
-      altura: 600,
+      altura: 338,
     });
     const { caso, assinaturas, gravadas } = bancada();
 
@@ -155,15 +158,31 @@ void describe('FotoDaIndicacao.autorizar', () => {
 
     assert.ok(erro instanceof AppError);
     assert.equal(erro.problemType, 'image-too-small');
+    // SO a largura agora: 512 e menor que 600, mas e MAIOR que os 338 de altura
+    // que a faixa 16:9 pede. Antes do piso derivado os dois campos vinham, e
+    // esse `height` era justamente a parte inalcancavel da regra.
     assert.deepEqual(
       (erro.errors ?? []).map((e) => ({ field: e.field, code: e.code })),
-      [
-        { field: 'width', code: 'minimum' },
-        { field: 'height', code: 'minimum' },
-      ],
+      [{ field: 'width', code: 'minimum' }],
     );
     assert.equal(assinaturas.length, 0);
     assert.equal(gravadas.length, 0);
+  });
+
+  void it('CONTRAPESO: a altura sozinha ainda reprova, nomeando so ela', async () => {
+    const { caso, assinaturas } = bancada();
+
+    const erro = await caso.autorizar(AUTOR, { ...CORPO_BOM, width: 1200, height: 337 }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    assert.ok(erro instanceof AppError);
+    assert.deepEqual(
+      (erro.errors ?? []).map((e) => e.field),
+      ['height'],
+    );
+    assert.equal(assinaturas.length, 0);
   });
 
   void it('recusa a dimensao declarada abaixo da minima SEM assinar nem gravar', async () => {

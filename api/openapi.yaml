@@ -489,7 +489,7 @@ x-problem-types:
   - { slug: captcha-rejected,              status: 403, note: "ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)" }
   - { slug: method-not-allowed,            status: 405, note: "ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do \"nao fui eu\", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)" }
   - { slug: weak-password,                 status: 422 }
-  - { slug: image-too-small,               status: 422, note: "a imagem de catalogo declarada no pedido de envio e menor que a dimensao minima do proposito (600 x 600 no encontro da Rede, 800 x 800 no produto da Loja). Separado de `validation-failed`: o corpo esta bem formado, e a saida e outra -- escolher outra imagem, nao corrigir o formulario. A dimensao real continua conferida pelo worker nos bytes" }
+  - { slug: image-too-small,               status: 422, note: "a imagem de catalogo declarada no pedido de envio e menor que a dimensao minima do proposito (600 x 338 no encontro da Rede, 800 x 800 no produto da Loja). Separado de `validation-failed`: o corpo esta bem formado, e a saida e outra -- escolher outra imagem, nao corrigir o formulario. A dimensao real continua conferida pelo worker nos bytes" }
   - { slug: precondition-required,         status: 428, note: "ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`" }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
@@ -2792,7 +2792,9 @@ paths:
         JPEG -- HEIC entra e nunca sai, e a conversao e nossa, no servidor.
         SVG nunca, e por IGUALDADE e nunca por prefixo.
 
-        Dimensao minima 600 x 600, a mesma da capa do encontro e da foto de pet:
+        Dimensao minima 600 x 600, a mesma da foto de pet -- e **ja nao a da capa do
+        encontro**, que passou a 600 x 338 em 03/11/2026 porque a capa e
+        enquadrada em 16:9 e esta vitrine e quadrada:
         `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
         `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
         worker, nos bytes.
@@ -3058,8 +3060,9 @@ paths:
         iPhone e HEIC. A derivada sai sempre em JPEG -- a conversao e nossa, no
         servidor. SVG nunca, e por IGUALDADE e nunca por prefixo de `image/`.
 
-        Dimensao minima 600 x 600, a mesma da vitrine, da capa do encontro e da
-        foto de pet, e pelo mesmo motivo: a derivada desta foto e `card` de
+        Dimensao minima 600 x 600, a mesma da vitrine e da foto de pet, e pelo mesmo
+        motivo (**ja nao a da capa do encontro**, que e 600 x 338 desde
+        03/11/2026: aquela e enquadrada em 16:9 e esta e quadrada): a derivada desta foto e `card` de
         1024 px e o `sharp` nao amplia. `width`/`height` sao opcionais e, quando
         vem abaixo dela, respondem `422 image-too-small` **antes** de assinar;
         quem decide de verdade e o worker, nos bytes.
@@ -6791,8 +6794,9 @@ paths:
         outra pessoa, de outro proposito ou vencido e recusado com `400`
         (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
 
-        Dimensao minima 600 x 600, a mesma do painel: `width`/`height` sao
-        opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+        Dimensao minima 600 x 338, a mesma do painel -- a LARGURA minima decidida e
+        600 e a altura e a que a moldura 16:9 impoe (cliente, 03/11/2026):
+        `width`/`height` sao opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
         **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
 
         **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
@@ -6868,7 +6872,7 @@ paths:
         de outro proposito, vencido ou ja usado em OUTRA indicacao e recusado
         com `400` (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
 
-        Dimensao minima **256 x 256**, e nao os 600 x 600 da capa do encontro: e
+        Dimensao minima **256 x 256**, e nao os 600 x 338 da capa do encontro: e
         a mesma minima de `directory_logo`, e o motivo esta escrito lá -- logo de
         clinica de bairro costuma ser um PNG de 300 px que saiu de um cartao de
         visita, e 256 e o piso em que a derivada `card` de 512 ainda fica
@@ -6932,7 +6936,7 @@ paths:
 
         O logotipo e a **marca**: um quadrado ao lado do nome, 512 x 512, minima
         de 256. A foto do estabelecimento e a **faixa do topo da ficha**:
-        1280 x 720, minima de 600 x 600. Sao duas geometrias e duas minimas, e
+        1280 x 720, minima de 600 x 338. Sao duas geometrias e duas minimas, e
         por isso sao duas rotas -- exatamente como `directory_logo` e
         `directory_photo` sao dois propositos no painel desde 18/10/2026.
 
@@ -6968,8 +6972,11 @@ paths:
         vencido ou ja usado em OUTRA indicacao e recusado com `400`
         (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
 
-        Dimensao minima **600 x 600**, a mesma da capa do encontro: a derivada
-        `banner` e 1280 x 720 e `sharp` nao amplia. `width`/`height` sao
+        Dimensao minima **600 x 338**, a mesma da capa do encontro: a LARGURA
+        minima decidida e 600 e a altura sai da moldura 16:9 da derivada
+        `banner` (1280 x 720), e `sharp` nao amplia. Ela era 600 x 600 -- um
+        piso QUADRADO numa faixa deitada, que nenhum recorte 16:9 de 600 de
+        largura alcanca (ele da 338) -- e foi corrigida em 03/11/2026. `width`/`height` sao
         opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
         **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
 
@@ -22113,7 +22120,7 @@ components:
         **Esquema PROPRIO e nao reuso de `NetworkEventCoverIntentInput`**, e as
         duas razoes sao de conteudo e nao de organizacao: a prosa daquele
         esquema afirma o proposito `network_event`, que aqui e falso; e a
-        dimensao minima e 256 x 256 e nao 600 x 600. A FORMA e a mesma de
+        dimensao minima e 256 x 256 e nao 600 x 338. A FORMA e a mesma de
         proposito -- quatro campos, mesmos tetos, mesmo `enum` de tres tipos --,
         e o que se reusa de verdade e a esteira: `catalog_images`, as derivadas
         de `DERIVADAS_DA_LOGO` e o `UploadIntent` da resposta.
@@ -22160,7 +22167,7 @@ components:
         **Esquema PROPRIO e nao reuso de `DirectorySuggestionLogoIntentInput`**,
         e a razao e de conteudo: a prosa daquele esquema afirma o proposito
         `directory_suggestion_logo`, que aqui e falso, e a dimensao minima lá e
-        256 x 256 e aqui e **600 x 600**. A FORMA e a mesma de proposito --
+        256 x 256 e aqui e **600 x 338**. A FORMA e a mesma de proposito --
         quatro campos, mesmos tetos, mesmo `enum` de tres tipos --, e o que se
         reusa de verdade e a esteira: `catalog_images`, as derivadas de
         `DERIVADAS_DA_FOTO_DO_LOCAL` e o `UploadIntent` da resposta.
@@ -22441,7 +22448,7 @@ components:
             nao saberia se o problema foi o formato, o tamanho, a dimensao
             minima ou um arquivo truncado -- e portanto nao teria como
             consertar. Exemplos reais medidos: *"A imagem precisa ter pelo menos
-            600 x 600 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
+            600 x 338 pixels."* e *"Nao conseguimos ler essa imagem. Ela pode
             ter chegado incompleta."*
 
             Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
@@ -22768,7 +22775,7 @@ components:
             **1280 x 720**, derivadas 1280 x 720 e 1024 x 576). Confirmar um no
             campo do outro e `400 upload_not_usable`.
 
-            ## O PISO DA FOTO E 1280 x 720 DESDE 02/11/2026, E A RAZAO E ARITMETICA
+            ## O PISO TEM A PROPORCAO DA MOLDURA, E A ALTURA E DERIVADA DELA
 
             Ele era 600 x 600 -- o numero da LOGO, que e quadrada --, e isso era
             uma **regra impossivel**: o painel enquadra a foto do local em 16:9
@@ -22795,7 +22802,22 @@ components:
             faixa do topo da ficha.
 
             A regra geral, para o proximo proposito: **piso com a proporcao da
-            moldura, ou piso inalcancavel.**
+            moldura, ou piso inalcancavel.** Desde 03/11/2026 ela nao depende
+            mais de ninguem lembrar: so a **largura** minima e decidida por
+            proposito (`LARGURA_MINIMA`), e a **altura e DERIVADA** da proporcao
+            da moldura num ponto unico, no painel e no servidor. O cliente
+            fixou a regra assim: *"sempre que estivermos falando de upload de
+            imagem, isso deve ser tratado no mesmo lugar, e as correcoes devem
+            ser realizadas em todos os lugares por ser o mesmo codigo"*.
+
+            **O 1280 de `directory_photo` e `directory_gallery` FICA**, e nao
+            por inercia: `1280/720` e exatamente `16/9`, entao aquele piso
+            sempre foi coerente com a moldura. A premissa que o escolheu em
+            02/11/2026 ("no piso nada e ampliado") era falsa -- `sharp` usa
+            `withoutEnlargement: true` nas duas formas do `resize` e o sistema
+            nunca amplia, de modo que uma foto de 600 de largura geraria
+            derivadas de 600 x 338, menores e NITIDAS --, mas o numero continua
+            coerente, e baixa-lo seria decisao nova que o cliente nao tomou.
 
             **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
             verbatim: *"implemente a tabela de galeria entao"*), com a galeria
@@ -22808,10 +22830,17 @@ components:
             exatamente as tres derivadas do encontro da `Rede`. Minima
             **1280 x 720**, a mesma de `directory_photo` e pelo mesmo motivo:
             a galeria tambem e enquadrada em 16:9 no painel, e a maior derivada
-            dela tambem e `banner` 1280 x 720. **Ela JA NAO e a de
-            `network_event`**, que continua em 600 x 600 com o mesmo defeito
-            aritmetico, a espera de decisao do cliente -- a de 02/11/2026 foi
-            sobre a foto do estabelecimento, nao sobre a capa do encontro.
+            dela tambem e `banner` 1280 x 720. **`network_event` tinha o
+            mesmo defeito, e ele foi corrigido em 03/11/2026**: a moldura dela
+            e 16:9 e o piso era 600 x 600, e o cliente travou de novo --
+            *"estou testando na capa do evento e nao esta funcionando, ta dando
+            o mesmo erro antigo"*. Ele disse o que esperava: *"as vezes a foto
+            ja tem 600px de largura e e muito grande na altura, ai precisa
+            manter os 600px que e o minimo, mas realizar o crop na altura"*.
+            Entao a LARGURA minima dela segue **600** e a altura passou a
+            **338** (`600 x 9/16`, arredondado), que e o que o recorte 16:9 de
+            uma foto de 600 de largura entrega. `1280 x 720` **nao** e o piso
+            dela: a decisao de 02/11/2026 foi sobre a foto do estabelecimento.
 
             **`user_photo` nao esta aqui, de proposito**: a foto da propria
             pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
@@ -22826,13 +22855,17 @@ components:
           maximum: 5242880
           description: |
             Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
-            17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
-            pixels para `store_item`, 600 x 600 para `network_event` (pedido do
-            cliente de 01/10; antes, 1600 x 900), 256 x 256 para
-            `directory_logo` e **1280 x 720** para `directory_photo` e
-            `directory_gallery` (cliente, 02/11/2026: antes eram 600 x 600, que
-            e um piso QUADRADO numa moldura 16:9 e por isso inalcancavel -- a
-            razao inteira esta em `purpose`). Duas conferencias: a
+            17/10/2026), e o numero que o painel mostra em tela.
+
+            Dimensao minima -- e dela so a **largura** e decidida, porque a
+            altura e DERIVADA da proporcao da moldura (a razao inteira esta em
+            `purpose`): **800 x 800** para `store_item` (sem moldura: `sharp`
+            usa `fit: inside` e nao corta), **600 x 338** para `network_event`
+            (largura 600 pedida pelo cliente em 01/10, altura da moldura 16:9
+            desde 03/11/2026; antes o par era 600 x 600, QUADRADO e por isso
+            inalcancavel), **256 x 256** para `directory_logo` (moldura 1:1) e
+            **1280 x 720** para `directory_photo` e `directory_gallery`
+            (cliente, 02/11/2026, e `1280/720` E `16/9`). Duas conferencias: a
             DECLARADA, em `width`/`height` deste pedido, recusada aqui com
             `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
             faz nos bytes e que marca a imagem `rejected` com o motivo, porque
