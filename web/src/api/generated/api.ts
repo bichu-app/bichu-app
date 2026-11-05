@@ -13972,17 +13972,49 @@ export interface components {
         NetworkEventImage: {
             /**
              * Format: uri
-             * @description A derivada de 1024 x 576 px (16:9), para o cartao da agenda, que
-             *     desenha ~328 dp de largura.
+             * @description A derivada `card`: **1024 px de largura e altura livre**, para o
+             *     cartao da agenda, que desenha ~328 dp de largura.
+             *
+             *     **Ela era 1024 x 576 (16:9) e CORTAVA. Deixou de cortar em
+             *     05/11/2026**, por decisao do cliente, verbatim: *"as imagens do
+             *     evento que subimos, a capa esta correta, fazendo o crop, mas deve
+             *     subir tambem a foto no formato original e quando clicar para
+             *     expandir deve mostrar a imagem inteira, hoje as fotos estao sendo
+             *     cropadas, e a unica cropada tem que ser a da capa."*
+             *
+             *     **E esta derivada que o visualizador amplia nas posicoes 1+**, e por
+             *     isso ela e o centro daquele relato: a foto que ele abria ao tocar na
+             *     miniatura JA vinha cortada do servidor. O visualizador do app sempre
+             *     usou `BoxFit.contain` e mostrava a derivada inteira -- o corte
+             *     acontecia antes, no `card` 16:9, e era invisivel na tela.
+             *
+             *     Em `DERIVADAS_DO_ENCONTRO` a `card` passou a NAO declarar altura, o
+             *     que em `sharp` e `fit: 'inside'`: so limita a largura e preserva a
+             *     proporcao do que subiu. **A capa continua recortada** -- ela e a
+             *     `banner` 1280 x 720 (`cover_banner_url`), que mantem a altura.
+             *
+             *     **Na posicao 0 esta URL continua 16:9 de fato**, e nao por esta
+             *     regra: a capa sobe JA recortada em 16:9 pelo painel e pelo app
+             *     (o recorte acontece nos bytes, antes do envio), entao ela entra 16:9
+             *     e sai 16:9. E isso que mantem `cover_image_url` na faixa do cartao
+             *     sem precisar que a derivada corte.
              */
             url: string;
             /**
              * Format: uri
-             * @description A derivada de 480 x 360 px (4:3), para a GALERIA do detalhe, que
-             *     desenha 144 dp. **E ela que a galeria deve pedir**: com `url` a
-             *     galeria baixava 1024 px para pintar 432 px, cinco vezes o dado que
-             *     ela usa, e uma galeria de oito imagens pesava mais que o resto da
-             *     tela somado.
+             * @description A derivada `thumb`: **480 px de largura e altura livre**, para a
+             *     GALERIA do detalhe, que desenha 144 dp. **E ela que a galeria deve
+             *     pedir**: com `url` a galeria baixava 1024 px para pintar 432 px,
+             *     cinco vezes o dado que ela usa, e uma galeria de oito imagens pesava
+             *     mais que o resto da tela somado.
+             *
+             *     **Era 480 x 360 (4:3) e CORTAVA.** Perdeu a altura em 05/11/2026,
+             *     pela mesma decisao e pela mesma frase que mudou a `card`: *"a unica
+             *     cropada tem que ser a da capa"*. A faixa `Fotos` do detalhe continua
+             *     com caixa FIXA de 144 dp em 4:3 -- para nao pular de altura entre
+             *     fotos de formatos diferentes --, mas encaixa a imagem com
+             *     `BoxFit.contain` e deixa o fundo aparecer nas sobras, em vez de
+             *     cortar as beiradas com `cover`.
              *
              *     Nula na imagem gravada antes desta derivada existir, e na imagem de
              *     produto da Loja (que tem uma derivada so). Quem recebe nulo cai em
@@ -14023,9 +14055,15 @@ export interface components {
             visibility: "public";
             /**
              * Format: uri
-             * @description A `url` da imagem de posicao 0 (derivada de 1024 x 576), derivada na
-             *     leitura e nunca gravada no banco. **E a do CARTAO da agenda**, que
-             *     desenha ~328 dp. Nula sem imagem; o cartao sabe se desenhar sem ela.
+             * @description A `url` da imagem de posicao 0 (a derivada `card`, 1024 px de
+             *     largura), derivada na leitura e nunca gravada no banco. **E a do
+             *     CARTAO da agenda**, que desenha ~328 dp. Nula sem imagem; o cartao
+             *     sabe se desenhar sem ela.
+             *
+             *     **Ela e 16:9 porque a CAPA sobe recortada em 16:9, e nao porque a
+             *     derivada corte**: desde 05/11/2026 a `card` do encontro nao declara
+             *     altura (ver `NetworkEventImage.url`). O cartao da agenda, portanto,
+             *     continua na faixa que sempre teve.
              */
             cover_image_url?: string | null;
             /**
@@ -14375,10 +14413,27 @@ export interface components {
              *     **Nao ha `alt_text` e nao ha regiao de recorte**, pelas duas razoes
              *     de `DirectorySuggestionInput.photo_upload_ids`: o cliente mandou
              *     tirar a descricao de foto do aplicativo em 26/10/2026, e o recorte
-             *     16:9 acontece nos bytes, no aparelho
-             *     (`FormatoDoRecorte.capaDoEncontro`), antes do envio. O schema
+             *     acontece nos bytes, no aparelho, antes do envio. O schema
              *     `ImageCrop`, que era a unica forma de mandar regiao ao servidor,
              *     saiu do contrato em 31/10/2026.
+             *
+             *     **O recorte DEPENDE DA POSICAO desde 05/11/2026**, e nao e 16:9 nas
+             *     quatro como era: a posicao 0 e a capa e o aparelho a enquadra em 16:9
+             *     (`FormatoDoRecorte.capaDoEncontro`, espelho da derivada `banner`
+             *     1280 x 720, que CORTA); as posicoes 1+ sobem **inteiras**
+             *     (`FormatoDoRecorte.fotoDoEncontro`, moldura livre), porque as
+             *     derivadas que elas consomem -- `card` e `thumb` -- deixaram de
+             *     declarar altura e o servidor nao as corta. Cliente, verbatim: *"deve
+             *     subir tambem a foto no formato original e quando clicar para expandir
+             *     deve mostrar a imagem inteira [...] a unica cropada tem que ser a da
+             *     capa"*.
+             *
+             *     **Reordenar depois do envio nao reprocessa a imagem**, e esse limite
+             *     e consequencia de o recorte acontecer no cliente: quem promove a foto
+             *     3 a capa fica com uma capa que o servidor fecha em 16:9 por
+             *     `sharp.strategy.attention`, e nao pelo enquadramento de ninguem.
+             *     Gravar a regiao para reaproveita-la exigiria `ImageCrop` de volta, o
+             *     que e decisao do cliente e nao desenho desta rota.
              */
             image_upload_ids?: string[];
         };
@@ -14738,9 +14793,12 @@ export interface components {
             status: components["schemas"]["MyNetworkEventCoverStatus"];
             /**
              * Format: uri
-             * @description A derivada de 1024 x 576 da imagem de posicao 0, a MESMA que
-             *     `cover_image_url` da agenda serve. Nula em `processing` e em
-             *     `rejected`.
+             * @description A derivada `card` (1024 px de largura) da imagem de posicao 0, a
+             *     MESMA que `cover_image_url` da agenda serve. Nula em `processing` e
+             *     em `rejected`.
+             *
+             *     16:9 porque a capa sobe recortada em 16:9, e nao porque a derivada
+             *     corte -- ver `NetworkEventImage.url` e a decisao de 05/11/2026.
              */
             url: string | null;
             /**
@@ -15046,8 +15104,18 @@ export interface components {
              *     mesmo**, pelo criterio que separou `user_showcase` de `user_photo`:
              *     aquele e a foto UNICA do lugar, com duas derivadas (`banner` 1280 x
              *     720 e `card` 1024 x 576), e este sao as da GALERIA, que pedem
-             *     tambem a miniatura de 480 x 360 que a faixa da galeria desenha --
-             *     exatamente as tres derivadas do encontro da `Rede`. Minima
+             *     tambem a miniatura de 480 x 360 que a faixa da galeria desenha.
+             *
+             *     **Ate 05/11/2026 estas eram, literalmente, a MESMA constante das
+             *     tres derivadas do encontro da `Rede`** -- uma lista so, usada pelos
+             *     dois propositos. Elas foram SEPARADAS naquele dia
+             *     (`DERIVADAS_DA_GALERIA_DO_DIRETORIO`), e a separacao e o ponto: o
+             *     cliente pediu que a galeria do ENCONTRO parasse de recortar as fotos
+             *     (*"a unica cropada tem que ser a da capa"*), e numa lista
+             *     compartilhada essa mudanca teria arrastado a galeria do diretorio
+             *     atras dela -- **que nenhuma decisao dele pediu**. A galeria do
+             *     diretorio continua recortando as tres em 16:9; a do encontro passou a
+             *     recortar so a `banner` da capa. Minima
              *     **1280 x 720**, a mesma de `directory_photo` e pelo mesmo motivo:
              *     a galeria tambem e enquadrada em 16:9 no painel, e a maior derivada
              *     dela tambem e `banner` 1280 x 720. **`network_event` tinha o
@@ -15654,6 +15722,28 @@ export interface components {
          *     imagem fica sem texto alternativo e o app cai no titulo do encontro.
          *     **Campo presente e vazio e recusado**: o painel OMITE o campo em vez de
          *     mandar `""`.
+         *
+         *     ## O RECORTE DEPENDE DA POSICAO, no encontro (cliente, 05/11/2026)
+         *
+         *     Nao ha campo de regiao aqui -- `ImageCrop` saiu do contrato em
+         *     31/10/2026 e **todo cliente recorta nos bytes antes de enviar**. O que
+         *     mudou em 05/11 e QUANDO ele recorta, no `purpose: network_event`:
+         *
+         *     - a **posicao 0 e a capa** e o painel a enquadra em 16:9, espelhando a
+         *       derivada `banner` 1280 x 720, que CORTA;
+         *     - as **posicoes 1+ sao as fotos** e sobem inteiras, com moldura livre,
+         *       porque as derivadas que elas consomem (`card` e `thumb`) deixaram de
+         *       declarar altura e o servidor nao as corta.
+         *
+         *     Verbatim: *"deve subir tambem a foto no formato original e quando clicar
+         *     para expandir deve mostrar a imagem inteira [...] a unica cropada tem que
+         *     ser a da capa"*. Em `purpose: store_item` a moldura ja era livre em toda
+         *     posicao, e em `directory_gallery` ela segue 16:9 em todas.
+         *
+         *     **Reordenar depois do envio nao reprocessa a imagem.** Quem promove a
+         *     foto 3 a capa fica com uma capa que o servidor fecha em 16:9 por
+         *     `sharp.strategy.attention`, e nao pelo enquadramento de ninguem -- o
+         *     painel oferece `Reenquadrar` para desfazer isso.
          */
         CatalogImagesInput: components["schemas"]["CatalogImageInput"][];
         CatalogImageInput: {
