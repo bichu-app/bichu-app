@@ -27,6 +27,7 @@ import {
   janelaEmPixels,
   LADO_MAXIMO_DO_ENVIO,
   PROPORCAO_DA_MOLDURA,
+  proporcaoDaMolduraNaPosicao,
   regiaoEnquadrada,
   tamanhoDoEnvio,
 } from '../src/componentes/recorte-de-imagem.ts';
@@ -37,6 +38,69 @@ const RETRATO = { largura: 1600, altura: 2000 };
 function emPixeis(imagem: { largura: number; altura: number }, proporcao: number | null, enquadramento = ENQUADRAMENTO_INICIAL) {
   return janelaEmPixels(regiaoEnquadrada(imagem, proporcao, enquadramento), imagem.largura, imagem.altura);
 }
+
+// ===========================================================================
+// A MOLDURA DA POSIÇÃO: só a CAPA do encontro é recortada
+// ===========================================================================
+// Cliente, 05/11/2026, verbatim: *"as imagens do evento que subimos, a capa
+// esta correta, fazendo o crop, mas deve subir tambem a foto no formato
+// original e quando clicar para expandir deve mostrar a imagem inteira, hoje as
+// fotos estao sendo cropadas, e a unica cropada tem que ser a da capa."*
+//
+// No encontro a capa **é a posição 0** da mesma lista e com o mesmo propósito
+// (`network_event`), então uma moldura por propósito não consegue dizer "a
+// primeira corta e as outras não".
+describe('a moldura, pela POSIÇÃO na galeria', () => {
+  it('encontro: a posição 0 corta em 16:9 e as posições 1+ são livres', () => {
+    expect(proporcaoDaMolduraNaPosicao('network_event', 0)).toBe(16 / 9);
+    for (const posicao of [1, 2, 3, 7]) {
+      expect(proporcaoDaMolduraNaPosicao('network_event', posicao)).toBeNull();
+    }
+  });
+
+  // ISCA: tire a guarda `posicao > 0` de `proporcaoDaMolduraNaPosicao`, ou
+  // troque o propósito testado. Compila, `tsc` cala, o lint cala, e o painel
+  // volta a recortar a foto da galeria em 16:9 antes de enviar -- jogando fora
+  // pixel que o servidor ia entregar inteiro. Estes casos reprovam.
+  it('os OUTROS propósitos não mudam com a posição: a decisão foi sobre o encontro', () => {
+    const outros = (Object.keys(PROPORCAO_DA_MOLDURA) as Proposito[]).filter((p) => p !== 'network_event');
+    // A contagem vai junto do veredito: lista vazia aprovaria qualquer coisa.
+    expect(outros.length).toBeGreaterThan(0);
+    expect(outros.sort()).toEqual(['directory_gallery', 'directory_logo', 'directory_photo', 'store_item']);
+    for (const proposito of outros) {
+      for (const posicao of [0, 1, 5]) {
+        expect(proporcaoDaMolduraNaPosicao(proposito, posicao)).toBe(PROPORCAO_DA_MOLDURA[proposito]);
+      }
+    }
+  });
+
+  it('a foto livre nasce INTEIRA, e a capa da MESMA foto sai recortada', () => {
+    const inteira = emPixeis(RETRATO, proporcaoDaMolduraNaPosicao('network_event', 1));
+    expect(inteira).toEqual({ left: 0, top: 0, width: 1600, height: 2000 });
+    const capa = emPixeis(RETRATO, proporcaoDaMolduraNaPosicao('network_event', 0));
+    expect(capa.height).toBeLessThan(inteira.height);
+  });
+
+  // O PISO NÃO FICA MAIS DIFÍCIL, e isso não é suposição: o recorte só REMOVE
+  // pixel, nunca acrescenta, então a altura do envio livre é sempre >= a do
+  // envio recortado. Se a capa passa no piso, a foto livre da mesma imagem
+  // também passa. Sem este caso, "soltei a moldura" poderia virar "e agora a
+  // foto é recusada por 422 image-too-small" sem ninguém medir.
+  it('soltar a moldura não aperta o piso: a foto livre passa sempre que a capa passa', () => {
+    const imagens = [
+      { largura: 600, altura: 1200 },
+      { largura: 4000, altura: 1000 },
+      { largura: 1000, altura: 350 },
+      RETRATO,
+    ];
+    for (const imagem of imagens) {
+      const capa = tamanhoDoEnvio(emPixeis(imagem, proporcaoDaMolduraNaPosicao('network_event', 0)));
+      const foto = tamanhoDoEnvio(emPixeis(imagem, proporcaoDaMolduraNaPosicao('network_event', 1)));
+      expect(foto.largura).toBeGreaterThanOrEqual(capa.largura);
+      expect(foto.altura).toBeGreaterThanOrEqual(capa.altura);
+    }
+  });
+});
 
 describe('a moldura, por propósito', () => {
   it('1:1 sobre um retrato devolve um QUADRADO, e não a imagem inteira', () => {

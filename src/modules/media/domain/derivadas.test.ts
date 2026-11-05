@@ -105,6 +105,7 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
   const todas = [
     ...DERIVADAS_DA_FOTO_DE_PET,
     ...DERIVADAS_DO_ENCONTRO,
+    ...DERIVADAS_DA_GALERIA_DO_DIRETORIO,
     ...DERIVADAS_DO_PRODUTO,
     DERIVADA_DA_FOTO_DO_ACHADO,
   ];
@@ -116,7 +117,12 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
   });
 
   void it('nenhuma lista repete uma variante: a segunda sobrescreveria a primeira', () => {
-    for (const lista of [DERIVADAS_DA_FOTO_DE_PET, DERIVADAS_DO_ENCONTRO, DERIVADAS_DO_PRODUTO]) {
+    for (const lista of [
+      DERIVADAS_DA_FOTO_DE_PET,
+      DERIVADAS_DO_ENCONTRO,
+      DERIVADAS_DA_GALERIA_DO_DIRETORIO,
+      DERIVADAS_DO_PRODUTO,
+    ]) {
       const variantes = lista.map((d) => d.variante);
       assert.equal(new Set(variantes).size, variantes.length);
     }
