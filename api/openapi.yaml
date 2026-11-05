@@ -14816,10 +14816,26 @@ components:
                     message: Valor precisa ser dog, cat ou other.
     ImageTooSmall:
       description: |
-        A imagem declarada e menor que a dimensao minima do proposito: 600 x
-        600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
-        `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
-        assinado: escolha outra imagem.
+        A imagem declarada e menor que a dimensao minima do proposito:
+        **600 x 338** pixels no encontro da `Rede`, 800 x 800 no produto da
+        `Loja`. `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada
+        foi assinado: escolha outra imagem.
+
+        **O par NAO e escrito a mao em lugar nenhum**, e por isso nenhum numero
+        aqui deve ser lido como decidido: a LARGURA e a decidida
+        (`LARGURA_MINIMA`) e a ALTURA sai de
+        `alturaDoPiso(largura, proporcaoDaMoldura(purpose))`, onde
+        `proporcaoDaMoldura` le a MAIOR derivada com altura do proposito. No
+        encontro essa derivada e a `banner` 1280 x 720, logo 600 / (16/9) = 338.
+        Foi assim desde 03/11/2026, quando o piso deixou de ser uma tabela de
+        pares -- o par quadrado 600 x 600 numa moldura 16:9 era uma regra que o
+        proprio recorte do produto nao conseguia cumprir, e travou o cliente
+        duas vezes.
+
+        **Esta frase dizia `600 x 600` ate 05/11/2026**, quatro dias depois de o
+        codigo ja devolver 338. O contrato e fonte unica para quatro
+        consumidores, e aqui ele estava mentindo sobre a recusa que o cliente ve
+        na tela: `textoDaRecusaPorDimensao` sempre disse "600 x 338".
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -22271,8 +22287,9 @@ components:
             **primeira e a capa**.
 
             **A rota de autorizacao e a QUE JA EXISTE, e nao uma nova.** O
-            proposito e `network_event` nas quatro, a dimensao minima e 600 x
-            600 nas quatro e a derivada e `DERIVADAS_DO_ENCONTRO` nas quatro:
+            proposito e `network_event` nas quatro, a dimensao minima e
+            **600 x 338** nas quatro e a derivada e `DERIVADAS_DO_ENCONTRO` nas
+            quatro:
             nao ha nada que distinga a segunda imagem da primeira no envio, e
             criar uma segunda rota so para dizer "esta nao e a capa" seria
             inventar uma fronteira que nao existe. **Quem e a capa e a POSICAO
