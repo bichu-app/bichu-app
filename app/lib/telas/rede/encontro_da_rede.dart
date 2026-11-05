@@ -771,13 +771,21 @@ class _Miniatura extends StatelessWidget {
   Widget build(BuildContext context) {
     final foto = ClipRRect(
       borderRadius: BorderRadius.circular(BichuRaio.md),
+      // `contain` E NAO `cover`, por pedido do cliente de 05/11/2026: *"a unica
+      // cropada tem que ser a da capa"*. A caixa da faixa continua fixa (144 dp
+      // em 4:3, para a faixa não pular de altura entre fotos de formatos
+      // diferentes), e o que sobra é `surfaceSunken` -- a imagem aparece
+      // INTEIRA, encaixada, em vez de ter as beiradas cortadas pelo `cover`.
       child: SizedBox(
         width: largura,
-        child: Image.network(
-          imagem.urlParaGaleria,
-          fit: BoxFit.cover,
-          semanticLabel: imagem.textoAlternativo,
-          errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),
+        child: ColoredBox(
+          color: cores.surfaceSunken,
+          child: Image.network(
+            imagem.urlParaGaleria,
+            fit: BoxFit.contain,
+            semanticLabel: imagem.textoAlternativo,
+            errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),
+          ),
         ),
       ),
     );

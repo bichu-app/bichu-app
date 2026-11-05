@@ -1,7 +1,7 @@
 import { LIMITE_DE_BYTES, TIPOS_ACEITOS, type TipoAceito } from './envio-de-imagem.ts';
 
 /** A moldura mora no PONTO UNICO do piso, e so e reexportada aqui. */
-export { PROPORCAO_DA_MOLDURA } from './piso-da-imagem.ts';
+export { PROPORCAO_DA_MOLDURA, proporcaoDaMolduraNaPosicao } from './piso-da-imagem.ts';
 
 /** Zoom de 1x (a imagem inteira dentro da moldura) a 4x. */
 export const ESCALA_MINIMA = 1;

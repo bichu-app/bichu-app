@@ -51,8 +51,50 @@ export const DERIVADAS_DA_FOTO_DE_PET: readonly EspecificacaoDaDerivada[] = [
   { variante: 'thumb', largura: 176, altura: 194, porte: 'enxuta' },
 ];
 
-/** ## As derivadas da imagem do encontro da comunidade */
+/**
+ * ## As derivadas da imagem do encontro da comunidade
+ *
+ * **SO `banner` CORTA, e ela e a CAPA** (cliente, 05/11/2026, verbatim: *"as
+ * imagens do evento que subimos, a capa esta correta, fazendo o crop, mas deve
+ * subir tambem a foto no formato original e quando clicar para expandir deve
+ * mostrar a imagem inteira, hoje as fotos estao sendo cropadas, e a unica
+ * cropada tem que ser a da capa"*).
+ *
+ * As tres derivadas saem do MESMO original, e quem consome cada uma e que
+ * separa a capa das fotos -- nao o proposito, que e um so (`network_event`)
+ * para toda a lista porque **a capa E a `position` 0** e nao existe campo de
+ * capa:
+ *
+ * - `banner` 1280 x 720 e a CAPA, no topo do detalhe e no que o visualizador
+ *   amplia na posicao 0 (`cover_banner_url`). `altura` presente = CORTA, e e
+ *   isto que o cliente chamou de correto;
+ * - `card` e `thumb` sao as FOTOS da galeria: **sem `altura`**, entao o
+ *   servidor nao corta, so limita a largura (`fit: 'inside'`). Era
+ *   `card 1024 x 576` e `thumb 480 x 360`, e esse par e que produzia a foto
+ *   cortada que ele viu ao ampliar.
+ *
+ * A posicao 0 nao perde o enquadramento por `card` deixar de cortar: o painel
+ * manda a capa JA recortada em 16:9, entao `card` da posicao 0 entra 16:9 e sai
+ * 16:9, e `cover_image_url` (o cartao da agenda) continua 16:9 de fato.
+ */
 export const DERIVADAS_DO_ENCONTRO: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'banner', largura: 1280, altura: 720, porte: 'grande' },
+  { variante: 'card', largura: 1024, porte: 'enxuta' },
+  { variante: 'thumb', largura: 480, porte: 'enxuta' },
+];
+
+/**
+ * ## As derivadas da GALERIA DE FOTOS da entrada do diretorio
+ *
+ * **Separada de [DERIVADAS_DO_ENCONTRO] em 05/11/2026**, e a separacao e o
+ * ponto: as duas eram a MESMA lista, entao tirar a altura da galeria do
+ * encontro tiraria tambem a da galeria do diretorio -- que **nenhuma decisao do
+ * cliente pediu**. O pedido de 05/11 fala do encontro.
+ *
+ * Os numeros aqui sao, deliberadamente, os que o encontro tinha ANTES daquele
+ * pedido: a galeria do diretorio nao muda de comportamento nesta mudanca.
+ */
+export const DERIVADAS_DA_GALERIA_DO_DIRETORIO: readonly EspecificacaoDaDerivada[] = [
   { variante: 'banner', largura: 1280, altura: 720, porte: 'grande' },
   { variante: 'card', largura: 1024, altura: 576, porte: 'enxuta' },
   { variante: 'thumb', largura: 480, altura: 360, porte: 'enxuta' },

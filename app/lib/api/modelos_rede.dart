@@ -634,10 +634,23 @@ class ImagemDoEncontro {
     this.urlDaMiniatura,
   });
 
-  /// A derivada de 1024 x 576 (16:9), do cartao da agenda.
+  /// A derivada `card`: 1024 de largura, **sem altura fixa** (05/11/2026).
+  ///
+  /// Era 1024 x 576 (16:9) e CORTAVA. O cliente pediu o contrario -- *"a unica
+  /// cropada tem que ser a da capa"* --, entao `DERIVADAS_DO_ENCONTRO` deixou de
+  /// declarar altura na `card`: o servidor usa `fit: 'inside'` e so limita a
+  /// largura, logo esta URL traz a foto INTEIRA, na proporcao em que ela subiu.
+  ///
+  /// **Na posicao 0 ela continua 16:9 de fato**, e nao por esta regra: a capa
+  /// sobe ja recortada em 16:9 pelo painel e pelo app, entao entra 16:9 e sai
+  /// 16:9. E isso que mantem `cover_image_url` (o cartao da agenda) na faixa.
   final String url;
 
-  /// `thumb_url`: a derivada de 480 x 360 (4:3), **da galeria do detalhe**.
+  /// `thumb_url`: a derivada `thumb`, 480 de largura e **sem altura fixa**.
+  ///
+  /// Era 480 x 360 (4:3). Mudou pela mesma decisao de 05/11/2026 e pelo mesmo
+  /// motivo da [url]: a faixa `Fotos` do detalhe encaixa a imagem inteira numa
+  /// caixa fixa (`BoxFit.contain`) em vez de cortar as beiradas.
   final String? urlDaMiniatura;
 
   final String textoAlternativo;
@@ -1397,7 +1410,11 @@ class CapaDoMeuEncontro {
   /// Nulo quando o servidor manda um estado que esta versao do app nao conhece.
   final EstadoDaCapa? estado;
 
-  /// A derivada de 1024 x 576, a MESMA que a agenda serve.
+  /// A derivada `card` da capa, a MESMA que a agenda serve.
+  ///
+  /// 1024 de largura. Ela e 16:9 porque a CAPA sobe recortada em 16:9, e nao
+  /// porque a derivada corte: desde 05/11/2026 a `card` do encontro nao declara
+  /// altura (ver `ImagemDoEncontro.url`).
   final String? url;
 
   /// O motivo da recusa, **em texto pronto do servidor**, quando recusada.

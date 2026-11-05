@@ -51,6 +51,44 @@ export const PROPORCAO_DA_MOLDURA: Record<Proposito, number | null> = {
 };
 
 /**
+ * A moldura da imagem NAQUELA POSICAO da galeria, e `null` e moldura livre.
+ *
+ * ## Por que a moldura deixou de ser so do proposito (cliente, 05/11/2026)
+ *
+ * *"as imagens do evento que subimos, a capa esta correta, fazendo o crop, mas
+ * deve subir tambem a foto no formato original e quando clicar para expandir
+ * deve mostrar a imagem inteira, hoje as fotos estao sendo cropadas, e a unica
+ * cropada tem que ser a da capa."*
+ *
+ * No encontro a capa **E a posicao 0** da mesma lista, com o mesmo proposito
+ * (`network_event`): nao existe campo de capa nem proposito que a distinga. Uma
+ * moldura por proposito, portanto, nao consegue dizer "a primeira corta e as
+ * outras nao" -- e e exatamente isso que ele pediu.
+ *
+ * A regra nao e um caso especial escrito a mao: ela segue a derivada que
+ * **aquela posicao consome**, que e o mesmo principio de [PROPORCAO_DA_MOLDURA].
+ * Em `DERIVADAS_DO_ENCONTRO` a posicao 0 sai na `banner` (1280 x 720, com
+ * altura, logo CORTA) e as posicoes 1+ saem na `card` e na `thumb`, que desde
+ * 05/11/2026 **nao tem altura** -- `fit: 'inside'`, o servidor nao corta.
+ * Recortar no navegador o que o servidor ia entregar inteiro era o defeito.
+ *
+ * **So o encontro tem galeria com capa embutida.** `store_item` ja e livre em
+ * toda posicao, e `directory_gallery` segue 16:9 em todas porque a derivada dela
+ * continua cortando -- ela foi SEPARADA da do encontro em 05/11 justamente para
+ * nao herdar uma decisao que o cliente tomou sobre o encontro.
+ *
+ * **Limite conhecido:** reordenar depois do envio nao reprocessa a imagem. Quem
+ * promove a foto 3 a capa fica com uma capa que o servidor fecha em 16:9 por
+ * `sharp.strategy.attention`, e nao pelo enquadramento de ninguem. O painel
+ * oferece `Reenquadrar` para desfazer isso; gravar a regiao exigiria o schema
+ * `ImageCrop`, que SAIU do contrato em 31/10/2026 por decisao do cliente.
+ */
+export function proporcaoDaMolduraNaPosicao(proposito: Proposito, posicao: number): number | null {
+  if (proposito === 'network_event' && posicao > 0) return null;
+  return PROPORCAO_DA_MOLDURA[proposito];
+}
+
+/**
  * A LARGURA minima decidida de cada proposito -- o unico numero escrito a mao,
  * e o espelho de `LARGURA_MINIMA` em
  * `src/modules/media/ports/imagem-de-catalogo.ts`.

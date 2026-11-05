@@ -295,14 +295,32 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     await _escolheuACapa(ajustada);
   }
 
-  Future<FotoLocal?> _ajustarACapa(CameraEGaleria camera, FotoLocal foto) =>
-      ajustarAFoto(
-        context,
-        camera: camera,
-        foto: foto,
-        formato: FormatoDoRecorte.capaDoEncontro,
-        titulo: 'Ajuste a capa do encontro',
-      );
+  /// Ajusta a imagem que vai entrar na posição `_imagens.length`.
+  ///
+  /// **A moldura sai da POSIÇÃO, e não do propósito** (cliente, 05/11/2026): a
+  /// posição 0 é a capa e corta em 16:9 (`banner` 1280 x 720); as posições 1+
+  /// são as fotos e vão **inteiras**, porque a `card` e a `thumb` do encontro
+  /// não têm mais altura e o servidor não corta.
+  ///
+  /// **Limite conhecido:** reordenar depois do envio não reprocessa a imagem.
+  /// Quem promove a foto 3 a capa fica com uma capa que o servidor fecha em
+  /// 16:9 por `sharp.strategy.attention`, e não pelo enquadramento de ninguém.
+  /// Gravar a região exigiria o schema `ImageCrop`, que SAIU do contrato em
+  /// 31/10/2026 por decisão do cliente.
+  Future<FotoLocal?> _ajustarACapa(CameraEGaleria camera, FotoLocal foto) {
+    final eACapa = _imagens.isEmpty;
+    return ajustarAFoto(
+      context,
+      camera: camera,
+      foto: foto,
+      formato: eACapa
+          ? FormatoDoRecorte.capaDoEncontro
+          : FormatoDoRecorte.fotoDoEncontro,
+      titulo: eACapa
+          ? 'Ajuste a capa do encontro'
+          : 'Ajuste a foto do encontro',
+    );
+  }
 
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
