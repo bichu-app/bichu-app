@@ -215,7 +215,8 @@ describe('o lote sobe sem fila de diálogos, e cada item é reenquadrável depoi
       expect(enviar).toHaveBeenCalledTimes(2);
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Reenquadrar a imagem 2 de 2' }));
+    // A IMAGEM 1 DE 2 É A CAPA, e ela continua enquadrada em 16:9.
+    fireEvent.click(await screen.findByRole('button', { name: 'Reenquadrar a imagem 1 de 2' }));
     const palco = await screen.findByTestId('recorte-palco');
     // O palco mede a imagem CRUA (1600 x 2000), e não o recorte de 1600 x 900
     // que já subiu: reenquadrar a partir do recorte impediria afastar o zoom.
@@ -227,6 +228,48 @@ describe('o lote sobe sem fila de diálogos, e cada item é reenquadrável depoi
     });
     const anotacao = await lerAnotacao(enviados[2]!);
     expect(anotacao).toEqual({ left: 0, top: 595, width: 1600, height: 900, destino: { largura: 1600, altura: 900 } });
+  });
+
+  // ========================================================================
+  // O PAR DO CASO ACIMA: a FOTO não é recortada (cliente, 05/11/2026)
+  // ========================================================================
+  // *"a unica cropada tem que ser a da capa"*. O caso de cima reenquadra a
+  // posição 0 e sai 16:9; este reenquadra a posição 1 e sai a imagem INTEIRA.
+  // Os dois juntos é que afirmam a decisão -- medir só um deixaria passar o
+  // estado em que nenhuma corta, ou em que as duas cortam.
+  //
+  // ISCA: tire a guarda `posicao > 0` de `proporcaoDaMolduraNaPosicao`, ou
+  // deixe de passar `proporcao` ao `DialogoDeRecorte` em `Galeria.tsx`. Este
+  // caso reprova com a medida do recorte na própria tela.
+  it('ISCA — reenquadrar a FOTO (posição 1+) sai INTEIRA, e não em 16:9', async () => {
+    instalarNavegadorQueRecorta();
+    const enviados: File[] = [];
+    const enviar = vi.fn(async (arquivo: File) => {
+      enviados.push(arquivo);
+      return Promise.resolve('018f7c1e-0000-7000-8000-00000000000d');
+    });
+    render(<GaleriaDeTeste enviar={enviar} proposito="network_event" />);
+    fireEvent.change(screen.getByTestId('fotos-arquivo'), { target: { files: [foto('a.jpg'), foto('b.jpg')] } });
+    await waitFor(() => {
+      expect(enviar).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reenquadrar a imagem 2 de 2' }));
+    await screen.findByTestId('recorte-palco');
+    // A imagem crua é 1600 x 2000 e o recorte sai 1600 x 2000: nada é cortado.
+    expect(screen.getByTestId('recorte-medida')).toHaveTextContent('1600 × 2000');
+    fireEvent.click(screen.getByRole('button', { name: 'Usar este enquadramento' }));
+    await waitFor(() => {
+      expect(enviar).toHaveBeenCalledTimes(3);
+    });
+    const anotacao = await lerAnotacao(enviados[2]!);
+    expect(anotacao).toEqual({
+      left: 0,
+      top: 0,
+      width: 1600,
+      height: 2000,
+      destino: { largura: 1600, altura: 2000 },
+    });
   });
 });
 
