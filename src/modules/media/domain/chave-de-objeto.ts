@@ -37,10 +37,33 @@ const LIMITE_DA_CHAVE = 1024;
  * As CATEGORIAS do armazenamento (ADR-0007 Emenda 1): o primeiro segmento de toda
  * chave nova, nos dois buckets.
  */
-export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'directory', 'people'] as const;
+/**
+ * `pets` ENTROU EM 06/11/2026, com a foto de capa do pet (`pet_cover`), e e a
+ * unica categoria que tem DUAS formas de original:
+ *
+ *  - `pets/<petId>/original/<128 bits>` -- a FOTO do pet, que nasceu com o
+ *    produto e tem o id do animal no caminho (`chaveDoOriginal`);
+ *  - `pets/original/<128 bits>` -- a CAPA, que anda na esteira de catalogo e
+ *    nao carrega id de entidade nenhum, como as outras quatro
+ *    (`chaveDoOriginalDeCatalogo`).
+ *
+ * As duas formas nao colidem: a primeira tem QUATRO segmentos e a segunda TRES,
+ * e `comoObjectKey` as separa por isso. As derivadas nao mudam de lugar -- elas
+ * ja viviam em `pets/<variante>/<nome>`, que e o padrao de `chaveDaDerivada`.
+ */
+export const CATEGORIAS_DE_CATALOGO = ['pets', 'products', 'events', 'directory', 'people'] as const;
 export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
-/** As categorias que tem derivada PUBLICA. */
-export const CATEGORIAS_PUBLICAS = ['pets', ...CATEGORIAS_DE_CATALOGO] as const;
+/**
+ * As categorias que tem derivada PUBLICA.
+ *
+ * Desde 06/11/2026 e a MESMA lista de [CATEGORIAS_DE_CATALOGO], e os dois nomes
+ * ficam de proposito: `ehCategoriaDeCatalogo` responde "esta categoria escreve
+ * original de catalogo" e `ehCategoriaPublica` responde "esta categoria serve
+ * derivada publica", e sao duas perguntas, nao uma. Escrever
+ * `['pets', ...CATEGORIAS_DE_CATALOGO]` agora repetiria `pets` na alternacao da
+ * expressao do leitor de midia.
+ */
+export const CATEGORIAS_PUBLICAS = CATEGORIAS_DE_CATALOGO;
 export type CategoriaPublica = (typeof CATEGORIAS_PUBLICAS)[number];
 
 function ehCategoriaDeCatalogo(valor: string | undefined): valor is CategoriaDeCatalogo {

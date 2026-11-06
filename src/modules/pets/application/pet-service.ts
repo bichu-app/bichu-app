@@ -88,6 +88,51 @@ export class PetService {
     return atualizado;
   }
 
+  /**
+   * Define a FOTO DE CAPA do pet (cliente, 06/11/2026).
+   *
+   * `upload_not_usable` e UMA recusa para quatro causas -- envio de outra
+   * conta, de outro proposito, vencido e ja gasto em outro pet --, e nao dizer
+   * qual e deliberado: a mesma redacao e a mesma reticencia de
+   * `createNetworkEvent`. Distinguir contaria sobre a ficha de outra pessoa.
+   *
+   * Pet que nao e do chamador e **404 e nao 403** (ADR-0021): ele nao existe.
+   */
+  async definirCapa(
+    pet: PetId,
+    uploadId: string,
+    chamador: ContextoDoChamador,
+  ): Promise<PetGravado> {
+    const desfecho = await this.deps.repositorio.definirCapa(
+      pet,
+      chamador.userId,
+      uploadId,
+      this.deps.clock.now(),
+    );
+    if (desfecho === 'pet_inexistente') throw problemas.naoEncontrado();
+    if (desfecho === 'envio_inservivel') {
+      throw problemas.validacao([
+        {
+          field: 'upload_id',
+          code: 'upload_not_usable',
+          message: 'Essa imagem não serve para este pet. Envie-a de novo.',
+        },
+      ]);
+    }
+
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      action: 'pet.cover_set',
+      actorUserId: chamador.userId,
+      resourceKind: 'pet',
+      resourceId: desfecho.id,
+      correlationId: chamador.correlationId,
+      actorIp: chamador.ip,
+    });
+
+    return desfecho;
+  }
+
   async excluir(pet: PetId, chamador: ContextoDoChamador): Promise<void> {
     const foi = await this.deps.repositorio.excluir(pet, chamador.userId, this.deps.clock.now());
     if (!foi) throw problemas.naoEncontrado();

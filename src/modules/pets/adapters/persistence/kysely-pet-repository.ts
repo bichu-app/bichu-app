@@ -1,5 +1,9 @@
+import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import { comoData } from '../../../../shared/time/clock.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-catalogo.js';
 import { rotuloDaRaca } from '../../domain/breed.js';
+import type { IdGenerator } from '../../../../shared/ports/index.js';
 import type {
   CodigosConhecidos,
   DadosDoPet,
@@ -59,6 +63,8 @@ interface LinhaDoPet {
   created_at: Date;
   updated_at: Date;
   breed_list_label: string | null;
+  /** `catalog_images.banner_key`, e **so** com `status = 'ready'`. */
+  cover_banner_key: string | null;
   active_tag_count: number | string;
   open_case_id: string | null;
 }
@@ -92,6 +98,7 @@ function comoPet(linha: LinhaDoPet): PetGravado {
     publicProfileEnabled: linha.public_profile_enabled,
     activeTagCount: Number(linha.active_tag_count),
     openCaseId: linha.open_case_id,
+    coverBannerKey: linha.cover_banner_key,
     createdAt: linha.created_at,
     updatedAt: linha.updated_at,
   };
@@ -155,6 +162,17 @@ export function construtorDaLeituraDoDono(db: DbExecutor, dono: UserId) {
         .where('lost_cases.status', '=', 'open')
         .select('lost_cases.id')
         .as('open_case_id'),
+      // A CAPA, so quando ela esta PRONTA. O `status = 'ready'` esta aqui e nao
+      // numa conferencia depois de propósito: `banner_key` existe antes de a
+      // imagem ser declarada pronta em nenhum caminho, mas a leitura nao pode
+      // DEPENDER disso -- a mesma razao do `IS NOT NULL` que a fila do painel
+      // usa, e o que impede servir derivada antes de o balde ter o arquivo.
+      eb
+        .selectFrom('catalog_images')
+        .whereRef('catalog_images.id', '=', 'pets.cover_image_id')
+        .where('catalog_images.status', '=', 'ready')
+        .select('catalog_images.banner_key')
+        .as('cover_banner_key'),
     ])
     .where('pets.owner_user_id', '=', dono)
     .where('pets.deleted_at', 'is', null);
@@ -197,7 +215,7 @@ export function construtorDaExclusao(db: DbExecutor, pet: PetId, dono: UserId, q
     .where('deleted_at', 'is', null);
 }
 
-export function criarPetRepository(db: Db): PetRepository {
+export function criarPetRepository(db: Db, ids: IdGenerator): PetRepository {
   const leituraDoDono = (dono: UserId) => construtorDaLeituraDoDono(db, dono);
 
   return {
@@ -297,6 +315,125 @@ export function criarPetRepository(db: Db): PetRepository {
     async excluir(pet: PetId, dono: UserId, quando: Instant) {
       const resultado = await construtorDaExclusao(db, pet, dono, quando).executeTakeFirst();
       return Number(resultado.numUpdatedRows) > 0;
+    },
+
+    /**
+     * A CAPA DO PET (cliente, 06/11/2026), nos quatro passos de
+     * `capaDoEnvio` do encontro, numa transacao so.
+     *
+     * **A transacao desfaz-se LANCANDO, e nunca com `return`** -- Kysely so
+     * reverte quando a funcao lanca, e `return` dentro dela COMITA o que ja
+     * foi escrito. E por isso que os desfechos de recusa saem de dentro como
+     * valor de retorno do `transaction`, e nao por caminho de erro: nao ha
+     * nada escrito a desfazer nos dois casos de recusa, porque as escritas vem
+     * todas DEPOIS das duas conferencias.
+     */
+    async definirCapa(pet: PetId, dono: UserId, uploadId: string, agora: Instant) {
+      const desfecho = await db.transaction().execute(async (trx) => {
+        // 1. O PET E DO CHAMADOR? O dono esta no `WHERE`, com trava de linha:
+        // duas confirmacoes simultaneas nao podem as duas achar o pet livre.
+        const alvo = await trx
+          .selectFrom('pets')
+          .select(['pets.id', 'pets.cover_image_id'])
+          .where('pets.id', '=', pet)
+          .where('pets.owner_user_id', '=', dono)
+          .where('pets.deleted_at', 'is', null)
+          .forUpdate()
+          .executeTakeFirst();
+        if (alvo === undefined) return 'pet_inexistente' as const;
+
+        // 2. O ENVIO SERVE? Conta, proposito e prazo no MESMO `WHERE`, e o
+        // `FOR UPDATE OF u` impede duas confirmacoes de criarem duas imagens
+        // do mesmo envio.
+        //
+        // **`sql` cru e nao o construtor, por uma razao do Postgres**:
+        // `FOR UPDATE` recusa a ser aplicado ao lado anulavel de um `LEFT
+        // JOIN`, e o construtor do Kysely nao expoe `OF <tabela>` para
+        // restringir a trava a `u`. E a mesma consulta, com as mesmas
+        // clausulas, que `capaDoEnvio` do encontro escreve.
+        const linhasDoEnvio = await sql<{
+          id: string;
+          expires_at: Date;
+          confirmed_at: Date | null;
+          catalog_image_id: string | null;
+        }>`
+          SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id
+            FROM catalog_upload_intents u
+            LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
+           WHERE u.id = ${uploadId}::uuid
+             AND u.user_id = ${dono}::uuid
+             AND u.purpose = 'pet_cover'
+           FOR UPDATE OF u
+        `.execute(trx);
+        const envio = linhasDoEnvio.rows[0];
+        if (envio === undefined) return 'envio_inservivel' as const;
+
+        // JA CONFIRMADO: idempotente **so para o mesmo pet**. A imagem que ja
+        // e capa de outro pet nao serve, pela mesma regra do encontro -- e e
+        // `envio_inservivel` e nao um 409, porque dizer "essa imagem e de
+        // outro pet" contaria sobre uma ficha que quem pergunta pode nao ter.
+        if (envio.confirmed_at !== null) {
+          const imagemId = envio.catalog_image_id;
+          if (imagemId === null) return 'envio_inservivel' as const;
+          const dono2 = await trx
+            .selectFrom('pets')
+            .select('pets.id')
+            .where('pets.cover_image_id', '=', imagemId)
+            .executeTakeFirst();
+          if (dono2 !== undefined && dono2.id !== pet) return 'envio_inservivel' as const;
+          if (alvo.cover_image_id !== imagemId) {
+            await trx
+              .updateTable('pets')
+              .set({ cover_image_id: imagemId, updated_at: comoData(agora) })
+              .where('id', '=', pet)
+              .execute();
+          }
+          return 'pronto' as const;
+        }
+
+        if (envio.expires_at.getTime() <= Number(agora)) return 'envio_inservivel' as const;
+
+        // 3. AS ESCRITAS, as quatro juntas: o envio fecha, a imagem nasce em
+        // `processing`, o trabalho entra na fila e o pet passa a apontar.
+        const imagemId = ids.uuidv7();
+        await trx
+          .updateTable('catalog_upload_intents')
+          .set({ confirmed_at: comoData(agora) })
+          .where('id', '=', envio.id)
+          .where('confirmed_at', 'is', null)
+          .execute();
+        await trx
+          .insertInto('catalog_images')
+          .values({
+            id: imagemId,
+            upload_intent_id: envio.id,
+            purpose: 'pet_cover',
+            public_key: null,
+            rejection_reason: null,
+          })
+          .execute();
+        await trx
+          .insertInto('jobs')
+          .values({
+            id: ids.uuidv7(),
+            kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+            payload: JSON.stringify({ catalog_image_id: imagemId }),
+          })
+          .execute();
+        await trx
+          .updateTable('pets')
+          .set({ cover_image_id: imagemId, updated_at: comoData(agora) })
+          .where('id', '=', pet)
+          .execute();
+        return 'pronto' as const;
+      });
+
+      if (desfecho !== 'pronto') return desfecho;
+      // A releitura e FORA da transacao de propósito: `cover_banner_key` sai
+      // nula aqui, porque o worker ainda nao rodou, e e isso que a resposta 202
+      // promete. Lê-la dentro nao mudaria nada e manteria a transacao aberta.
+      const atual = await this.buscarDoTutor(pet, dono);
+      return atual === null ? 'pet_inexistente' : atual;
     },
   };
 }

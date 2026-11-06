@@ -60,6 +60,8 @@ export type AuditAction =
   | 'profile.updated'
   | 'pet.created'
   | 'pet.updated'
+  /** O tutor definiu a FOTO DE CAPA do pet (`PUT /v1/pets/{petId}/cover`). */
+  | 'pet.cover_set'
   | 'pet.deleted'
   | 'tag.issued'
   | 'tag.revoked'

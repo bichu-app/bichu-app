@@ -262,6 +262,41 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     );
   }
 
+  /// `POST /media/pet-cover-intents` (`createPetCoverUploadIntent`).
+  ///
+  /// **Sem `pet_id` no corpo**, ao contrario de `intencaoDeFotoDoPet`: autorizar
+  /// nao reserva nada e nao escreve em pet nenhum. Quem liga a imagem ao pet e
+  /// [definirCapaDoPet], e e lá que o servidor confere o dono.
+  @override
+  Future<Map<String, dynamic>> intencaoDeCapaDoPet({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      '/media/pet-cover-intents',
+      corpo: <String, dynamic>{
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
+  }
+
+  /// `PUT /pets/{petId}/cover` (`setPetCover`).
+  ///
+  /// Responde **202** e o `cover_image_url` vem NULO: a derivada ainda nao
+  /// existe. Quem quiser a capa recarrega o pet depois.
+  @override
+  Future<Pet> definirCapaDoPet({
+    required String petId,
+    required String uploadId,
+  }) async {
+    final json = await _api.put(
+      '/pets/${Uri.encodeComponent(petId)}/cover',
+      corpo: <String, dynamic>{'upload_id': uploadId},
+    );
+    return Pet.doJson(json);
+  }
+
   /// `DELETE /pets/{petId}/photos/{photoId}`.
   Future<void> excluirFotoDoPet({
     required String petId,

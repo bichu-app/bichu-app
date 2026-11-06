@@ -104,6 +104,10 @@ class RepositorioQueImitaOPostgres implements PetRepository {
     this.conferir(pet);
     return Promise.resolve(false);
   }
+  definirCapa(pet: PetId): Promise<PetGravado | 'pet_inexistente' | 'envio_inservivel'> {
+    this.conferir(pet);
+    return Promise.resolve('pet_inexistente');
+  }
 }
 
 const IDEMPOTENCIA_INERTE: Idempotencia = {
@@ -148,6 +152,7 @@ async function bancadaDePets(): Promise<Bancada> {
         pets,
         autenticador: { autenticar: () => Promise.resolve({ userId: 'u-1' as UserId }) },
         idempotencia: IDEMPOTENCIA_INERTE,
+        baseDeMidia: 'https://midia.exemplo.test',
         contrato,
         clock: relogioParado(),
         fotos: { porPets: () => Promise.resolve(new Map()) },
