@@ -525,6 +525,57 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // a FOTO DE CAPA do pet (`20261106000001`, 06/11/2026)
+  //
+  // Pedido do cliente do dia: *"gostei muito da forma como ele apresenta o
+  // perfil do pet, com a foto de capa, como fazemos na pagina de eventos e
+  // profissionais"*.
+  //
+  // Aponta para `catalog_images` e não para uma tabela de foto nova: a esteira
+  // de imagem deste produto é UMA (ADR-0007, ADR-0027 A.3). O propósito é
+  // `pet_cover`, e ele **não** entra em `pet_photos` — o `CHECK`
+  // `pet_photos_pronta_tem_derivadas` exige `thumb_key` E `card_key`, as duas
+  // de RETRATO (1 : 1,1), e faixa 16:9 não gera miniatura de retrato.
+  //
+  // `NO ACTION` É ESCOLHA, e o molde é `directory_suggestions.logo_image_id`
+  // (`20261029000004`), que é a análoga mais próxima: coluna SINGULAR na
+  // entidade, apontando para uma imagem de catálogo que uma PESSOA enviou.
+  // Apagar a imagem com a capa de pé seria apagar o arquivo que o tutor subiu
+  // enquanto a ficha ainda o mostra, e recusar é o desfecho certo.
+  //
+  // **DIVERGE de `professionals.photo_image_id` e de `users.photo_image_id`,
+  // que são `SET NULL`**, e a diferença é de significado e não de descuido:
+  // naquelas, retirar a imagem de uma superfície PÚBLICA é operação normal do
+  // painel, e a entrada continua existindo sem foto. Aqui quem apagaria seria
+  // uma varredura, e um `SET NULL` deixaria a ficha perder a capa sem ninguém
+  // ter decidido isso.
+  //
+  // **A EXCLUSÃO DO PET NÃO ESBARRA NISTO**, e é o que impede o `NO ACTION` de
+  // virar uma trava para quem sai da conta: `pets` é exclusão LÓGICA
+  // (`deleted_at`), e `pets_owner_user_id_fkey` é `CASCADE` — quando a conta
+  // vai embora, o pet vai com ela por aquela chave, e esta nunca é consultada
+  // porque ninguém apaga `catalog_images` naquele caminho.
+  //
+  // O NOME é o automático do Postgres: a migração escreve
+  // `ADD COLUMN cover_image_id uuid REFERENCES catalog_images (id)` sem nomear
+  // nada, e a chave herda `<tabela>_<coluna>_fkey`. Este teste lê
+  // `pg_constraint`, e não o texto da migração.
+  //
+  // MEDIDO NO CATÁLOGO e não deduzido do SQL, na pilha efêmera migrada do zero:
+  // `pg_constraint.confdeltype` desta chave é `'a'` (NO ACTION), `condeferrable`
+  // é falso, a coluna é `cover_image_id` e a referência é
+  // `public.catalog_images`. A mesma consulta leu as duas vizinhas como
+  // CONTROLE POSITIVO, e as duas reproduziram o que este registro já declarava:
+  // `directory_suggestions_logo_image_id_fkey` deu `'a'` e
+  // `professionals_photo_image_id_fkey` deu `'n'` (SET NULL).
+  // -------------------------------------------------------------------------
+  'public.pets.pets_cover_image_id_fkey': {
+    colunas: ['cover_image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
   // dados de referência: NO ACTION de propósito
   //
   // Apagar uma raça, cor, porte, espécie ou versão de referência com pet
