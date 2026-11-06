@@ -501,14 +501,13 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       _FaixaDaCapa(
         pet: pet,
         enviando: _enviandoACapa,
-        aoTocar: _enviandoACapa ? null : () => _trocarACapa(pet),
+        aoTocar: () => _trocarACapa(pet),
       ),
       _Margem(
         child: _Conteudo(
           pet: pet,
           avisoDaCapa: _avisoDaCapa,
-          enviandoACapa: _enviandoACapa,
-          aoTrocarACapa: _enviandoACapa ? null : () => _trocarACapa(pet),
+          aoTrocarACapa: () => _trocarACapa(pet),
           aoEditar: _editar,
           aoExcluir: _excluir,
           estadoDoQr: _estadoDoQr,
@@ -543,6 +542,16 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   /// geometria, e dar um nome novo ao mesmo numero daria dois lugares para o
   /// piso divergir.
   Future<void> _trocarACapa(Pet pet) async {
+    // A GUARDA MORA AQUI, e nao num `aoTocar` nulo nem num fecho vazio.
+    //
+    // `_AcaoEmTexto` exige `VoidCallback` nao anulavel, entao desligar o
+    // controle exigiria passar `() {}` -- um botao que o leitor de tela anuncia
+    // e que nao faz nada, que e exatamente o defeito que
+    // `a11y/acao_de_controle_test.dart` existe para pegar. Com a guarda aqui, o
+    // controle tem SEMPRE uma acao de verdade, e o segundo toque durante o
+    // envio simplesmente nao comeca um segundo envio.
+    if (_enviandoACapa) return;
+
     final escopo = Escopo.of(context);
     final camera = escopo.camera;
     final escolhida = await camera.escolherDaGaleria();
@@ -670,7 +679,6 @@ class _Conteudo extends StatelessWidget {
   const _Conteudo({
     required this.pet,
     required this.avisoDaCapa,
-    required this.enviandoACapa,
     required this.aoTrocarACapa,
     required this.aoEditar,
     required this.aoExcluir,
@@ -698,10 +706,9 @@ class _Conteudo extends StatelessWidget {
   /// O que dizer sobre a ultima tentativa de capa, ou nulo.
   final String? avisoDaCapa;
 
-  final bool enviandoACapa;
-
-  /// Nulo enquanto os bytes sobem: nao da para pedir duas capas de uma vez.
-  final VoidCallback? aoTrocarACapa;
+  /// Trocar (ou adicionar) a capa. **Sempre presente**: a guarda do envio em
+  /// curso mora em `_trocarACapa`, e nao num `aoTocar` nulo.
+  final VoidCallback aoTrocarACapa;
 
   final VoidCallback aoEditar;
   final VoidCallback aoExcluir;
@@ -1014,7 +1021,7 @@ class _Conteudo extends StatelessWidget {
           rotulo: pet.urlDaCapa == null
               ? TextosDoDetalhe.adicionarACapa
               : TextosDoDetalhe.trocarACapa,
-          aoTocar: enviandoACapa ? () {} : (aoTrocarACapa ?? () {}),
+          aoTocar: aoTrocarACapa,
         ),
         const SizedBox(height: BichuEspaco.e4),
         _AcaoEmTexto(rotulo: TextosDoDetalhe.editar, aoTocar: aoEditar),
@@ -1078,10 +1085,10 @@ class _FaixaDaCapa extends StatelessWidget {
 
   final Pet pet;
 
-  /// Os bytes estao subindo: a faixa fica com o indicador e nao aceita toque.
+  /// Os bytes estao subindo: a faixa troca a pastilha pelo indicador.
   final bool enviando;
 
-  final VoidCallback? aoTocar;
+  final VoidCallback aoTocar;
 
   @override
   Widget build(BuildContext context) {
@@ -1134,15 +1141,24 @@ class _FaixaDaCapa extends StatelessWidget {
 class _PastilhaDeAdicionarCapa extends StatelessWidget {
   const _PastilhaDeAdicionarCapa({required this.aoTocar});
 
-  final VoidCallback? aoTocar;
+  final VoidCallback aoTocar;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
+    // `onTap: aoTocar` NO PROPRIO `Semantics`, e nao so no `InkWell`.
+    //
+    // Com `excludeSemantics: true` a arvore de semantica do `InkWell` e
+    // DESCARTADA, e com ela a acao de toque: o no resultante diria `botao` e
+    // nao carregaria `tap`. Quem navega por TalkBack ou VoiceOver ouviria que
+    // existe um botao e nao receberia a acao. E o mesmo arranjo de
+    // `CartaoDePet`, e `a11y/acao_de_controle_test.dart` pegou este exato
+    // defeito aqui antes de ele sair da maquina.
     return Semantics(
       button: true,
+      onTap: aoTocar,
       label: TextosDoDetalhe.adicionarACapa,
       excludeSemantics: true,
       child: Material(

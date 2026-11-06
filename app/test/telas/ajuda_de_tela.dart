@@ -22,6 +22,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:bichu/api/cache_de_imagens.dart';
+// `BichuAlvoDeToque.critico` e `BichuEspaco.e2`: a altura da barra flutuante
+// que `desencostarDaBarraDeTopo` precisa vencer sai do MESMO token que a casca
+// usa para desenha-la, e nao de um 64 escrito a mao aqui.
+import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/api/estados_brasileiros.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
@@ -964,7 +968,51 @@ Future<void> irPara(
 Future<void> tocar(WidgetTester tester, Finder alvo) async {
   await tester.ensureVisible(alvo);
   await tester.pumpAndSettle();
+  await desencostarDaBarraDeTopo(tester, alvo);
   await tester.tap(alvo);
+  await tester.pumpAndSettle();
+}
+
+/// Rola o alvo para FORA dos 64 dp que a barra de topo FLUTUANTE cobre.
+///
+/// ## O defeito que isto existe para evitar, medido em 06/11/2026
+///
+/// `ensureVisible` traz o alvo para DENTRO da janela de rolagem, e com
+/// frequencia o encosta na BORDA de cima dela (`dy = 0`, ou perto). Com uma
+/// barra de `AppBar`, isso bastava: o `Scaffold` desconta a barra, e a janela
+/// de rolagem COMECA abaixo dela.
+///
+/// `CascaDaPaginaInterna` nao e assim, e e de proposito -- ela e a casca que o
+/// encontro da comunidade e a pagina do profissional usam, e desde 06/11/2026
+/// a ficha do pet tambem. Nela a barra que volta com a rolagem e um
+/// `Positioned(top: 0)` dentro de um `Stack`, FLUTUANDO sobre a lista: a janela
+/// de rolagem comeca em `dy = 0` e os 64 dp de cima ficam sob a barra. Um alvo
+/// encostado no topo existe, esta visivel para o `find`, **e nao recebe o
+/// toque** -- o `tap` cai na barra. O sintoma e um aviso de
+/// `derived an Offset (...) that would not hit test`, seguido de uma reprovacao
+/// no passo SEGUINTE, por motivo que nao e o do caso.
+///
+/// ## Por que isto nao afrouxa nada
+///
+/// Nao e `warnIfMissed: false`, que silenciaria o aviso e deixaria o toque cair
+/// na barra. Aqui o alvo e REALMENTE movido para onde o dedo o alcanca, que e o
+/// que a pessoa faria -- e e o unico jeito de o `tap` medir o que o caso quer.
+///
+/// E ela e INOCUA onde nada cobre: sem `Scrollable` ancestral, sem alvo unico,
+/// ou com o alvo ja abaixo de [BichuAlvoDeToque.critico], ela nao faz nada.
+Future<void> desencostarDaBarraDeTopo(WidgetTester tester, Finder alvo) async {
+  if (alvo.evaluate().length != 1) return;
+  final rolagem = find.ancestor(of: alvo, matching: find.byType(Scrollable));
+  if (rolagem.evaluate().isEmpty) return;
+
+  final topo = tester.getTopLeft(alvo).dy;
+  if (topo >= BichuAlvoDeToque.critico) return;
+
+  // Arrastar para BAIXO move o conteudo para baixo (a lista volta), que e o
+  // sentido que tira o alvo de sob a barra. A folga de `e2` evita parar
+  // exatamente na borda da barra.
+  final falta = BichuAlvoDeToque.critico - topo + BichuEspaco.e2;
+  await tester.drag(rolagem.first, Offset(0, falta));
   await tester.pumpAndSettle();
 }
 
@@ -1125,6 +1173,7 @@ Future<void> rolarAte(
   if (alvo.evaluate().isNotEmpty) {
     await tester.ensureVisible(alvo);
     await tester.pumpAndSettle();
+    await desencostarDaBarraDeTopo(tester, alvo);
     return;
   }
   await tester.scrollUntilVisible(
@@ -1133,6 +1182,7 @@ Future<void> rolarAte(
     scrollable: scrollable ?? find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
+  await desencostarDaBarraDeTopo(tester, alvo);
 }
 
 /// O tamanho do alvo tocavel que contem [alvo].
