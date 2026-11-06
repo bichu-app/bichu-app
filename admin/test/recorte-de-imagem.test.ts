@@ -27,6 +27,7 @@ import {
   janelaEmPixels,
   LADO_MAXIMO_DO_ENVIO,
   PROPORCAO_DA_MOLDURA,
+  proporcaoDaMolduraNaPosicao,
   regiaoEnquadrada,
   tamanhoDoEnvio,
 } from '../src/componentes/recorte-de-imagem.ts';
@@ -37,6 +38,149 @@ const RETRATO = { largura: 1600, altura: 2000 };
 function emPixeis(imagem: { largura: number; altura: number }, proporcao: number | null, enquadramento = ENQUADRAMENTO_INICIAL) {
   return janelaEmPixels(regiaoEnquadrada(imagem, proporcao, enquadramento), imagem.largura, imagem.altura);
 }
+
+// ===========================================================================
+// A MOLDURA DA POSIÇÃO: só a CAPA do encontro é recortada
+// ===========================================================================
+// Cliente, 05/11/2026, verbatim: *"as imagens do evento que subimos, a capa
+// esta correta, fazendo o crop, mas deve subir tambem a foto no formato
+// original e quando clicar para expandir deve mostrar a imagem inteira, hoje as
+// fotos estao sendo cropadas, e a unica cropada tem que ser a da capa."*
+//
+// No encontro a capa **é a posição 0** da mesma lista e com o mesmo propósito
+// (`network_event`), então uma moldura por propósito não consegue dizer "a
+// primeira corta e as outras não".
+describe('a moldura, pela POSIÇÃO na galeria', () => {
+  it('encontro: a posição 0 corta em 16:9 e as posições 1+ são livres', () => {
+    expect(proporcaoDaMolduraNaPosicao('network_event', 0)).toBe(16 / 9);
+    for (const posicao of [1, 2, 3, 7]) {
+      expect(proporcaoDaMolduraNaPosicao('network_event', posicao)).toBeNull();
+    }
+  });
+
+  // ISCA: tire a guarda `posicao > 0` de `proporcaoDaMolduraNaPosicao`, ou
+  // troque o propósito testado. Compila, `tsc` cala, o lint cala, e o painel
+  // volta a recortar a foto da galeria em 16:9 antes de enviar -- jogando fora
+  // pixel que o servidor ia entregar inteiro. Estes casos reprovam.
+  it('os OUTROS propósitos não mudam com a posição: a decisão foi sobre o encontro', () => {
+    const outros = (Object.keys(PROPORCAO_DA_MOLDURA) as Proposito[]).filter((p) => p !== 'network_event');
+    // A contagem vai junto do veredito: lista vazia aprovaria qualquer coisa.
+    expect(outros.length).toBeGreaterThan(0);
+    expect(outros.sort()).toEqual(['directory_gallery', 'directory_logo', 'directory_photo', 'store_item']);
+    for (const proposito of outros) {
+      for (const posicao of [0, 1, 5]) {
+        expect(proporcaoDaMolduraNaPosicao(proposito, posicao)).toBe(PROPORCAO_DA_MOLDURA[proposito]);
+      }
+    }
+  });
+
+  it('a foto livre nasce INTEIRA, e a capa da MESMA foto sai recortada', () => {
+    const inteira = emPixeis(RETRATO, proporcaoDaMolduraNaPosicao('network_event', 1));
+    expect(inteira).toEqual({ left: 0, top: 0, width: 1600, height: 2000 });
+    const capa = emPixeis(RETRATO, proporcaoDaMolduraNaPosicao('network_event', 0));
+    expect(capa.height).toBeLessThan(inteira.height);
+  });
+
+  // ========================================================================
+  // O QUE EU AFIRMEI ERRADO, E O QUE A MEDIÇÃO DISSE
+  // ========================================================================
+  // Eu escrevi aqui que "o recorte só REMOVE pixel, então a altura do envio
+  // livre é sempre >= a do recortado; se a capa passa no piso, a foto passa".
+  // **É FALSO**, e este caso existe porque ele me reprovou:
+  //
+  //   imagem 4000 x 1000  ->  capa 16:9 sai 1778 x 1000
+  //                       ->  foto livre sai 2048 x  512
+  //
+  // A causa é [LADO_MAXIMO_DO_ENVIO]: `tamanhoDoEnvio` escala pelo lado MAIOR.
+  // A janela livre é mais larga, então ela bate no teto de 2048 primeiro e a
+  // ALTURA desce junto. Soltar a moldura pode, sim, apertar o piso de altura.
+  //
+  // O piso do propósito continua `{ 600, 338 }`, derivado da `banner` da capa
+  // (a maior derivada com altura), e não muda com a posição.
+  it('a foto livre passa no piso nas proporções que uma câmera produz', () => {
+    const imagens = [
+      { largura: 600, altura: 1200 },
+      { largura: 4000, altura: 1000 },
+      { largura: 1000, altura: 350 },
+      { largura: 4032, altura: 3024 },
+      { largura: 3024, altura: 4032 },
+      RETRATO,
+    ];
+    // A contagem vai junto do veredito: lista vazia aprovaria qualquer coisa.
+    expect(imagens.length).toBe(6);
+    for (const imagem of imagens) {
+      const foto = tamanhoDoEnvio(emPixeis(imagem, proporcaoDaMolduraNaPosicao('network_event', 1)));
+      expect(foto.largura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.largura);
+      expect(foto.altura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.altura);
+    }
+  });
+
+  // ========================================================================
+  // DÍVIDA, E NÃO DECISÃO: o piso é por PROPÓSITO e a moldura é por POSIÇÃO
+  // ========================================================================
+  // **O número 6,06:1 deste caso não é uma regra que alguém escolheu.** Ele é
+  // o SINTOMA de uma incoerência que esta mudança introduziu e não consertou, e
+  // está travado aqui só para que ninguém o mova sem perceber.
+  //
+  // A incoerência, com endereço:
+  //
+  // - a MOLDURA passou a sair da derivada que aquela posição consome
+  //   (`proporcaoDaMolduraNaPosicao`, neste arquivo de produção);
+  // - o PISO continua saindo do PROPÓSITO -- `DIMENSAO_MINIMA` em
+  //   `src/modules/media/ports/imagem-de-catalogo.ts`, cuja altura vem de
+  //   `alturaDoPiso(largura, proporcaoDaMoldura(purpose))`, e `proporcaoDaMoldura`
+  //   lê a MAIOR derivada com altura, que é a `banner` 1280 x 720 **da capa**.
+  //
+  // Resultado: a foto herda um piso de ALTURA derivado do 16:9 da capa, enquanto
+  // as derivadas dela (`card` largura 1024 e `thumb` largura 480, em
+  // `src/modules/media/domain/derivadas.ts`) restringem **só a largura**. Uma
+  // imagem 8000 x 600 desce para 2048 x 154 pelo teto do envio, e dela sairiam
+  // `card` 1024 x 77 e `thumb` 480 x 36 -- **derivadas válidas, sem ampliação
+  // nenhuma**. O piso de 338 de altura recusa uma imagem que produziria derivada
+  // boa; ele não protege nada neste caminho, porque o que o piso existe para
+  // evitar é ampliação, e sem `altura` na derivada a altura não participa disso.
+  //
+  // ## POR QUE O PISO POR POSIÇÃO NÃO FOI FEITO AQUI
+  //
+  // Não é economia de PR: **a posição não existe no instante em que o piso é
+  // avaliado**, e isso foi medido nos dois instantes em que ele é avaliado:
+  //
+  // 1. no INTENT -- `AdminCatalogImageIntentInput` tem `purpose`, `content_type`,
+  //    `byte_size`, `width`, `height` (e os campos da indicação), **não tem
+  //    posição**, e é `additionalProperties: false`. O envio é anônimo quanto ao
+  //    destino **por desenho**: o contrato diz, com estas palavras, que "não há
+  //    nada que distinga a segunda imagem da primeira no envio";
+  // 2. no WORKER -- `processar-imagem-de-catalogo.ts` indexa
+  //    `DIMENSAO_MINIMA[imagem.purpose]`, e `ImagemParaProcessar` carrega `id`,
+  //    `purpose`, `status` e `originalKey`. Sem posição, e a imagem de catálogo
+  //    não conhece o dono.
+  //
+  // E, mesmo que carregasse: **a posição muda por reordenação depois do envio,
+  // sem reprocessar**. Um piso por posição seria avaliado num instante e
+  // invalidado no seguinte. A moldura escapa disso porque é escolhida no
+  // CLIENTE, no enquadramento, onde a posição futura já é conhecida localmente.
+  //
+  // Então isto fica como **pendência nomeada para o cliente**, não como regra:
+  // a foto panorâmica mais deitada que 2048/338 é recusada HOJE.
+  it('ISCA — DÍVIDA: a panorâmica é recusada como foto hoje, e isso não é decisão', () => {
+    const limite = LADO_MAXIMO_DO_ENVIO / DIMENSAO_MINIMA.network_event.altura;
+    expect(limite).toBeCloseTo(6.06, 1);
+
+    const passa = tamanhoDoEnvio(emPixeis({ largura: 6000, altura: 1000 }, null));
+    expect(passa.altura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.altura);
+
+    // 13:1 -- acima da fronteira: a altura sai abaixo do piso.
+    const recusada = tamanhoDoEnvio(emPixeis({ largura: 8000, altura: 600 }, null));
+    expect(recusada.altura).toBeLessThan(DIMENSAO_MINIMA.network_event.altura);
+
+    // E a MESMA imagem, enquadrada como CAPA, passa -- que é o que faz disto
+    // uma mudança de comportamento e não um limite que sempre existiu.
+    const comoCapa = tamanhoDoEnvio(
+      emPixeis({ largura: 8000, altura: 600 }, proporcaoDaMolduraNaPosicao('network_event', 0)),
+    );
+    expect(comoCapa.altura).toBeGreaterThanOrEqual(DIMENSAO_MINIMA.network_event.altura);
+  });
+});
 
 describe('a moldura, por propósito', () => {
   it('1:1 sobre um retrato devolve um QUADRADO, e não a imagem inteira', () => {

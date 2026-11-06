@@ -96,6 +96,23 @@ class FormatoDoRecorte {
     largura: 1024,
     altura: 1126,
   );
+
+  /// A FOTO da galeria do encontro (posições 1+): **moldura livre**.
+  ///
+  /// Cliente, 05/11/2026: *"deve subir tambem a foto no formato original e
+  /// quando clicar para expandir deve mostrar a imagem inteira [...] a unica
+  /// cropada tem que ser a da capa"*.
+  ///
+  /// Ela é livre porque as derivadas que esta posição consome **deixaram de ter
+  /// altura** em `DERIVADAS_DO_ENCONTRO` (`card` 1024 e `thumb` 480): o servidor
+  /// usa `fit: 'inside'` e não corta. Recortar aqui 16:9 jogaria fora pixel que
+  /// o servidor ia entregar inteiro -- e era esse o defeito que ele viu.
+  ///
+  /// A capa continua [capaDoEncontro], porque a posição 0 sai na `banner`
+  /// (1280 x 720, com altura, logo CORTA). Quem é a capa é a POSIÇÃO na lista, e
+  /// não o propósito do envio, que é `network_event` nas quatro.
+  static const FormatoDoRecorte fotoDoEncontro =
+      FormatoDoRecorte.doProprioArquivo();
 }
 
 /// O enquadramento, como GEOMETRIA PURA.

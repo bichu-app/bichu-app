@@ -28,19 +28,34 @@ export interface PropsDoDialogoDeRecorte {
    * de 5").
    */
   rotulo: string;
+  /**
+   * A moldura desta imagem, quando ela NAO e a do proposito inteiro: a galeria do
+   * encontro corta a capa e deixa as fotos livres (`proporcaoDaMolduraNaPosicao`).
+   * Ausente usa a do proposito; `null` e moldura livre.
+   */
+  proporcao?: number | null;
   aoConfirmar: (janela: Janela) => void;
   aoFechar: () => void;
 }
 
 /** RECORTAR E REPOSICIONAR (BICHUS-314, cliente 28 e 29/10/2026). */
-export function DialogoDeRecorte({ imagem, proposito, rotulo, aoConfirmar, aoFechar }: PropsDoDialogoDeRecorte) {
+export function DialogoDeRecorte({
+  imagem,
+  proposito,
+  rotulo,
+  proporcao: molduraPedida,
+  aoConfirmar,
+  aoFechar,
+}: PropsDoDialogoDeRecorte) {
   const [enquadramento, setEnquadramento] = useState<Enquadramento>(ENQUADRAMENTO_INICIAL);
   const palco = useRef<HTMLDivElement>(null);
   const tela = useRef<HTMLCanvasElement>(null);
   const arrasto = useRef<{ x: number; y: number; de: Enquadramento } | null>(null);
 
-  const proporcao = PROPORCAO_DA_MOLDURA[proposito] ?? imagem.largura / imagem.altura;
-  const regiao = regiaoEnquadrada(imagem, PROPORCAO_DA_MOLDURA[proposito], enquadramento);
+  /** Ausente cai na do proposito; `null` explicito e moldura livre e NAO ausencia. */
+  const moldura = molduraPedida === undefined ? PROPORCAO_DA_MOLDURA[proposito] : molduraPedida;
+  const proporcao = moldura ?? imagem.largura / imagem.altura;
+  const regiao = regiaoEnquadrada(imagem, moldura, enquadramento);
   const janela = janelaEmPixels(regiao, imagem.largura, imagem.altura);
   const envio = tamanhoDoEnvio(janela);
   const minima = DIMENSAO_MINIMA[proposito];

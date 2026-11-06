@@ -11,7 +11,15 @@ import {
   type Proposito,
 } from './envio-de-imagem.ts';
 import { Icone } from './Icone.tsx';
-import { devolverImagem, lerImagem, podeRecortar, recortar, type ImagemParaRecorte, type Janela } from './recorte-de-imagem.ts';
+import {
+  devolverImagem,
+  lerImagem,
+  podeRecortar,
+  proporcaoDaMolduraNaPosicao,
+  recortar,
+  type ImagemParaRecorte,
+  type Janela,
+} from './recorte-de-imagem.ts';
 
 /** Uma imagem da galeria, do ponto de vista da tela. */
 export interface ImagemDaGaleria {
@@ -106,6 +114,12 @@ export function Galeria({
     original: File;
     indice: number | null;
     chave: string | null;
+    /**
+     * A posicao que esta imagem VAI ocupar, e e ela que escolhe a moldura: na
+     * galeria do encontro a posicao 0 e a capa (corta 16:9) e as outras sao as
+     * fotos (moldura livre, cliente de 05/11/2026).
+     */
+    posicao: number;
   }>();
   const seletor = useRef<HTMLInputElement>(null);
   const trocarEm = useRef<number | null>(null);
@@ -178,7 +192,7 @@ export function Galeria({
     if (!conferirArquivo(arquivo)) {
       const imagem = await lerImagem(arquivo);
       if (imagem) {
-        setRecorte({ imagem, original: arquivo, indice, chave: null });
+        setRecorte({ imagem, original: arquivo, indice, chave: null, posicao: indice ?? n });
         return;
       }
     }
@@ -214,7 +228,13 @@ export function Galeria({
       setAnuncio('Não foi possível abrir o enquadramento desta imagem.');
       return;
     }
-    setRecorte({ imagem, original: im.original, indice: null, chave: im.chave });
+    setRecorte({
+      imagem,
+      original: im.original,
+      indice: null,
+      chave: im.chave,
+      posicao: imagens.findIndex((x) => x.chave === im.chave),
+    });
   }
 
   async function confirmarRecorte(janela: Janela) {
@@ -519,6 +539,7 @@ export function Galeria({
         <DialogoDeRecorte
           imagem={recorte.imagem}
           proposito={proposito}
+          proporcao={proporcaoDaMolduraNaPosicao(proposito, recorte.posicao)}
           rotulo={rotuloDoRecorte(recorte.chave)}
           aoConfirmar={(janela) => void confirmarRecorte(janela)}
           aoFechar={fecharRecorte}

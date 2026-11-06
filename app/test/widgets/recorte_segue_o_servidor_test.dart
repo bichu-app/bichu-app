@@ -386,6 +386,65 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
       });
     }
 
+    // ======================================================================
+    // O ESPELHO NA DIRECAO OPOSTA: a derivada que NAO corta
+    // ======================================================================
+    // O loop acima cobra "a janela tem a proporcao com que o servidor corta".
+    // Este caso cobra o contrario, que e a decisao do cliente de 05/11/2026:
+    // *"a unica cropada tem que ser a da capa"*. As posicoes 1+ da galeria do
+    // encontro consomem a `card`, que desde entao NAO declara altura -- o
+    // servidor usa `fit: 'inside'` e entrega a foto inteira.
+    //
+    // Sem este caso, devolver `FormatoDoRecorte.capaDoEncontro` as fotos
+    // passaria calado: o loop acima nao mede a `card` do encontro, e a
+    // reprovacao dele so acusaria a capa. A pessoa enquadraria 16:9, o app
+    // jogaria pixel fora nos bytes e o servidor entregaria o que sobrou --
+    // exatamente o defeito que ele relatou, de volta por onde foi consertado.
+    //
+    // ISCA: troque `FormatoDoRecorte.fotoDoEncontro` por `capaDoEncontro` em
+    // `criar_encontro.dart`, ou devolva `altura: 576` a `card` em
+    // `derivadas.ts`. Compila, `flutter analyze` cala, nenhum outro caso
+    // reprova. Este reprova.
+    test('ISCA — fotos da galeria do encontro: a `card` NAO corta, e a janela e livre', () {
+      final doServidor = aVariante(lidas, 'DERIVADAS_DO_ENCONTRO', 'card');
+      expect(
+        doServidor.aspecto,
+        isNull,
+        reason:
+            'REPROVA: a `card` de `DERIVADAS_DO_ENCONTRO` voltou a declarar '
+            'altura ($doServidor), ou seja o servidor CORTA a foto da galeria '
+            'de novo. O cliente pediu o contrario em 05/11/2026: "a unica '
+            'cropada tem que ser a da capa". Se a decisao mudou, a janela de '
+            '`FormatoDoRecorte.fotoDoEncontro` tem de voltar a declarar '
+            'proporcao junto.',
+      );
+      expect(
+        FormatoDoRecorte.fotoDoEncontro.aspecto,
+        isNull,
+        reason:
+            'REPROVA: a janela da FOTO do encontro declara proporcao, mas o '
+            'servidor nao corta esta derivada. O app jogaria fora pixel que o '
+            'servidor ia entregar inteiro -- e o cliente veria a foto cortada '
+            'ao ampliar, que e o relato de 05/11/2026.',
+      );
+      // A CAPA continua cortando, e os dois fatos vivem no mesmo caso de
+      // proposito: "so a capa corta" e uma afirmacao sobre as DUAS, e medir
+      // uma sem a outra deixaria passar o estado em que nenhuma corta.
+      final capa = aVariante(lidas, 'DERIVADAS_DO_ENCONTRO', 'banner');
+      expect(
+        capa.aspecto,
+        isNotNull,
+        reason:
+            'REPROVA: a `banner` do encontro perdeu a altura, entao NENHUMA '
+            'derivada do encontro corta e a capa deixou de ser recortada. O '
+            'cliente disse que a capa estava CORRETA fazendo o crop.',
+      );
+      expect(
+        FormatoDoRecorte.capaDoEncontro.aspecto,
+        closeTo(capa.aspecto!, 1e-9),
+      );
+    });
+
     test(
         'ISCA — os DOIS kind do achado caem na MESMA derivada, e por isso a '
         'janela e uma so', () {

@@ -6,6 +6,7 @@ export { comoObjectKey };
 import {
   DERIVADAS_DA_FOTO_DE_USUARIO,
   DERIVADAS_DA_FOTO_DO_LOCAL,
+  DERIVADAS_DA_GALERIA_DO_DIRETORIO,
   DERIVADAS_DA_LOGO,
   DERIVADAS_DA_PUBLICACAO,
   DERIVADAS_DA_VITRINE_DO_USUARIO,
@@ -83,7 +84,7 @@ export const DERIVADAS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonl
   store_item: DERIVADAS_DO_PRODUTO,
   directory_logo: DERIVADAS_DA_LOGO,
   directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
-  directory_gallery: DERIVADAS_DO_ENCONTRO,
+  directory_gallery: DERIVADAS_DA_GALERIA_DO_DIRETORIO,
   directory_suggestion_logo: DERIVADAS_DA_LOGO,
   directory_suggestion_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   DERIVADAS_DA_FOTO_DE_PET,
+  DERIVADAS_DA_GALERIA_DO_DIRETORIO,
   DERIVADAS_DO_ENCONTRO,
   DERIVADAS_DO_PRODUTO,
   DERIVADA_DA_FOTO_DO_ACHADO,
@@ -104,6 +105,7 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
   const todas = [
     ...DERIVADAS_DA_FOTO_DE_PET,
     ...DERIVADAS_DO_ENCONTRO,
+    ...DERIVADAS_DA_GALERIA_DO_DIRETORIO,
     ...DERIVADAS_DO_PRODUTO,
     DERIVADA_DA_FOTO_DO_ACHADO,
   ];
@@ -115,7 +117,12 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
   });
 
   void it('nenhuma lista repete uma variante: a segunda sobrescreveria a primeira', () => {
-    for (const lista of [DERIVADAS_DA_FOTO_DE_PET, DERIVADAS_DO_ENCONTRO, DERIVADAS_DO_PRODUTO]) {
+    for (const lista of [
+      DERIVADAS_DA_FOTO_DE_PET,
+      DERIVADAS_DO_ENCONTRO,
+      DERIVADAS_DA_GALERIA_DO_DIRETORIO,
+      DERIVADAS_DO_PRODUTO,
+    ]) {
       const variantes = lista.map((d) => d.variante);
       assert.equal(new Set(variantes).size, variantes.length);
     }
@@ -144,7 +151,6 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     const thumb = DERIVADAS_DO_ENCONTRO.find((d) => d.variante === 'thumb');
     assert.ok(thumb !== undefined, 'sem `thumb` a galeria volta a baixar 1024 px para 432');
     assert.ok(thumb.largura >= 144 * 3);
-    assert.ok(Math.abs((thumb.altura ?? 0) / thumb.largura - 3 / 4) < 0.02);
   });
 
   void it('encontro: o `banner` cobre 430 dp a 3x, e o `card` cobre 328 dp a 3x', () => {
@@ -153,9 +159,55 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     assert.ok(banner !== undefined && card !== undefined);
     assert.ok(banner.largura >= 430 * 3 - 10, `banner de ${String(banner.largura)} px`);
     assert.ok(card.largura >= 328 * 3, `card de ${String(card.largura)} px`);
-    for (const d of [banner, card]) {
-      assert.ok(Math.abs((d.altura ?? 0) / d.largura - 9 / 16) < 0.02);
+  });
+
+  // ==========================================================================
+  // SÓ A CAPA CORTA (cliente, 05/11/2026)
+  // ==========================================================================
+  // *"as imagens do evento que subimos, a capa esta correta, fazendo o crop,
+  // mas deve subir tambem a foto no formato original e quando clicar para
+  // expandir deve mostrar a imagem inteira, hoje as fotos estao sendo cropadas,
+  // e a unica cropada tem que ser a da capa."*
+  //
+  // Até 05/11 as três derivadas do encontro tinham altura, e as três cortavam:
+  // `card` em 1024 x 576 e `thumb` em 480 x 360. A `card` é o que o
+  // visualizador amplia nas posições 1+ (`urlsParaAmpliar`), então a foto que
+  // ele abria JÁ vinha cortada -- e o `BoxFit.contain` do visualizador mostrava
+  // essa derivada inteira, o que fazia o defeito parecer não existir no app.
+  //
+  // ISCA: devolva `altura` à `card` ou à `thumb` em `DERIVADAS_DO_ENCONTRO`.
+  // Compila, `tsc` cala, o lint cala, e a foto volta a ser cortada no servidor.
+  // Este caso reprova.
+  void it('encontro: SÓ o `banner` corta — `card` e `thumb` vão inteiras', () => {
+    const comAltura = DERIVADAS_DO_ENCONTRO.filter((d) => d.altura !== undefined).map((d) => d.variante);
+    assert.deepEqual(
+      comAltura,
+      ['banner'],
+      'a capa é a ÚNICA recortada (cliente, 05/11/2026): `altura` presente = corta',
+    );
+  });
+
+  void it('encontro: a `banner` da CAPA continua 16:9, que é o que ele chamou de correto', () => {
+    const banner = DERIVADAS_DO_ENCONTRO.find((d) => d.variante === 'banner');
+    assert.ok(banner !== undefined);
+    assert.ok(
+      Math.abs((banner.altura ?? 0) / banner.largura - 9 / 16) < 0.02,
+      'a moldura da capa (no painel e no app) é derivada DESTA proporção',
+    );
+  });
+
+  // A galeria do DIRETÓRIO foi separada da do encontro em 05/11/2026, e este
+  // caso é o que impede alguém de "limpar" as duas por simetria: o pedido do
+  // cliente falou do ENCONTRO, e nenhuma decisão dele pediu que a foto de
+  // estabelecimento parasse de ser recortada.
+  void it('diretório: a galeria MANTÉM as três cortando — a decisão foi sobre o encontro', () => {
+    assert.equal(DERIVADAS_DA_GALERIA_DO_DIRETORIO.length, 3);
+    for (const d of DERIVADAS_DA_GALERIA_DO_DIRETORIO) {
+      assert.notEqual(d.altura, undefined, `${d.variante} do diretório perdeu a altura`);
     }
+    const banner = DERIVADAS_DA_GALERIA_DO_DIRETORIO.find((d) => d.variante === 'banner');
+    assert.ok(banner !== undefined);
+    assert.ok(Math.abs((banner.altura ?? 0) / banner.largura - 9 / 16) < 0.02);
   });
 
   void it('encontro: o `banner` é MAIOR que o `card`, senão não há o que ganhar', () => {
