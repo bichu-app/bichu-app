@@ -4,6 +4,7 @@ import { TIPOS_ACEITOS, comoObjectKey, type CategoriaDeCatalogo } from '../domai
 /** A ÚNICA porta pela qual outro módulo obtém a marca `ObjectKey`. */
 export { comoObjectKey };
 import {
+  DERIVADAS_DA_CAPA_DO_PET,
   DERIVADAS_DA_FOTO_DE_USUARIO,
   DERIVADAS_DA_FOTO_DO_LOCAL,
   DERIVADAS_DA_GALERIA_DO_DIRETORIO,
@@ -30,7 +31,9 @@ export type PropositoDaImagem =
   | 'directory_suggestion_photo'
   | 'user_photo'
   | 'user_showcase'
-  | 'user_publication';
+  | 'user_publication'
+  /** A FOTO DE CAPA 16:9 da ficha do pet (`20261106000001`). */
+  | 'pet_cover';
 
 /** O proposito do LOGOTIPO DA INDICACAO, num ponto so. */
 export const PROPOSITO_DO_LOGOTIPO_DA_INDICACAO = 'directory_suggestion_logo' as const;
@@ -50,6 +53,9 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   user_photo: 'people',
   user_showcase: 'people',
   user_publication: 'people',
+  // `pets/`, e nao `people/`: a capa e do ANIMAL. O prefixo e o mesmo de onde a
+  // foto do pet ja mora, e o original dela nasce em `pets/original/<128 bits>`.
+  pet_cover: 'pets',
 };
 
 /**
@@ -70,6 +76,10 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   user_photo: TIPOS_ACEITOS,
   user_showcase: TIPOS_ACEITOS,
   user_publication: TIPOS_ACEITOS,
+  // **SEM HEIC**, ao contrario da foto de pet: a capa e processada por este
+  // caminho, que nao decodifica HEIC, e aceitar na entrada o que o worker vai
+  // recusar nos bytes seria prometer envio que termina em `rejected`.
+  pet_cover: TIPOS_DE_IMAGEM_DE_CATALOGO,
 };
 
 /** O teto do envio, reexportado do PONTO ÚNICO (`domain/derivadas.ts`). */
@@ -90,6 +100,7 @@ export const DERIVADAS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonl
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
   user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
   user_publication: DERIVADAS_DA_PUBLICACAO,
+  pet_cover: DERIVADAS_DA_CAPA_DO_PET,
 };
 
 /**
@@ -152,6 +163,12 @@ export const LARGURA_MINIMA: Readonly<Record<PropositoDaImagem, number>> = {
   user_photo: 300,
   user_showcase: 600,
   user_publication: 600,
+  // 1280, a decisao do cliente de 02/11/2026, e a MESMA largura de
+  // `directory_photo` -- a outra faixa 16:9 do produto. A ALTURA nao esta aqui:
+  // `DIMENSAO_MINIMA` a deriva da proporcao da `banner` e da 720. Escrever
+  // `{ 1280, 720 }` a mao seria o segundo par escrito a mao, e e par escrito a
+  // mao que discorda da moldura.
+  pet_cover: 1280,
 };
 
 /** A altura do piso: a que a moldura impoe a essa largura. */

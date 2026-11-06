@@ -1694,6 +1694,41 @@ export interface paths {
         patch: operations["updatePet"];
         trace?: never;
     };
+    "/pets/{petId}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Define a foto de capa do pet
+         * @description Confirma o `upload_id` de `createPetCoverUploadIntent` e enfileira o
+         *     processamento. Responde **202** e nao 200: a derivada ainda nao existe
+         *     quando esta resposta sai, entao `cover_image_url` vem **nulo** aqui e
+         *     passa a ter valor na proxima leitura do pet. Prometer a URL nesta
+         *     resposta seria prometer arquivo que nao esta no balde.
+         *
+         *     Confirmar de novo com o MESMO `upload_id` devolve a mesma capa sem criar
+         *     trabalho novo; confirmar com `upload_id` de outra conta, de outro
+         *     proposito, vencido ou ja gasto em outro pet responde `400`
+         *     (`code: upload_not_usable`).
+         *
+         *     Pet de outra pessoa **nao existe** (ADR-0021): a autorizacao mora na
+         *     clausula `WHERE`, comparando o dono do pet com o portador do token, e a
+         *     resposta e `404`.
+         */
+        put: operations["setPetCover"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pets/{petId}/delivery-address": {
         parameters: {
             query?: never;
@@ -3861,6 +3896,48 @@ export interface paths {
          *     (`cover_image_url` nulo, e o app mostra o banner da marca).
          */
         post: operations["createNetworkEventCoverUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/pet-cover-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da foto de capa do pet
+         * @description Pedido do cliente de 06/11/2026: *"gostei muito da forma como ele
+         *     apresenta o perfil do pet, com a foto de capa, como fazemos na pagina de
+         *     eventos e profissionais"*.
+         *
+         *     O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO; a derivada
+         *     publica e criada pelo worker, e e ela que sai em `Pet.cover_image_url`.
+         *
+         *     **O envio e da CONTA** (`bearerAuth`), e nao do painel -- o mesmo
+         *     caminho que a capa do encontro criado pela conta ja percorre (ADR-0025
+         *     emenda 3): `setPetCover` so confirma `upload_id` cuja intencao e da
+         *     propria conta, e a conferencia esta na clausula `WHERE`. O painel **nao
+         *     ganha tela nenhuma** nesta mudanca: a capa e do tutor.
+         *
+         *     Dimensao minima **1280 x 720** (decisao do cliente, 02/11/2026): a
+         *     LARGURA minima decidida e 1280 e a altura e a que a moldura 16:9 impoe.
+         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
+         *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
+         *     worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; o pet sem capa e estado normal, e
+         *     sera o de todos os pets no dia em que isto subir.
+         */
+        post: operations["createPetCoverUploadIntent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9521,6 +9598,32 @@ export interface components {
                 hint?: string;
             }[];
             photos?: components["schemas"]["PetPhoto"][];
+            /**
+             * Format: uri
+             * @description A FOTO DE CAPA do pet: a derivada `banner` 1280 x 720 (16:9),
+             *     de borda a borda no topo da ficha (pedido do cliente,
+             *     06/11/2026: *"gostei muito da forma como ele apresenta o perfil
+             *     do pet, com a foto de capa, como fazemos na pagina de eventos e
+             *     profissionais"*).
+             *
+             *     **Ela NAO substitui `photos[].card_url`, e isto e o ponto do
+             *     desenho.** Sao duas imagens com dois papeis: o RETRATO
+             *     (`card_url`, 1024 x 1126, proporcao 1 : 1,1) e a identidade do
+             *     animal e alimenta cinco superficies fora da ficha -- a pagina
+             *     publica do caso, o cartaz IMPRESSO de pet perdido
+             *     (`LostCasePoster.photo_url`), a tela de quem achou, o perfil
+             *     publico do pet e a pagina da plaquinha. A CAPA e o ambiente
+             *     dele, e so a ficha a desenha. Fazer a capa 16:9 ocupar o lugar
+             *     do retrato faria o cartaz de pet perdido sair deitado.
+             *
+             *     Nula e o estado NORMAL e sera o de 100% dos pets no dia em que
+             *     isto subir, porque a coluna nasce agora: a faixa continua
+             *     existindo e recebe o banner da marca com o convite de envio --
+             *     a mesma saida que o encontro da comunidade sem capa ja da hoje.
+             *     Tambem nula enquanto o worker processa e quando a imagem foi
+             *     recusada.
+             */
+            cover_image_url?: string | null;
             active_tag_count?: number;
             /** Format: uuid */
             open_case_id?: string | null;
@@ -9580,6 +9683,59 @@ export interface components {
             card_url?: string | null;
             /** Format: date-time */
             created_at?: string;
+        };
+        /**
+         * @description O pedido de autorizacao de envio da FOTO DE CAPA do pet (pedido do
+         *     cliente, 06/11/2026).
+         *
+         *     **Sem `purpose`**, pela mesma razao de `NetworkEventCoverIntentInput`:
+         *     esta operacao existe para um proposito so (`pet_cover`), e deixar o
+         *     cliente escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de
+         *     produto por uma rota do aplicativo.
+         *
+         *     **A capa anda na esteira de IMAGEM DE CATALOGO, e nao na da foto de
+         *     pet**, por decisao do cliente de 03/11/2026: *"sempre que estivermos
+         *     falando de upload de imagem, isso deve ser tratado no mesmo lugar, e as
+         *     correcoes devem ser realizadas em todos os lugares por ser o mesmo
+         *     codigo"*. E ela nao podia andar na outra nem por acidente: o
+         *     `CHECK pet_photos_pronta_tem_derivadas` exige `thumb_key` **e**
+         *     `card_key` para a linha chegar a `ready`, e uma faixa 16:9 nao gera
+         *     miniatura de retrato -- ela nao cabe naquela linha.
+         */
+        PetCoverIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+             *     fora porque a derivada de catalogo e processada pelo mesmo caminho
+             *     do painel, que nao o aceita -- e por isso este enum NAO e o de
+             *     `UploadIntentInput`, que e da foto de pet.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /**
+             * @description Opcional, como o cliente a le. Abaixo de 1280 responde `422
+             *     image-too-small` **antes** de assinar.
+             *
+             *     O piso e 1280 x 720 (decisao do cliente, 02/11/2026), e a ALTURA
+             *     nao esta escrita a mao em lugar nenhum: ela e derivada da largura
+             *     pela proporcao da derivada `banner`. Piso quadrado sobre recorte
+             *     16:9 e regra impossivel, e foi assim que o defeito de 02/11 nasceu.
+             */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description A confirmacao do envio da capa: o `upload_id` que
+         *     `createPetCoverUploadIntent` devolveu, depois que os bytes subiram.
+         *
+         *     `upload_id` de outra conta, de outro proposito, vencido ou ja usado em
+         *     outro pet e recusado com `400` (`code: upload_not_usable`), **sem dizer
+         *     qual dos casos ocorreu** -- a mesma redacao e a mesma reticencia de
+         *     `createNetworkEvent`.
+         */
+        PetCoverInput: {
+            /** Format: uuid */
+            upload_id: string;
         };
         /**
          * @description **O teto de 5 MiB vale para TODO envio de imagem da aplicacao** -- foto
@@ -19989,6 +20145,37 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    setPetCover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetCoverInput"];
+            };
+        };
+        responses: {
+            /** @description Capa aceita e em processamento. `cover_image_url` ainda nulo. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pet"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getPetDeliveryAddress: {
         parameters: {
             query?: never;
@@ -22271,6 +22458,35 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NetworkEventCoverIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createPetCoverUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetCoverIntentInput"];
             };
         };
         responses: {

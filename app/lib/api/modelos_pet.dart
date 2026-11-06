@@ -307,6 +307,7 @@ class Pet {
     this.castrado,
     this.chip,
     this.rgAnimal,
+    this.urlDaCapa,
   });
 
   final String id;
@@ -370,6 +371,17 @@ class Pet {
   /// quem nao tem chip tem nulo.
   final String? chip;
 
+  /// `cover_image_url`: a FOTO DE CAPA 16:9 (cliente, 06/11/2026).
+  ///
+  /// **Nao e a foto do pet, e nao substitui [fotoDeCapa]** — o nome daquele
+  /// getter e anterior a existencia desta capa e quer dizer "a foto principal do
+  /// pet", que e RETRATO. Aqui e a faixa 16:9 do topo da ficha, a derivada
+  /// `banner` 1280 x 720.
+  ///
+  /// Nula e o estado normal: sem capa, em processamento e recusada dao nulo, e a
+  /// ficha mostra o `BannerDaMarca` nos tres.
+  final String? urlDaCapa;
+
   /// `sinpatinhas_id`, 1 a 40 caracteres no contrato: o RG Animal do
   /// registro federal. **Guardado como veio**, sem validacao de formato --
   /// o SinPatinhas nao tem API publica, e recusar formato que nao se conhece
@@ -430,6 +442,7 @@ class Pet {
       castrado: json['neutered'] as bool?,
       chip: json['microchip_number'] as String?,
       rgAnimal: json['sinpatinhas_id'] as String?,
+      urlDaCapa: json['cover_image_url'] as String?,
       redacoesDeCuidados:
           (json['care_notes_redactions'] as List<dynamic>? ?? const <dynamic>[])
               .whereType<Map<String, dynamic>>()

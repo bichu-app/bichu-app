@@ -157,6 +157,12 @@ void describe('a recusa de dimensão declarada pequena tem uma fonte só', () =>
       user_photo: 300,
       user_showcase: 600,
       user_publication: 600,
+      // A FOTO DE CAPA DO PET (cliente, 06/11/2026). 1280 e a MESMA largura de
+      // `directory_photo`, a outra faixa 16:9 do produto, e vem da decisao do
+      // cliente de 02/11/2026. A altura NAO esta aqui, e e esse o ponto do
+      // arquivo: ela sai da proporcao da `banner` 1280 x 720 e da 720, o que o
+      // caso abaixo confere com o par escrito a mao.
+      pet_cover: 1280,
     });
   });
 
@@ -172,6 +178,11 @@ void describe('a recusa de dimensão declarada pequena tem uma fonte só', () =>
       user_photo: { largura: 300, altura: 300 },
       user_showcase: { largura: 600, altura: 600 },
       user_publication: { largura: 600, altura: 600 },
+      // 1280 / (16/9) = 720, e o par fecha. O quadrado de 600 x 600 do RETRATO
+      // (`DIMENSAO_MINIMA_DA_FOTO_DE_PET`) NAO entra aqui: a capa anda na
+      // esteira de catalogo e o retrato na dele, e aplicar piso quadrado a
+      // recorte 16:9 e a regra impossivel que travou o cliente em 02/11/2026.
+      pet_cover: { largura: 1280, altura: 720 },
     });
   });
 

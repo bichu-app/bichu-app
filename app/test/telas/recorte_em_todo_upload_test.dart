@@ -198,6 +198,11 @@ void main() {
           'achado/tela_registrar_achado.dart',
       'encontrei este pet (quem NAO tem conta)':
           'achado/tela_encontrei_este_pet.dart',
+      // O DECIMO-PRIMEIRO ponto, 06/11/2026: a FOTO DE CAPA do pet. Ele usa
+      // `FormatoDoRecorte.capaDoEncontro` (1280 x 720, 16:9), que JA existia --
+      // dar um nome novo ao mesmo numero daria dois lugares para o piso
+      // divergir.
+      'capa do pet': 'pet/tela_detalhe_do_pet.dart',
     };
 
     for (final ponto in pontos.entries) {
@@ -282,11 +287,15 @@ void main() {
       // exemplo).
       expect(
         comAquisicao,
-        10,
+        11,
         reason:
             'REPROVA: a varredura achou $comAquisicao telas que pegam foto do '
-            'aparelho, e o travado e 10 -- os 10 pontos de upload do app, '
-            'TODOS com recorte desde 29/10/2026. Um ponto de upload novo move '
+            'aparelho, e o travado e 11 -- os 11 pontos de upload do app, '
+            'TODOS com recorte. Eram 10 ate 06/11/2026, quando a FOTO DE CAPA '
+            'do pet entrou em `pet/tela_detalhe_do_pet.dart`: aquele arquivo '
+            'NAO pegava foto do aparelho antes, e agora pega (da galeria, '
+            'nunca da camera -- a capa e o ambiente do animal). Um ponto de '
+            'upload novo move '
             'este numero DE PROPOSITO: ligue o recorte nele, ou ponha-o em '
             '`pendentesComMotivo` com o motivo escrito, e atualize este '
             'numero na mesma edicao. Se ele caiu a ZERO, a expressao de '

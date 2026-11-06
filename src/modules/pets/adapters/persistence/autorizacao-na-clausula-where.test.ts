@@ -98,12 +98,31 @@ void describe('toda consulta de pet que responde a um tutor carrega o dono no WH
     );
   });
 
-  void it('a leitura do dono liga o dono a $3, e não a $1: DUAS subconsultas vem antes', () => {
+  /// A ORDEM DOS PARÂMETROS, e por que ela é um caso e não um detalhe.
+  ///
+  /// Este caso NÃO é o que autoriza a leitura — quem autoriza é
+  /// [donoLigadoAoPredicado], que acha a POSIÇÃO do dono no SQL compilado e
+  /// confere o valor ligado a ela. Este caso existe para que a tabela de prova
+  /// dos casos acima não possa apodrecer em silêncio: se alguém acrescentar uma
+  /// subconsulta ao `SELECT` e o dono passar de `$4` para `$5`, a leitura por
+  /// posição continua certa e **nada acusaria** que a prosa que diz "$3" ficou
+  /// mentindo.
+  ///
+  /// **SÃO TRÊS SUBCONSULTAS desde 06/11/2026**, e o dono é `$4`:
+  ///
+  ///  1. `'active'` — a contagem de plaquinhas ativas (`active_tag_count`);
+  ///  2. `'open'` — o caso de perdido em aberto (`open_case_id`);
+  ///  3. `'ready'` — a derivada `banner` da FOTO DE CAPA (`cover_banner_key`),
+  ///     que entrou com o pedido do cliente de 06/11/2026. O `'ready'` é o que
+  ///     impede servir a URL de uma capa que o worker ainda não processou.
+  ///
+  /// Eram DUAS e o dono era `$3` até a capa entrar.
+  void it('a leitura do dono liga o dono a $4, e não a $1: TRÊS subconsultas vem antes', () => {
     const compilada = construtorDaLeituraDoDono(semBanco, DONO).compile();
 
     assert.deepEqual(
       [...compilada.parameters],
-      ['active', 'open', DONO],
+      ['active', 'open', 'ready', DONO],
       'a ordem dos parâmetros mudou; a leitura por posição continua certa, mas a tabela de ' +
         'prova do cabeçalho precisa ser refeita',
     );

@@ -38,6 +38,17 @@ export interface PetGravado extends DadosDoPet {
   readonly activeTagCount: number;
   /** Caso de perdido em aberto, quando houver. */
   readonly openCaseId: string | null;
+  /**
+   * A chave da derivada `banner` 1280 x 720 da FOTO DE CAPA (cliente,
+   * 06/11/2026), **só quando a imagem está `ready`**. Nula é o estado normal:
+   * sem capa, em processamento ou recusada, as três dão nulo, e a ficha mostra
+   * o banner da marca nas três.
+   *
+   * É CHAVE e não URL: a base de mídia é domínio separado da origem da
+   * aplicação (ADR-0007), e quem a monta é a borda HTTP — o mesmo arranjo de
+   * `FotoDoPet.thumbKey`/`cardKey`.
+   */
+  readonly coverBannerKey: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -71,4 +82,24 @@ export interface PetRepository {
 
   /** Exclusão lógica. `false` quando não existe ou não é do chamador. */
   excluir(pet: PetId, dono: UserId, quando: Instant): Promise<boolean>;
+
+  /**
+   * Confirma o envio da FOTO DE CAPA e a aponta no pet (cliente, 06/11/2026).
+   *
+   * `'pet_inexistente'` quando o pet não existe **ou** não é do chamador — são
+   * um desfecho só de propósito: pet de outra pessoa não existe (ADR-0021).
+   * `'envio_inservivel'` cobre, numa resposta só, o `upload_id` de outra conta,
+   * de outro propósito, vencido e já gasto — **sem dizer qual** foi, a mesma
+   * reticência de `createNetworkEvent`.
+   *
+   * Reconfirmar o MESMO `upload_id` no MESMO pet devolve o pet sem criar
+   * trabalho novo: é idempotente, e é isso que faz o toque repetido do app não
+   * gerar duas derivadas.
+   */
+  definirCapa(
+    pet: PetId,
+    dono: UserId,
+    uploadId: string,
+    agora: Instant,
+  ): Promise<PetGravado | 'pet_inexistente' | 'envio_inservivel'>;
 }

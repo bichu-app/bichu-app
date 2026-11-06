@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../dispositivo/camera_e_galeria.dart';
 import 'falhas.dart';
+import 'modelos_pet.dart';
 import 'problem.dart';
 
 /// `#/components/schemas/UploadIntent` do contrato.
@@ -118,6 +119,40 @@ class FotoDePet implements DestinoDaFoto {
   }
 }
 
+/// A FOTO DE CAPA do pet (cliente, 06/11/2026): intencao SEM `pet_id`, e
+/// confirmacao em `PUT /pets/{petId}/cover`.
+///
+/// **E um destino proprio e nao um parametro de [FotoDePet]**, porque as duas
+/// nao sao variantes da mesma coisa: a foto do pet e o RETRATO 1 : 1,1, que
+/// alimenta o cartaz impresso e as paginas publicas, e a capa e a faixa 16:9 que
+/// so a ficha do app desenha. Elas tem rotas diferentes, propositos diferentes,
+/// derivadas diferentes e pisos diferentes — um `bool` as unificando seria uma
+/// classe com duas verdades.
+class CapaDePet implements DestinoDaFoto {
+  const CapaDePet({required this.api, required this.petId});
+
+  final IntencaoEConfirmacaoDePet api;
+  final String petId;
+
+  @override
+  Future<AutorizacaoDeEnvio> pedirAutorizacao({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) async {
+    return AutorizacaoDeEnvio.doJson(
+      await api.intencaoDeCapaDoPet(
+        tipoDeConteudo: tipoDeConteudo,
+        tamanhoEmBytes: tamanhoEmBytes,
+      ),
+    );
+  }
+
+  @override
+  Future<void> confirmar(String uploadId) async {
+    await api.definirCapaDoPet(petId: petId, uploadId: uploadId);
+  }
+}
+
 /// A foto do achado avulso: intencao com `found_report_id`, sem confirmacao.
 class FotoDeAchado implements DestinoDaFoto {
   const FotoDeAchado({required this.api, required this.foundReportId});
@@ -199,6 +234,18 @@ abstract class IntencaoEConfirmacaoDePet {
     required String petId,
     required String uploadId,
     bool comoPrincipal,
+  });
+
+  /// `POST /media/pet-cover-intents`, a capa (06/11/2026). **Sem `petId`**.
+  Future<Map<String, dynamic>> intencaoDeCapaDoPet({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  });
+
+  /// `PUT /pets/{petId}/cover`. Devolve o pet, com a capa ainda nula.
+  Future<Pet> definirCapaDoPet({
+    required String petId,
+    required String uploadId,
   });
 }
 

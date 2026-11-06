@@ -51,6 +51,52 @@ abstract final class TextosDoDetalhe {
   static const String editar = 'Editar';
   static const String excluir = 'Excluir';
 
+  // =========================================================================
+  // A FOTO DE CAPA (cliente, 06/11/2026)
+  //
+  // Pedido literal: *"gostei muito da forma como ele apresenta o perfil do pet,
+  // com a foto de capa, como fazemos na pagina de eventos e profissionais"*.
+  //
+  // DUAS redacoes e nao uma, porque sao dois gestos diferentes para quem le:
+  // quem ainda nao tem capa esta ADICIONANDO, e quem tem esta TROCANDO. Uma
+  // frase so ("Foto de capa") nao diria qual dos dois vai acontecer.
+  //
+  // **Nao existe `Remover a capa`**, e e de proposito: o cliente aprovou
+  // `Trocar a foto de capa` e so isso. A ficha sem capa mostra o banner da
+  // marca, que e o estado normal e nao uma falta.
+  // =========================================================================
+
+  /// O que a casca anuncia ao leitor de tela: `Pet: <nome>`.
+  static const String anuncioDaPagina = 'Pet';
+
+  /// A acao em texto, junto de `Editar` e `Excluir`, quando JA ha capa.
+  static const String trocarACapa = 'Trocar a foto de capa';
+
+  /// A mesma acao quando ainda NAO ha capa.
+  static const String adicionarACapa = 'Adicionar foto de capa';
+
+  /// A pastilha sobre a faixa do banner da marca, no estado sem capa.
+  static const String pastilhaDeAdicionarCapa = 'Adicionar capa';
+
+  /// O titulo da tela de recorte da capa.
+  static const String ajusteACapa = 'Ajuste a foto de capa';
+
+  /// A descricao da capa para o leitor de tela.
+  static String capaDe(String nome) => 'Foto de capa de $nome';
+
+  /// A faixa enquanto os bytes da capa sobem.
+  static const String capaSubindo = 'Enviando a foto de capa…';
+
+  /// A capa subiu e o servidor esta processando.
+  static const String capaEmProcessamento =
+      'A foto de capa chegou. Ela aparece aqui em instantes.';
+
+  static const String capaSemSinal =
+      'A foto de capa nao subiu: faltou conexao. Tente de novo.';
+
+  static const String capaRecusada =
+      'Nao conseguimos usar essa foto de capa. Tente outra.';
+
   /// `Marcar como perdido`, trazida para a pagina do pet (cliente, 18/10).
   static const String marcarComoPerdido = TelaDeQuemEOCaso.titulo;
 

@@ -182,9 +182,11 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
+import { CapaDoPet } from '../modules/media/application/capa-do-pet.js';
 import { LogotipoDaIndicacao } from '../modules/media/application/logotipo-da-indicacao.js';
 import { FotoDaIndicacao } from '../modules/media/application/foto-da-indicacao.js';
 import {
+  registrarIntencaoDaCapaDoPet,
   registrarIntencaoDeCapaDaComunidade,
   registrarIntencaoDoLogotipoDaIndicacao,
   registrarIntencaoDaFotoDaIndicacao,
@@ -477,7 +479,7 @@ export async function main(): Promise<void> {
 
   const dependenciasDasRotasDePet = {
     pets: new PetService({
-      repositorio: criarPetRepository(db),
+      repositorio: criarPetRepository(db, ids),
       ids,
       clock: systemClock,
       trilha,
@@ -509,6 +511,7 @@ export async function main(): Promise<void> {
         return saida;
       },
     },
+    baseDeMidia: config.mediaPublicBaseUrl,
   };
 
   const dependenciasDasRotasDeLocalizacao = {
@@ -607,6 +610,15 @@ export async function main(): Promise<void> {
   };
 
   const dependenciasDasRotasDeMidia = {
+    capasDePet: new CapaDoPet({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDaCapaDoPet,
+      db,
+      ids,
+    }),
     capasDeEncontro: new CapaDeEncontroDaComunidade({
       envios: criarPreparadorDeEnvioDeCatalogo({
         armazenamento: criarObjectStorage(config.objectStorage),

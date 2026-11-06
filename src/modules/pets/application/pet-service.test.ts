@@ -63,7 +63,7 @@ class RepositorioFalso implements PetRepository {
     this.criados.push({ dono, dados });
     return Promise.resolve({ ...dados, id, breedLabel: 'SRD', status: 'active' as const,
       slug: null, publicProfileEnabled: false, activeTagCount: 0, openCaseId: null,
-      createdAt: dataFixa(), updatedAt: dataFixa() });
+      coverBannerKey: null, createdAt: dataFixa(), updatedAt: dataFixa() });
   }
 
   listarDoTutor(): Promise<readonly PetGravado[]> {
@@ -84,6 +84,21 @@ class RepositorioFalso implements PetRepository {
     if (dono !== DONO) return Promise.resolve(false);
     this.excluiu = true;
     return Promise.resolve(true);
+  }
+
+  /** A CAPA (06/11/2026). `capaDefinida` guarda o `upload_id` que chegou. */
+  public capaDefinida: string | null = null;
+  public desfechoDaCapa: 'pet_inexistente' | 'envio_inservivel' | 'pronto' = 'pronto';
+
+  definirCapa(
+    _pet: PetId,
+    dono: UserId,
+    uploadId: string,
+  ): Promise<PetGravado | 'pet_inexistente' | 'envio_inservivel'> {
+    if (dono !== DONO || this.guardado === null) return Promise.resolve('pet_inexistente');
+    if (this.desfechoDaCapa !== 'pronto') return Promise.resolve(this.desfechoDaCapa);
+    this.capaDefinida = uploadId;
+    return Promise.resolve(this.guardado);
   }
 }
 
@@ -241,6 +256,7 @@ void describe('listar e excluir', () => {
       publicProfileEnabled: false,
       activeTagCount: 0,
       openCaseId: null,
+      coverBannerKey: null,
       createdAt: dataFixa(),
       updatedAt: dataFixa(),
     };
@@ -260,6 +276,7 @@ void describe('listar e excluir', () => {
       publicProfileEnabled: false,
       activeTagCount: 0,
       openCaseId: null,
+      coverBannerKey: null,
       createdAt: dataFixa(),
       updatedAt: dataFixa(),
     };

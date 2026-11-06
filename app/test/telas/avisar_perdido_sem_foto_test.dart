@@ -45,6 +45,7 @@
 /// pronta" cobria os dois e não ajudava em nenhum.
 library;
 
+import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/perdido/tela_alcance_do_alerta.dart';
@@ -125,6 +126,31 @@ Future<void> _avancar(WidgetTester tester) async {
   }
 }
 
+/// O mesmo que `desencostarDaBarraDeTopo` de `ajuda_de_tela.dart`, mas com
+/// [_avancar] no lugar de `pumpAndSettle`.
+///
+/// **A copia e deliberada e tem uma razao propria**: a compartilhada chama
+/// `pumpAndSettle`, e este arquivo nao pode -- a `Moldura` em `processing`
+/// desenha um esqueleto que anima para sempre, e `pumpAndSettle` morreria no
+/// prazo falando de animacao. Ver [_avancar].
+///
+/// Por que ela e necessaria desde 06/11/2026: a ficha do pet passou a usar
+/// `CascaDaPaginaInterna`, onde a barra de topo FLUTUA sobre a lista num
+/// `Stack` em vez de ser descontada por um `Scaffold`. Alvo encostado no topo
+/// existe, esta visivel, e o `tap` cai na barra.
+Future<void> _desencostarDaBarra(WidgetTester tester, Finder alvo) async {
+  if (alvo.evaluate().length != 1) return;
+  final rolagem = find.ancestor(of: alvo, matching: find.byType(Scrollable));
+  if (rolagem.evaluate().isEmpty) return;
+  final topo = tester.getTopLeft(alvo).dy;
+  if (topo >= BichuAlvoDeToque.critico) return;
+  await tester.drag(
+    rolagem.first,
+    Offset(0, BichuAlvoDeToque.critico - topo + BichuEspaco.e2),
+  );
+  await _avancar(tester);
+}
+
 /// Rola ate o alvo sem esperar assentamento, pelo mesmo motivo de [_avancar].
 Future<void> _rolarAte(WidgetTester tester, Finder alvo) async {
   if (alvo.evaluate().isNotEmpty) {
@@ -139,12 +165,14 @@ Future<void> _rolarAte(WidgetTester tester, Finder alvo) async {
   }
   await tester.ensureVisible(alvo);
   await _avancar(tester);
+  await _desencostarDaBarra(tester, alvo);
 }
 
 /// Toca sem esperar assentamento, pelo mesmo motivo de [_avancar].
 Future<void> _tocarSemAssentar(WidgetTester tester, Finder alvo) async {
   await tester.ensureVisible(alvo);
   await _avancar(tester);
+  await _desencostarDaBarra(tester, alvo);
   await tester.tap(alvo);
   await _avancar(tester);
 }

@@ -21,6 +21,10 @@ import type {
   CorpoDaIntencaoDaFoto,
   FotoDaIndicacao,
 } from '../../application/foto-da-indicacao.js';
+import type {
+  CapaDoPet,
+  CorpoDaIntencaoDaCapaDoPet,
+} from '../../application/capa-do-pet.js';
 import type { FotoDoPet } from '../../ports/media-repository.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -76,6 +80,23 @@ export const rotaDeIntencaoDaFotoDaIndicacao = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A FOTO DE CAPA DO PET (cliente, 06/11/2026).
+ *
+ * **O teto e o MESMO de `rotaDeIntencaoDeFoto` (20/1h por conta)**, e nao a
+ * soma dos dois: o espelho do `x-rate-limit` do contrato. Trocar a capa e
+ * trocar a foto do pet consomem orcamentos SEPARADOS de propósito -- sao duas
+ * imagens com dois papeis --, mas nenhuma delas ganha teto maior por existir a
+ * outra.
+ */
+export const rotaDeIntencaoDaCapaDoPet = defineRoute({
+  operationId: 'createPetCoverUploadIntent',
+  method: 'post',
+  path: '/media/pet-cover-intents',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDeConfirmacaoDeFoto = defineRoute({
   operationId: 'confirmPetPhoto',
   method: 'post',
@@ -106,6 +127,8 @@ export interface DependenciasDasRotasDeMidia {
   readonly logotiposDeIndicacao: LogotipoDaIndicacao;
   /** 30/10/2026: a autorizacao de envio de UMA foto do estabelecimento indicado. */
   readonly fotosDeIndicacao: FotoDaIndicacao;
+  /** 06/11/2026: a autorizacao de envio da FOTO DE CAPA do pet. */
+  readonly capasDePet: CapaDoPet;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
   /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
@@ -252,6 +275,23 @@ export function registrarRotasDeMidia(
       const { uploadId, autorizacao } = await deps.fotosDeIndicacao.autorizar(
         dono,
         request.body as CorpoDaIntencaoDaFoto,
+      );
+      return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeIntencaoDaCapaDoPet,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDaCapaDoPet.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.capasDePet.autorizar(
+        dono,
+        request.body as CorpoDaIntencaoDaCapaDoPet,
       );
       return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
     },

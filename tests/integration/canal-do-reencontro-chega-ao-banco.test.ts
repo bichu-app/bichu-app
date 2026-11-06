@@ -61,6 +61,7 @@ import type {
   LostCaseRepository,
 } from '../../src/modules/lostfound/ports/lost-case-repository.js';
 import { criarPetRepository } from '../../src/modules/pets/adapters/persistence/kysely-pet-repository.js';
+import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import type { DadosDoPet, PetRepository } from '../../src/modules/pets/ports/pet-repository.js';
 import type { CaseId, Instant, PetId, UserId } from '../../src/shared/types/brands.js';
 
@@ -187,7 +188,7 @@ void before(async () => {
   banco = createDb(CONEXAO);
   db = banco.db;
   await banco.ping();
-  pets = criarPetRepository(db);
+  pets = criarPetRepository(db, criarIdGenerator(() => Date.now()));
   casos = criarLostCaseRepository(db);
 
   cliente = new pg.Client({ connectionString: CONEXAO });

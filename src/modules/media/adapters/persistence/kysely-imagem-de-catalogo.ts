@@ -68,6 +68,39 @@ export async function registrarIntencaoDeCapaDaComunidade(
     .execute();
 }
 
+/**
+ * A intencao de envio da FOTO DE CAPA DO PET (cliente, 06/11/2026).
+ *
+ * `admin_account_id: null` e `user_id` preenchido: o autor e a CONTA, e nao o
+ * painel. `catalog_upload_intents_um_autor` ja impoe exatamente um dos dois, e e
+ * `user_id` que permite `capaDoEnvioDoPet` conferir a conta na clausula `WHERE`.
+ */
+export async function registrarIntencaoDaCapaDoPet(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      purpose: 'pet_cover',
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 /** A intencao de envio da FOTO DO PROPRIO USUARIO (cliente, 18/10/2026). */
 export async function registrarIntencaoDeFotoDoUsuario(
   db: DbExecutor,

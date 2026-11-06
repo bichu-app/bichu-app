@@ -365,8 +365,20 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
       // valores ao reescrever, e e por isso que estes sete estao declarados
       // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
-      // `catalog_images`. Sao DEZ desde 30/10/2026.
+      // `catalog_images`. Sao DEZ desde 30/10/2026, e ONZE desde 06/11/2026.
       'user_publication',
+      // O DECIMO-PRIMEIRO, `20261106000001` (06/11/2026): a FOTO DE CAPA 16:9
+      // da ficha do pet, pelo pedido do cliente do dia (*"gostei muito da
+      // forma como ele apresenta o perfil do pet, com a foto de capa, como
+      // fazemos na pagina de eventos e profissionais"*). Entrou na MESMA
+      // esteira pela decisao dele de 03/11/2026 (*"sempre que estivermos
+      // falando de upload de imagem, isso deve ser tratado no mesmo lugar"*).
+      //
+      // **E ela nao podia entrar em `pet_photos` nem por acidente**:
+      // `pet_photos_pronta_tem_derivadas` exige `thumb_key` E `card_key`, que
+      // sao as duas derivadas de RETRATO (1 : 1,1), e faixa 16:9 nao gera
+      // miniatura de retrato -- a linha ficaria presa em `processing`.
+      'pet_cover',
     ],
   },
   'public.pet_tags.pet_tags_revocation_reason_check': {
@@ -769,8 +781,20 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
       // valores ao reescrever, e e por isso que estes sete estao declarados
       // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
-      // `catalog_images`. Sao DEZ desde 30/10/2026.
+      // `catalog_images`. Sao DEZ desde 30/10/2026, e ONZE desde 06/11/2026.
       'user_publication',
+      // O DECIMO-PRIMEIRO, `20261106000001` (06/11/2026): a FOTO DE CAPA 16:9
+      // da ficha do pet, pelo pedido do cliente do dia (*"gostei muito da
+      // forma como ele apresenta o perfil do pet, com a foto de capa, como
+      // fazemos na pagina de eventos e profissionais"*). Entrou na MESMA
+      // esteira pela decisao dele de 03/11/2026 (*"sempre que estivermos
+      // falando de upload de imagem, isso deve ser tratado no mesmo lugar"*).
+      //
+      // **E ela nao podia entrar em `pet_photos` nem por acidente**:
+      // `pet_photos_pronta_tem_derivadas` exige `thumb_key` E `card_key`, que
+      // sao as duas derivadas de RETRATO (1 : 1,1), e faixa 16:9 nao gera
+      // miniatura de retrato -- a linha ficaria presa em `processing`.
+      'pet_cover',
     ],
   },
   'public.user_devices.user_devices_permissao': {

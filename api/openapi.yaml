@@ -3334,6 +3334,82 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------------------
+  # A FOTO DE CAPA DO PET -- e por que SUB-RECURSO e nao campo em `PetInput`
+  # ----------------------------------------------------------------------
+  #
+  # Pedido do cliente, 06/11/2026: *"gostei muito da forma como ele apresenta o
+  # perfil do pet, com a foto de capa, como fazemos na pagina de eventos e
+  # profissionais"*.
+  #
+  # A razao da forma e a MESMA, medida, que `putPetDeliveryAddress` escreveu
+  # logo abaixo, e nao estetica:
+  #
+  #  1. **`PATCH updatePet` recebe `PetInput`, que exige `name`, `species` e
+  #     `size`.** Trocar a capa por ali obrigaria a tela da capa a reenviar o
+  #     pet inteiro, e pet inteiro reenviado a partir de um gesto de escolher
+  #     foto e como um campo de cadastro voltar ao valor antigo sem ninguem ter
+  #     editado nada;
+  #  2. **`PUT` e o verbo certo e `PATCH` nao e.** A capa e UMA: trocar a capa
+  #     troca a capa inteira. Nao ha campo para mesclar;
+  #  3. **`PetInput` tambem e a base de `Pet` (`allOf`).** Um `cover_image` de
+  #     ENTRADA posto nele apareceria na RESPOSTA de `getPet` e de `listMyPets`
+  #     ao lado de `cover_image_url`, que e a saida -- duas formas de dizer a
+  #     mesma coisa, no mesmo objeto, e e assim que a divergencia nasce.
+  #
+  # **NAO existe operacao de REMOVER a capa nesta rodada, de proposito.** O
+  # cliente aprovou `Trocar a foto de capa`, e so isso; a tela sem capa mostra o
+  # banner da marca, que e o estado normal e nao uma falta. Remover seria
+  # decisao de produto que ele nao tomou.
+
+  /pets/{petId}/cover:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    put:
+      operationId: setPetCover
+      security:
+        - bearerAuth: []
+      tags: [pets]
+      x-effects: [irreversible_write]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto de updatePet: confirmar e barato, e quem abusa esbarra antes no teto de 20/1h de createPetCoverUploadIntent"
+      summary: Define a foto de capa do pet
+      description: |
+        Confirma o `upload_id` de `createPetCoverUploadIntent` e enfileira o
+        processamento. Responde **202** e nao 200: a derivada ainda nao existe
+        quando esta resposta sai, entao `cover_image_url` vem **nulo** aqui e
+        passa a ter valor na proxima leitura do pet. Prometer a URL nesta
+        resposta seria prometer arquivo que nao esta no balde.
+
+        Confirmar de novo com o MESMO `upload_id` devolve a mesma capa sem criar
+        trabalho novo; confirmar com `upload_id` de outra conta, de outro
+        proposito, vencido ou ja gasto em outro pet responde `400`
+        (`code: upload_not_usable`).
+
+        Pet de outra pessoa **nao existe** (ADR-0021): a autorizacao mora na
+        clausula `WHERE`, comparando o dono do pet com o portador do token, e a
+        resposta e `404`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PetCoverInput' }
+      responses:
+        '202':
+          description: Capa aceita e em processamento. `cover_image_url` ainda nulo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pet' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ----------------------------------------------------------------------
   # O ENDERECO DE ENTREGA DO PET -- e a decisao de 27/10/2026 que o moveu
   # ----------------------------------------------------------------------
   #
@@ -6842,6 +6918,61 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/NetworkEventCoverIntentInput' }
+      responses:
+        '201':
+          description: Credenciais de upload, validas por 10 minutos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '422': { $ref: '#/components/responses/ImageTooSmall' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /media/pet-cover-intents:
+    post:
+      operationId: createPetCoverUploadIntent
+      security:
+        - bearerAuth: []
+      tags: [pets]
+      x-effects: [irreversible_write]
+      summary: Pede as credenciais de upload direto da foto de capa do pet
+      description: |
+        Pedido do cliente de 06/11/2026: *"gostei muito da forma como ele
+        apresenta o perfil do pet, com a foto de capa, como fazemos na pagina de
+        eventos e profissionais"*.
+
+        O backend assina a autorizacao de envio direto e **nunca recebe os
+        bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO; a derivada
+        publica e criada pelo worker, e e ela que sai em `Pet.cover_image_url`.
+
+        **O envio e da CONTA** (`bearerAuth`), e nao do painel -- o mesmo
+        caminho que a capa do encontro criado pela conta ja percorre (ADR-0025
+        emenda 3): `setPetCover` so confirma `upload_id` cuja intencao e da
+        propria conta, e a conferencia esta na clausula `WHERE`. O painel **nao
+        ganha tela nenhuma** nesta mudanca: a capa e do tutor.
+
+        Dimensao minima **1280 x 720** (decisao do cliente, 02/11/2026): a
+        LARGURA minima decidida e 1280 e a altura e a que a moldura 16:9 impoe.
+        `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
+        `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
+        worker, nos bytes.
+
+        **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+        dez minutos e o varredor a recolhe; o pet sem capa e estado normal, e
+        sera o de todos os pets no dia em que isto subir.
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto de createPetPhotoUploadIntent: assinar e barato, mas cada assinatura e uma autorizacao de escrita que nao se desfaz"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PetCoverIntentInput' }
       responses:
         '201':
           description: Credenciais de upload, validas por 10 minutos.
@@ -16528,6 +16659,33 @@ components:
             photos:
               type: array
               items: { $ref: '#/components/schemas/PetPhoto' }
+            cover_image_url:
+              type: string
+              format: uri
+              nullable: true
+              description: |
+                A FOTO DE CAPA do pet: a derivada `banner` 1280 x 720 (16:9),
+                de borda a borda no topo da ficha (pedido do cliente,
+                06/11/2026: *"gostei muito da forma como ele apresenta o perfil
+                do pet, com a foto de capa, como fazemos na pagina de eventos e
+                profissionais"*).
+
+                **Ela NAO substitui `photos[].card_url`, e isto e o ponto do
+                desenho.** Sao duas imagens com dois papeis: o RETRATO
+                (`card_url`, 1024 x 1126, proporcao 1 : 1,1) e a identidade do
+                animal e alimenta cinco superficies fora da ficha -- a pagina
+                publica do caso, o cartaz IMPRESSO de pet perdido
+                (`LostCasePoster.photo_url`), a tela de quem achou, o perfil
+                publico do pet e a pagina da plaquinha. A CAPA e o ambiente
+                dele, e so a ficha a desenha. Fazer a capa 16:9 ocupar o lugar
+                do retrato faria o cartaz de pet perdido sair deitado.
+
+                Nula e o estado NORMAL e sera o de 100% dos pets no dia em que
+                isto subir, porque a coluna nasce agora: a faixa continua
+                existindo e recebe o banner da marca com o convite de envio --
+                a mesma saida que o encontro da comunidade sem capa ja da hoje.
+                Tambem nula enquanto o worker processa e quando a imagem foi
+                recusada.
             active_tag_count: { type: integer }
             open_case_id: { type: string, format: uuid, nullable: true }
             created_at: { type: string, format: date-time }
@@ -16588,6 +16746,67 @@ components:
             forma de derivada, e toda chave de original tem `original` no lugar
             onde ela exige `thumb`, `card` ou `banner`.
         created_at: { type: string, format: date-time }
+
+    PetCoverIntentInput:
+      type: object
+      required: [content_type, byte_size]
+      additionalProperties: false
+      description: |
+        O pedido de autorizacao de envio da FOTO DE CAPA do pet (pedido do
+        cliente, 06/11/2026).
+
+        **Sem `purpose`**, pela mesma razao de `NetworkEventCoverIntentInput`:
+        esta operacao existe para um proposito so (`pet_cover`), e deixar o
+        cliente escolhe-lo seria deixa-lo pedir uma autorizacao de imagem de
+        produto por uma rota do aplicativo.
+
+        **A capa anda na esteira de IMAGEM DE CATALOGO, e nao na da foto de
+        pet**, por decisao do cliente de 03/11/2026: *"sempre que estivermos
+        falando de upload de imagem, isso deve ser tratado no mesmo lugar, e as
+        correcoes devem ser realizadas em todos os lugares por ser o mesmo
+        codigo"*. E ela nao podia andar na outra nem por acidente: o
+        `CHECK pet_photos_pronta_tem_derivadas` exige `thumb_key` **e**
+        `card_key` para a linha chegar a `ready`, e uma faixa 16:9 nao gera
+        miniatura de retrato -- ela nao cabe naquela linha.
+      properties:
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: |
+            SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+            fora porque a derivada de catalogo e processada pelo mesmo caminho
+            do painel, que nao o aceita -- e por isso este enum NAO e o de
+            `UploadIntentInput`, que e da foto de pet.
+        # 5 MiB: o teto unico de toda a aplicacao (cliente, 17/10/2026).
+        byte_size: { type: integer, minimum: 1, maximum: 5242880 }
+        width:
+          type: integer
+          minimum: 1
+          maximum: 20000
+          description: |
+            Opcional, como o cliente a le. Abaixo de 1280 responde `422
+            image-too-small` **antes** de assinar.
+
+            O piso e 1280 x 720 (decisao do cliente, 02/11/2026), e a ALTURA
+            nao esta escrita a mao em lugar nenhum: ela e derivada da largura
+            pela proporcao da derivada `banner`. Piso quadrado sobre recorte
+            16:9 e regra impossivel, e foi assim que o defeito de 02/11 nasceu.
+        height: { type: integer, minimum: 1, maximum: 20000 }
+
+    PetCoverInput:
+      type: object
+      required: [upload_id]
+      additionalProperties: false
+      description: |
+        A confirmacao do envio da capa: o `upload_id` que
+        `createPetCoverUploadIntent` devolveu, depois que os bytes subiram.
+
+        `upload_id` de outra conta, de outro proposito, vencido ou ja usado em
+        outro pet e recusado com `400` (`code: upload_not_usable`), **sem dizer
+        qual dos casos ocorreu** -- a mesma redacao e a mesma reticencia de
+        `createNetworkEvent`.
+      properties:
+        upload_id: { type: string, format: uuid }
 
     UploadIntentInput:
       type: object

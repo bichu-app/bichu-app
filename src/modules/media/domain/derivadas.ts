@@ -134,7 +134,49 @@ export const DERIVADAS_DA_PUBLICACAO: readonly EspecificacaoDaDerivada[] = [
   { variante: 'card', largura: 1024, altura: 1024, porte: 'grande' },
 ];
 
-/** A dimensão mínima da foto de pet, que não existia. */
+/**
+ * ## As derivadas da FOTO DE CAPA do pet (cliente, 06/11/2026)
+ *
+ * Pedido literal: *"gostei muito da forma como ele apresenta o perfil do pet,
+ * com a foto de capa, como fazemos na pagina de eventos e profissionais"*.
+ *
+ * **Separada de [DERIVADAS_DA_FOTO_DO_LOCAL] de proposito, embora os numeros
+ * sejam hoje os mesmos.** A licao e de 05/11/2026, escrita dez linhas acima em
+ * [DERIVADAS_DA_GALERIA_DO_DIRETORIO]: duas superficies que compartilham a
+ * MESMA constante nao podem mudar separadamente, e tirar a altura de uma tira a
+ * da outra sem ninguem pedir. A capa do pet e a foto do estabelecimento sao
+ * duas decisoes de produto diferentes, e vao poder divergir sem arrastar a
+ * outra.
+ *
+ * **`banner` 1280 x 720 e a CAPA**, de borda a borda no topo da ficha: e dela
+ * que sai `Pet.cover_image_url`. `altura` presente = CORTA, que e o que a capa
+ * precisa -- a faixa 16:9 e a geometria, nao uma sugestao.
+ *
+ * **`card` 1024 x 576 existe porque `processar-imagem-de-catalogo.ts` EXIGE
+ * `card`** (ele lanca com "As derivadas de ... precisam declarar `card`"), e
+ * nao porque alguma tela a desenhe. Ela e 16:9 como a `banner`, entao a capa
+ * nunca sai deitada por acidente.
+ *
+ * **SEM `thumb`, e isto e medido e nao economia cega**: nenhuma lista de pets
+ * desenha a capa. O cartao do pet em toda lista pinta o RETRATO, que vem de
+ * `pet_photos.thumb_key` (176 x 194, proporcao 1 : 1,1) e nao daqui. Derivada
+ * que ninguem baixa e byte pago sem leitor.
+ */
+export const DERIVADAS_DA_CAPA_DO_PET: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'banner', largura: 1280, altura: 720, porte: 'grande' },
+  { variante: 'card', largura: 1024, altura: 576, porte: 'enxuta' },
+];
+
+/**
+ * A dimensão mínima da foto de pet, que não existia.
+ *
+ * **Esta é a do RETRATO, e ela NÃO vale para a capa.** A capa do pet
+ * ([DERIVADAS_DA_CAPA_DO_PET]) anda na esteira de catálogo, e lá o piso é
+ * `LARGURA_MINIMA.pet_cover` com a altura DERIVADA da proporção — 1280 x 720,
+ * decisão do cliente de 02/11/2026. O par quadrado abaixo só é coerente porque
+ * `card` e `thumb` do retrato são 1 : 1,1 e 600 x 600 cabe nas duas; aplicá-lo
+ * a um recorte 16:9 seria a regra impossível que travou o cliente em 02/11.
+ */
 export const DIMENSAO_MINIMA_DA_FOTO_DE_PET = { largura: 600, altura: 600 } as const;
 
 /** ## A derivada da foto do ACHADO — privada, e uma só */

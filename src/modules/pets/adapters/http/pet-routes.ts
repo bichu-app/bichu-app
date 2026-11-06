@@ -45,6 +45,24 @@ export const rotaDeEdicaoDoPet = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A FOTO DE CAPA DO PET (cliente, 06/11/2026).
+ *
+ * `PUT` e nao `PATCH`: a capa e UMA, e trocar a capa troca a capa inteira --
+ * nao ha campo para mesclar. E SUB-RECURSO e nao campo de `PetInput` pela
+ * mesma razao medida que moveu o endereco de entrega para fora dele:
+ * `PATCH updatePet` recebe `PetInput`, que exige `name`, `species` e `size`,
+ * entao trocar a capa por ali obrigaria a tela da capa a reenviar o pet
+ * inteiro.
+ */
+export const rotaDeCapaDoPet = defineRoute({
+  operationId: 'setPetCover',
+  method: 'put',
+  path: '/pets/:petId/cover',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDeExclusaoDoPet = defineRoute({
   operationId: 'deletePet',
   method: 'delete',
@@ -64,6 +82,8 @@ export interface DependenciasDasRotasDePet {
   readonly contrato: Contrato;
   readonly clock: Clock;
   readonly fotos: FotosDoPet;
+  /** Dominio de midia, separado da origem da aplicacao (ADR-0007). */
+  readonly baseDeMidia: string;
 }
 
 interface CorpoDoPet {
@@ -111,7 +131,13 @@ function comoEntrada(corpo: CorpoDoPet): EntradaDoPet {
 function comoRespostaDoPet(
   pet: PetGravado,
   fotos: readonly FotoResumida[],
+  baseDeMidia: string,
 ): Record<string, unknown> {
+  // A CHAVE vira URL AQUI, na borda, e nao no repositorio: a base de midia e
+  // dominio separado da origem da aplicacao (ADR-0007), e o mesmo arranjo das
+  // derivadas da foto do pet (`thumbUrl`/`cardUrl`, montadas em `api.ts`).
+  const urlDeMidia = (chave: string): string =>
+    `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
   return {
     id: pet.id,
     name: pet.name,
@@ -141,6 +167,7 @@ function comoRespostaDoPet(
       card_url: f.cardUrl,
       created_at: f.createdAt.toISOString(),
     })),
+    cover_image_url: pet.coverBannerKey === null ? null : urlDeMidia(pet.coverBannerKey),
     active_tag_count: pet.activeTagCount,
     open_case_id: pet.openCaseId,
     created_at: pet.createdAt.toISOString(),
@@ -190,7 +217,7 @@ export function registrarRotasDePets(
     const pets = await deps.pets.listar(chamador);
     const fotos = await deps.fotos.porPets(pets.map((p) => p.id));
     return reply.status(200).send({
-      items: pets.map((p) => comoRespostaDoPet(p, fotos.get(p.id) ?? [])),
+      items: pets.map((p) => comoRespostaDoPet(p, fotos.get(p.id) ?? [], deps.baseDeMidia)),
     });
   });
 
@@ -219,7 +246,11 @@ export function registrarRotasDePets(
         },
         async () => ({
           status: 201,
-          body: comoRespostaDoPet(await deps.pets.criar(comoEntrada(corpo), chamador), []),
+          body: comoRespostaDoPet(
+            await deps.pets.criar(comoEntrada(corpo), chamador),
+            [],
+            deps.baseDeMidia,
+          ),
         }),
       );
 
@@ -231,7 +262,9 @@ export function registrarRotasDePets(
     const chamador = await donoAutenticado(request, deps);
     const pet = await deps.pets.buscar(petIdDoCaminho(request), chamador);
     const fotos = await deps.fotos.porPets([pet.id]);
-    return reply.status(200).send(comoRespostaDoPet(pet, fotos.get(pet.id) ?? []));
+    return reply
+      .status(200)
+      .send(comoRespostaDoPet(pet, fotos.get(pet.id) ?? [], deps.baseDeMidia));
   });
 
   registrarRota(
@@ -251,7 +284,33 @@ export function registrarRotasDePets(
 
       const pet = await deps.pets.atualizar(petId, fundido, chamador);
       const fotos = await deps.fotos.porPets([petId]);
-      return reply.status(200).send(comoRespostaDoPet(pet, fotos.get(petId) ?? []));
+      return reply
+        .status(200)
+        .send(comoRespostaDoPet(pet, fotos.get(petId) ?? [], deps.baseDeMidia));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeCapaDoPet,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeCapaDoPet.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const petId = petIdDoCaminho(request);
+      const corpo = request.body as { upload_id: string };
+
+      const pet = await deps.pets.definirCapa(petId, corpo.upload_id, chamador);
+      const fotos = await deps.fotos.porPets([petId]);
+      // **202, e nao 200**: a derivada ainda nao existe quando esta resposta
+      // sai, entao `cover_image_url` vem NULO aqui e passa a ter valor na
+      // proxima leitura. Prometer a URL agora seria prometer arquivo que nao
+      // esta no balde.
+      return reply
+        .status(202)
+        .send(comoRespostaDoPet(pet, fotos.get(petId) ?? [], deps.baseDeMidia));
     },
   );
 

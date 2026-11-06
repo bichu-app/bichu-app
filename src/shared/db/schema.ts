@@ -385,6 +385,16 @@ export interface PetsTable {
   status: Generated<StatusDoPet>;
   slug: string | null;
   public_profile_enabled: Generated<boolean>;
+  /**
+   * `catalog_images.id` com `purpose = 'pet_cover'`: a FOTO DE CAPA 16:9 da
+   * ficha (cliente, 06/11/2026). Nulo e o estado normal.
+   *
+   * **Não substitui a foto do pet**: `pet_photos.card_key` é o RETRATO
+   * (1024 x 1126, proporção 1 : 1,1) e alimenta cinco leituras fora da ficha —
+   * a página pública do caso, o cartaz IMPRESSO, a tela de quem achou, o perfil
+   * público e a página da plaquinha. Duas imagens, dois papéis.
+   */
+  cover_image_id: string | null;
   created_at: CriadoEm;
   updated_at: AtualizadoEm;
   deleted_at: Date | null;
@@ -531,7 +541,9 @@ export type PropositoDaImagemDeCatalogo =
   | 'directory_suggestion_photo'
   | 'user_photo'
   | 'user_showcase'
-  | 'user_publication';
+  | 'user_publication'
+  /** A FOTO DE CAPA 16:9 da ficha do pet (`20261106000001`). */
+  | 'pet_cover';
 
 export interface UploadIntentsTable {
   id: string;

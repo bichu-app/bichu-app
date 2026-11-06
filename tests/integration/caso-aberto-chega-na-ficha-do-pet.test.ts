@@ -70,6 +70,7 @@ import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { criarPetRepository } from '../../src/modules/pets/adapters/persistence/kysely-pet-repository.js';
+import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import type { DadosDoPet, PetRepository } from '../../src/modules/pets/ports/pet-repository.js';
 import type { PetId, UserId } from '../../src/shared/types/brands.js';
 
@@ -171,7 +172,7 @@ void before(async () => {
   banco = createDb(CONEXAO);
   db = banco.db;
   await banco.ping();
-  pets = criarPetRepository(db);
+  pets = criarPetRepository(db, criarIdGenerator(() => Date.now()));
 
   cliente = new pg.Client({ connectionString: CONEXAO });
   await cliente.connect();
