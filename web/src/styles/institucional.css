@@ -156,8 +156,34 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .hero--sem-ilustracao { grid-template-columns: minmax(0, 1fr); padding-bottom: var(--space-10); }
 
 .recorte { display: block; width: 100%; height: auto; object-fit: cover; }
+/* A ilustracao de tres pessoas e 3:2 (1536x1024) e SANGRA ate a borda: ao
+   contrario da arte anterior, que era um cartao arredondado boiando numa
+   margem transparente larga, esta nao tem folga de sobra. A caixa e 1360/740
+   (1,8378), entao o `cover` come 188 px de 1024 -- 18,4% da altura -- e so o
+   `object-position` decide de onde. Os dois numeros abaixo sao medidos, nao
+   escolhidos no olho:
+
+   - X = 50%: nao ha recorte horizontal nenhum. A imagem e mais ESTREITA que a
+     caixa (1,5 < 1,8378), entao o `cover` escala pela largura e usa os 1536 px
+     inteiros. Qualquer valor de X daria o mesmo quadro; 50% e o que nao mente.
+   - Y = 55%: e o MAIOR valor que ainda nao perde conteudo. A arte tem 142 px
+     de margem transparente em cima (caixa opaca em y 142..1023); com Y = 55%
+     o corte de cima e 103 px, ou seja, cai inteiro dentro dessa margem, e
+     sobram 85 px cortados embaixo (as patas dianteiras do cao). De 57% para
+     cima a MASCARA passa a comer o cabelo da mulher da direita -- medido: a
+     faixa de pixels opacos que a mascara apaga pula de "y 551-739" para
+     "y 31-739". Subir este numero decepa cabeca.
+
+   A MASCARA MUDOU DE PAPEL AQUI. Com a arte antiga ela era quase decorativa:
+   o desenho ja vinha com borda arredondada propria e nao encostava nos cantos,
+   entao o blob recortava transparencia. Com esta arte, que sangra, a mascara
+   passa a cortar imagem de verdade -- 34.180 px opacos, 3,4% da caixa, todos
+   nos DOIS CANTOS DE BAIXO (camiseta e folhagem). Ela fica porque e ela que
+   mantem o hero na linguagem de papel recortado do site; se um dia a decisao
+   for deixar a arte inteira, o caminho e `aspect-ratio: 3 / 2` (sem corte) e
+   nao afrouxar o `object-position`. */
 .recorte--tres-pessoas {
-  aspect-ratio: 1360 / 740; object-position: 54.5% 42.3%;
+  aspect-ratio: 1360 / 740; object-position: 50% 55%;
   mask: url("../assets/formas/recorte-tres-pessoas.svg") center / 100% 100% no-repeat;
 }
 .recorte--encontro {
