@@ -1,8 +1,8 @@
 {
-  "versionCode": 2004,
-  "apk": "bichu-hml-78801f60-vc2004.apk",
-  "commitDoRegistro": "78801f60bd6458ba3749f7a9044d8bbe6dc4f245",
-  "medidoEm": "2026-11-04",
+  "versionCode": 2007,
+  "apk": "bichu-hml-9cb017d2-vc2007.apk",
+  "commitDoRegistro": "9cb017d25b46e78477c6f2542b1ee93d9b777bd7",
+  "medidoEm": "2026-11-09",
   "comoFoiMedido": "aapt2 dump badging (infra/verificacao/verificar-apk.sh --registrar-entrega)",
   "porque": "Este numero e a linha de base da conferencia de regressao de versionCode. Ele sai MEDIDO de dentro do APK entregue, e nunca do pubspec: numero passado em --build-number nao aparece no pubspec, e foi por isso que a regressao de 04/11/2026 (pacote com 1, aparelho do cliente com 2001) ficou invisivel."
 }
