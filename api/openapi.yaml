@@ -11346,9 +11346,11 @@ paths:
       summary: Altera titulo, resumo, capa ou endereco publico de um encontro
       description: |
         **Data, horario, fuso e lugar nao mudam aqui**: mudar onde e quando as
-        pessoas levam os caes e `relocateAdminNetworkEvent`, com aviso a todos os
-        administradores. **Visibilidade e condicao de acesso
-        tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
+        pessoas levam os caes e `relocateAdminNetworkEvent` -- que desde
+        15/11/2026 aceita rascunho tambem, e avisa todos os administradores
+        **so quando o encontro esta publicado**. **Visibilidade e condicao de
+        acesso tambem nao**: sao `changeAdminNetworkEventAccess`, que continua
+        exigindo `published`.
         O corpo nao tem esses campos. Encontro `removed` responde `400`
         (`code: event_removed`).
 
@@ -11470,14 +11472,11 @@ paths:
           ficou esquecido ate depois da data nao entra no app como encontro
           futuro.
 
-        **Rascunho com data errada ainda nao tem conserto, e isto esta dito de
-        proposito.** Data, horario e lugar mudam so em
-        `relocateAdminNetworkEvent`, que exige encontro `published`
-        (`event_not_published`) e nao foi aberta ao rascunho em 15/11/2026: abri-la
-        decide se mover um rascunho avisa todos os administradores, e essa e uma
-        pergunta de produto que o cliente nao viu. Hoje a saida para um rascunho
-        vencido e `removeAdminNetworkEvent` e criar outro. **Aberto, para
-        decisao dele.**
+        **E o rascunho vencido tem conserto** (decisao do cliente de 15/11/2026,
+        ADR-0027 item 25): `relocateAdminNetworkEvent` aceita `draft`, entao
+        mover a data para o futuro o torna publicavel aqui de novo, sem avisar
+        ninguem -- o encontro ainda nao existe para o publico. Ate aquela decisao
+        a unica saida era remover e cadastrar outro.
 
         **Nao ha recusa por rascunho incompleto, e a ausencia e medida.** O
         rascunho da `Loja` admite trabalho pela metade (`20261017000002` afrouxou
@@ -11528,14 +11527,43 @@ paths:
       operationId: relocateAdminNetworkEvent
       tags: [admin]
       x-effects: [notifies]
-      summary: Muda data, horario ou lugar de um encontro publicado
+      summary: Muda data, horario ou lugar de um encontro em rascunho ou publicado
       description: |
+        **Aceita `draft` e `published`** (decisao do cliente de 15/11/2026,
+        ADR-0027 item 25): *"Sim, editar antes de publicar"* -- ele corrige data,
+        horario e lugar enquanto o encontro esta em rascunho. Antes de 15/11/2026
+        a rota exigia `published`, e um rascunho com a data errada so tinha a
+        saida de ser removido e cadastrado de novo.
+
+        **O AVISO E CONDICIONAL AO ESTADO, e e a unica diferenca entre os dois
+        casos:**
+
+        | estado | trilha | e-mail a todos os administradores |
+        | ------ | ------ | --------------------------------- |
+        | `draft` | sim | **nao** |
+        | `published` | sim | sim (D52) |
+
+        Nas palavras dele: mover um rascunho nao avisa ninguem *"porque nao ha
+        quem avisar: o evento ainda nao existe para o publico"*. Encontro **ja
+        publicado continua como hoje** -- mexer nele avisa todos os
+        administradores. O aviso e consequencia de ser publico, nao de ser
+        mudado. A trilha sai nos dois casos: rascunho sem aviso nao e rascunho
+        sem registro.
+
         E a operacao que um invasor com a sessao usaria para reunir caes num
-        lugar e horario escolhidos por ele (T11). Ficam duas travas: aviso por
+        lugar e horario escolhidos por ele (T11). Para o encontro **publicado**,
+        que e onde T11 mora, ficam duas travas: aviso por
         e-mail a **todos** os administradores com o antes e o depois (D52), e
         linha na trilha (sem a coordenada bruta: a trilha grava
         `point_changed`). Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. O risco de uma sessao
         sequestrada mover o encontro sem senha foi aceito pelo cliente.
+
+        **`reason` continua obrigatorio tambem no rascunho**, e isso e
+        deliberado: ele vai para a trilha, que existe nos dois estados, e um
+        corpo cujos campos obrigatorios dependessem do estado do recurso nao
+        teria como ser declarado aqui -- seriam duas formas que divergem na
+        primeira mudanca de uma delas. O que muda e so para onde ele vai: no
+        publicado ele sai tambem no e-mail; no rascunho, so na trilha.
 
         **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
         `place.point` desta rota fica so por compatibilidade. A rota continua
@@ -11544,8 +11572,17 @@ paths:
         valem para o endereco como valem para o ponto.
 
         Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
-        `time_zone`. O `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
-        responde `400` (`code: event_not_published`).
+        `time_zone`. Encontro cancelado ou removido
+        responde `400` (`code: event_not_published`) -- os dois estados que
+        sobraram na recusa depois de 15/11/2026, e para os quais o nome do codigo
+        e literal: eles **nao estao mais** publicados.
+
+        **A validacao de horario vale igual no rascunho**, e e ela que da a saida
+        para o rascunho vencido: `starts_at` no passado e recusado com
+        `event_in_past`, entao mover a data de um rascunho que venceu para o
+        futuro o torna publicavel de novo em `publishAdminNetworkEvent`. Fuso
+        inexistente, ponto fora dos limites do Brasil e fim antes do inicio
+        tambem recusam igual nos dois estados.
       security:
         - adminSession: []
           adminCsrf: []

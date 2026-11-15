@@ -325,7 +325,11 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         if (semVersao) return semVersao;
         const v = exigirVersao(req, e);
         if (v) return v;
-        if (e.publication_status !== 'published') return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
+        // Rascunho TAMBEM move (15/11/2026, ADR-0027 item 25); `cancelled` e
+        // `removed` continuam recusando, como no servidor de verdade.
+        if (e.publication_status !== 'draft' && e.publication_status !== 'published') {
+          return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
+        }
         const corpo = req.corpo as Mudanca;
         if (!corpo.reason) return problema(400, 'validation-failed', 'Falta o motivo', [{ field: 'reason', code: 'required' }]);
         const recusaDoEnderecoNovo = recusaDeEndereco(corpo.street_address);

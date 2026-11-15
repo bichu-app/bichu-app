@@ -188,9 +188,25 @@ export default function FormularioDoEncontro() {
 
   const sujo = fase === 'pronto' && comparavel(f) !== comparavel(editando ? base : formularioVazio());
   const publicado = encontro?.publication_status === 'published';
+  const rascunho = encontro?.publication_status === 'draft';
   const cancelado = encontro?.publication_status === 'cancelled';
   const removido = encontro?.publication_status === 'removed';
-  const travarLugarEAcesso = editando && !publicado;
+  /**
+   * DUAS travas, e nao uma (decisao do cliente de 15/11/2026, ADR-0027 item 25).
+   *
+   * Era `editando && !publicado`, uma so, e enquanto rascunho nao existia ela
+   * estava certa: os unicos estados nao-publicados eram `cancelled` e `removed`,
+   * que de fato nao mudam mais nada. Com o rascunho, aquela expressao passou a
+   * TRANCAR data, horario e lugar do rascunho -- exatamente o que o cliente
+   * pediu para abrir: *"Sim, editar antes de publicar"*.
+   *
+   * O acesso continua trancado no rascunho porque a decisao dele nomeou **data,
+   * horario e lugar**, e `changeAdminNetworkEventAccess` segue exigindo
+   * `published` no servidor. Destrancar aqui faria o formulario mandar uma
+   * chamada que o servidor recusa com `event_not_published`.
+   */
+  const travarLugar = editando && (cancelado || removido);
+  const travarAcesso = editando && !publicado;
 
   function sair(aviso: string) {
     liberado.current = true;
@@ -221,12 +237,19 @@ export default function FormularioDoEncontro() {
       setSalvando(true);
       const r = await rede.criar(montarCriacao(f));
       setSalvando(false);
-      if (r.ok) sair('Evento publicado. Ele já aparece na Rede do app.');
-      else tratarFalha(r.falha, 'publicar o evento');
+      // "Rascunho salvo", e nao "Evento publicado": desde 15/11/2026 a criacao
+      // NAO publica (ADR-0027 item 25), e a mensagem antiga dizia a quem opera
+      // que o encontro estava no app quando ele nao estava em lugar nenhum.
+      if (r.ok) sair('Rascunho salvo. Ele não aparece no app até você publicar.');
+      else tratarFalha(r.falha, 'salvar o rascunho');
       return;
     }
     if (!encontro || !etag) return;
-    const plano = planoDeEdicao(encontro, travarLugarEAcesso ? { ...f, ...lugarEAcessoDe(base) } : f);
+    const plano = planoDeEdicao(encontro, {
+      ...f,
+      ...(travarLugar ? lugarDe(base) : {}),
+      ...(travarAcesso ? acessoDe(base) : {}),
+    });
     if (!plano.patch && !plano.mudanca && !plano.acesso) {
       setNadaMudou(true);
       return;
@@ -339,6 +362,12 @@ export default function FormularioDoEncontro() {
       {encontro?.timing === 'ended' && publicado && (
         <Banner tipo="info">Este evento já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.</Banner>
       )}
+      {rascunho && (
+        <Banner tipo="info">
+          Este evento está em rascunho e não aparece no app. Você pode corrigir os dados, inclusive data, horário e local, e
+          ninguém é avisado. Quem pode participar e o valor só mudam depois de publicar.
+        </Banner>
+      )}
       {cancelado && (
         <Banner tipo="info">
           Este evento foi cancelado. Você ainda pode corrigir título, descrição, fotos e detalhes; data, local e acesso não mudam mais.
@@ -350,7 +379,7 @@ export default function FormularioDoEncontro() {
         <ResumoDosCampos
           referencia={resumo}
           erros={erros.map((e) => ({ campo: idDoCampo(e.campo), rotulo: e.rotulo }))}
-          acao={editando ? 'salvar' : 'publicar'}
+          acao={editando ? 'salvar' : 'salvar o rascunho'}
         />
       )}
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
@@ -375,7 +404,7 @@ export default function FormularioDoEncontro() {
       {avisoDeFotosSemEnvio(f) && <Banner tipo="alerta">{avisoDeFotosSemEnvio(f)}</Banner>}
 
       <h2 className={`t-title ${estilos.secao ?? ''}`}>Quando e onde</h2>
-      <fieldset className={estilos.grupo} disabled={travarLugarEAcesso}>
+      <fieldset className={estilos.grupo} disabled={travarLugar}>
         <legend className="sr">Quando e onde</legend>
         <div className="form">
           <div className="row2">
@@ -412,7 +441,7 @@ export default function FormularioDoEncontro() {
       </fieldset>
 
       <h2 className={`t-title ${estilos.secao ?? ''}`}>Participação</h2>
-      <fieldset className={estilos.grupo} disabled={travarLugarEAcesso}>
+      <fieldset className={estilos.grupo} disabled={travarAcesso}>
         <legend className="sr">Participação</legend>
         <div className="form">
           <GrupoDeOpcoes rotulo="Quem pode participar *">
@@ -536,7 +565,7 @@ export default function FormularioDoEncontro() {
         </Link>
         <button type="submit" className="btn pri" aria-busy={salvando || undefined}>
           {salvando && <span className="spin" aria-hidden="true" />}
-          {editando ? 'Salvar alterações' : 'Publicar evento'}
+          {editando ? 'Salvar alterações' : 'Salvar rascunho'}
         </button>
       </div>
 
@@ -546,7 +575,11 @@ export default function FormularioDoEncontro() {
           titulo={tituloDaMudanca(dialogo.plano)}
           corpo={corpoDaMudanca(encontro, f, dialogo.plano)}
           rotuloDoMotivo="Motivo"
-          ajudaDoMotivo="Vai no e-mail que avisa os administradores. Não aparece no app."
+          ajudaDoMotivo={
+            rascunho
+              ? 'Fica registrado para a equipe. Em rascunho ninguém é avisado por e-mail.'
+              : 'Vai no e-mail que avisa os administradores. Não aparece no app.'
+          }
           rotuloDaAcao="Salvar a mudança"
           perigo={false}
           executar={(motivo) => executarComMotivo(dialogo.plano, motivo)}
@@ -557,9 +590,16 @@ export default function FormularioDoEncontro() {
   );
 }
 
-function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
-  const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
-  return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };
+/** O que a trava de LUGAR devolve ao valor original antes de montar o plano. */
+function lugarDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
+  const { inicio, fim, local, endereco, bairro, cidade, uf } = b;
+  return { inicio, fim, local, endereco, bairro, cidade, uf };
+}
+
+/** O mesmo para a trava de ACESSO. Separados desde 15/11/2026: ver `travarLugar`. */
+function acessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
+  const { visibilidade, pago, valor, unidade } = b;
+  return { visibilidade, pago, valor, unidade };
 }
 
 function VoltarParaARede() {

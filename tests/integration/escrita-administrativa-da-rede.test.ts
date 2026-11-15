@@ -301,6 +301,82 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     );
   });
 
+  /**
+   * O aviso condicional ao estado, contra o Postgres (decisao do cliente de
+   * 15/11/2026): *"Sim, editar antes de publicar"*, e mover um rascunho nao
+   * avisa ninguem *"porque nao ha quem avisar"*.
+   *
+   * Os dois estados andam LADO A LADO, pela mesma rota e com o mesmo corpo, e a
+   * contagem de avisos e medida POR DIFERENCA -- `avisos` e um array de modulo
+   * que nenhum caso zera, entao contagem absoluta aqui mediria a ordem dos casos.
+   *
+   * Reprova nos dois sentidos: rascunho que passe a avisar quebra a primeira
+   * assercao, publicado que pare de avisar quebra a segunda.
+   */
+  void it('mover rascunho NAO avisa e mover publicado AVISA, com a trilha nos dois (contra Postgres)', async () => {
+    const mudanca = { starts_at: emDias(12, 12), ends_at: emDias(12, 14), reason: 'Corrigindo a data.' };
+
+    const rascunho = await criarRascunho();
+    const antesDoRascunho = avisos.length;
+    const movidoR = await r.moverEncontro(autor, rascunho.recurso.slug, rascunho.etag, mudanca);
+    assert.equal(movidoR.recurso.publication_status, 'draft', 'mover publicou o rascunho');
+    assert.equal(movidoR.recurso.published_at, null);
+    assert.equal(
+      avisos.length,
+      antesDoRascunho,
+      'mover um rascunho avisou os administradores: ninguem ve esse encontro ainda',
+    );
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(rascunho.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.relocated'],
+    );
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criar();
+    const antesDoPublicado = avisos.length;
+    await r.moverEncontro(autor, publicado.recurso.slug, publicado.etag, mudanca);
+    assert.equal(
+      avisos.length,
+      antesDoPublicado + 1,
+      'mover um encontro PUBLICADO parou de avisar os administradores: a trava de T11 caiu',
+    );
+    assert.match(avisos.at(-1) ?? '', /Evento movido/);
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(publicado.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.published', 'admin.network_event.relocated'],
+    );
+  });
+
+  void it('rascunho vencido volta a ser publicavel depois de mover a data (contra Postgres)', async () => {
+    // Nasce no FUTURO, porque a criacao recusa encontro passado, e o relogio
+    // deste arquivo e o de verdade. O que envelhece o rascunho e o UPDATE
+    // abaixo: ele simula o tempo que passou, que e a situacao que a decisao de
+    // 15/11/2026 veio consertar.
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+    await sql`update network_events
+                 set starts_at = now() - interval '3 days',
+                     ends_at   = now() - interval '3 days' + interval '2 hours'
+               where id = ${id}::uuid`.execute(banco.db);
+
+    const vencido = await r
+      .publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag)
+      .catch((e: unknown) => e);
+    // `codigo()` devolve o codigo do CAMPO, e nao o tipo do problema: a
+    // assercao certa aqui e `event_in_past`, que diz por que a publicacao
+    // recusou, e nao so que ela recusou.
+    assert.equal(codigo(vencido), 'event_in_past');
+
+    const movido = await r.moverEncontro(autor, rascunho.recurso.slug, rascunho.etag, {
+      starts_at: emDias(14, 12),
+      ends_at: emDias(14, 14),
+      reason: 'Remarcando o rascunho vencido.',
+    });
+    const publicado = await r.publicarEncontro(autor, rascunho.recurso.slug, movido.etag);
+    assert.equal(publicado.recurso.publication_status, 'published');
+    assert.notEqual(publicado.recurso.published_at, null);
+  });
+
   void it('ISCA: o banco recusa `published` sem instante, que e o que a publicacao grava', async () => {
     // Sem este caso, o anterior ficaria verde mesmo se `published_at` fosse
     // decorativo. Aqui o banco e quem fala.

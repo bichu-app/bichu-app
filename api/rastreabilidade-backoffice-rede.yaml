@@ -433,7 +433,7 @@ telas:
           - header:If-Match
       - operationId: relocateAdminNetworkEvent
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de local?'; sem senha desde 07/10 (ADR-0027 item 23)"
+        nota: "dialogo 'Salvar a mudanca de local?'; sem senha desde 07/10 (ADR-0027 item 23); aceita rascunho desde 15/11/2026 (ADR-0027 item 25, item 8) e so avisa os administradores quando o encontro esta publicado -- no rascunho o dialogo nao promete o e-mail"
         usa:
           - req:place.point.lat
           - req:place.point.lon

@@ -645,8 +645,13 @@ export class RedeAdministrativa {
     const { antes, depois } = await this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.encontroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
-      if (atual.publicacao !== 'published') {
-        throw recusa('publication_status', 'event_not_published', 'Só encontro publicado muda de lugar ou horário.');
+      // RASCUNHO TAMBEM MUDA (decisao do cliente de 15/11/2026): "Sim, editar
+      // antes de publicar" -- ele corrige data, horario e lugar enquanto o
+      // encontro esta em rascunho. `cancelled` e `removed` continuam recusando,
+      // e o codigo `event_not_published` descreve exatamente esses dois ("nao
+      // esta MAIS publicado"), que e o que o contrato ja dizia.
+      if (atual.publicacao !== 'draft' && atual.publicacao !== 'published') {
+        throw recusa('publication_status', 'event_not_published', 'Só encontro em rascunho ou publicado muda de lugar ou horário.');
       }
       const startsAt = corpo.starts_at === undefined ? atual.startsAt : comoData(corpo.starts_at, 'starts_at');
       const endsAt =
@@ -677,6 +682,20 @@ export class RedeAdministrativa {
       );
       return { antes: atual, depois: completo };
     });
+
+    // O AVISO E CONDICIONAL AO ESTADO, e e a unica coisa que distingue mover um
+    // rascunho de mover um publicado (decisao do cliente de 15/11/2026): *"sem
+    // avisar ninguem, porque nao ha quem avisar: o evento ainda nao existe para
+    // o publico"*. O aviso e consequencia de ser PUBLICO, nao de ser mudado.
+    //
+    // A trilha, ao contrario, sai nos dois casos -- ela esta dentro da transacao,
+    // acima, e e o registro de quem mudou o que. Rascunho sem aviso nao e
+    // rascunho sem registro.
+    //
+    // `antes.publicacao`, e nao `depois`: mover nao muda estado de publicacao, e
+    // ler o estado de antes deixa dito que a decisao e sobre o encontro que
+    // ESTAVA la, nao sobre um efeito da propria operacao.
+    if (antes.publicacao !== 'published') return this.escrito(depois);
 
     await this.avisarAdministradores(autor, `Evento movido: ${depois.title}`, [
       'Um evento publicado mudou de lugar ou de horário (T11).',

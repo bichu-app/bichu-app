@@ -193,7 +193,86 @@ describe('Rede: rascunho, selo, filtro e publicar (15/11/2026)', () => {
     await screen.findByText('2 eventos');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro em rascunho' }));
     expect(screen.getByRole('menuitem', { name: 'Publicar evento' })).toBeInTheDocument();
+    // Editar aparece AO LADO de Publicar, na mesma linha da mesma lista: e por
+    // ele que se corrige data, horario e lugar antes de publicar (decisao do
+    // cliente de 15/11/2026, ADR-0027 item 25, item 8).
+    expect(screen.getByRole('menuitem', { name: 'Editar' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Cancelar evento' })).toBeNull();
+    // E o atalho do lapis na propria linha, que leva a mesma tela.
+    expect(screen.getByRole('link', { name: 'Editar Encontro em rascunho' })).toHaveAttribute(
+      'href',
+      '/rede/rascunho-para-aprovar',
+    );
+  });
+
+  // ---- Editar o rascunho antes de publicar (decisao do cliente, 15/11/2026) --
+
+  it('o rascunho destranca data, horario e local, e o acesso continua trancado', async () => {
+    montar('/rede/rascunho-para-aprovar', comRascunho());
+    expect(await screen.findByLabelText('Início *')).toBeEnabled();
+    expect(screen.getByLabelText('Nome do lugar *')).toBeEnabled();
+    expect(screen.getByLabelText('Cidade *')).toBeEnabled();
+    // O acesso NAO: a decisao dele nomeou data, horario e lugar, e
+    // `changeAdminNetworkEventAccess` segue exigindo `published`.
+    expect(screen.getByRole('radio', { name: /Público/ })).toBeDisabled();
+    expect(screen.getByText(/Este evento está em rascunho e não aparece no app/)).toBeInTheDocument();
+  });
+
+  it('ISCA: o cancelado continua com data e local trancados -- o controle positivo da trava', async () => {
+    // Sem este caso, o de cima ficaria verde com a trava removida para TODO
+    // estado, que e o defeito oposto: data e local de um cancelado voltariam a
+    // ser editaveis.
+    const duble = criarDuble({
+      encontros: [
+        encontroDeExemplo({
+          slug: 'cancelado-para-conferir',
+          title: 'Encontro cancelado',
+          publication_status: 'cancelled',
+          timing: 'upcoming',
+          cancelled_at: '2026-09-21T13:00:00Z',
+          cancellation_note: 'Chuva.',
+        }),
+      ],
+    });
+    montar('/rede/cancelado-para-conferir', duble);
+    expect(await screen.findByLabelText('Início *')).toBeDisabled();
+    expect(screen.getByLabelText('Nome do lugar *')).toBeDisabled();
+  });
+
+  it('mudar o local do rascunho vai por relocation e o dialogo NAO promete e-mail', async () => {
+    const { duble, usuario } = montar('/rede/rascunho-para-aprovar', comRascunho());
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    expect(within(dialogo).getByText('Fica registrado para a equipe. Em rascunho ninguém é avisado por e-mail.')).toBeInTheDocument();
+    expect(within(dialogo).queryByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeNull();
+    expect(within(dialogo).getByText(/O evento continua fora do app, e ninguém é avisado/)).toBeInTheDocument();
+
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Corrigindo o lugar antes de publicar.');
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    const [mudanca] = escritas(duble, 'POST', /relocation$/);
+    expect(mudanca?.corpo).toMatchObject({
+      reason: 'Corrigindo o lugar antes de publicar.',
+      place: { place_name: 'Praça General Polidoro' },
+    });
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
+  });
+
+  it('ISCA: o PUBLICADO continua prometendo o e-mail -- o controle positivo da condicao', async () => {
+    // Se alguem tirar a condicao e apagar a promessa para todo mundo, este caso
+    // reprova. O par com o caso acima e o que faz a condicao ser medida, e nao
+    // so a ausencia.
+    const { usuario } = montar('/rede/ja-publicado', comRascunho());
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    expect(within(dialogo).getByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeInTheDocument();
+    expect(within(dialogo).getByText('Vai no e-mail que avisa os administradores. Não aparece no app.')).toBeInTheDocument();
   });
 
   it('ISCA: publicar nao sai sem If-Match, e o duble responderia 428', async () => {
@@ -316,10 +395,10 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Observações'), 'Dúvidas no zap 11 98765-4321');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
 
     const resumo = await screen.findByRole('alert');
-    expect(resumo).toHaveTextContent('Corrija 1 campo para publicar:');
+    expect(resumo).toHaveTextContent('Corrija 1 campo para salvar o rascunho:');
     // O foco vai para o resumo quando ele aparece (3.13).
     await waitFor(() => expect(resumo).toHaveFocus());
     expect(screen.getByLabelText('Observações')).toHaveAccessibleDescription(/Tire das observações telefone, e-mail, chave Pix ou dados de outra pessoa\./);
@@ -356,9 +435,11 @@ describe('Rede: formulário novo', () => {
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
 
-    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    // A mensagem virou do avesso em 15/11/2026: a criacao salva RASCUNHO, e
+    // dizer "ja aparece na Rede do app" era afirmar o contrario do que acontece.
+    expect(await screen.findByText('Rascunho salvo. Ele não aparece no app até você publicar.')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/rede');
     const [criacao] = escritas(duble, 'POST', /\/admin\/network\/events$/);
     expect(criacao?.corpo).toEqual({
@@ -415,13 +496,15 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200, fone (11) 98765-4321');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
-    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText('Corrija 1 campo para salvar o rascunho:')).toBeInTheDocument();
     expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(/^Tire do endereço telefone, e-mail, link, perfil ou chave Pix\. Rua, número e CEP podem ficar\./);
     await usuario.clear(screen.getByLabelText('Endereço'));
     await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
-    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    // A mensagem virou do avesso em 15/11/2026: a criacao salva RASCUNHO, e
+    // dizer "ja aparece na Rede do app" era afirmar o contrario do que acontece.
+    expect(await screen.findByText('Rascunho salvo. Ele não aparece no app até você publicar.')).toBeInTheDocument();
     const criacoes = escritas(duble, 'POST', /\/admin\/network\/events$/);
     expect((criacoes.at(-1)?.corpo as { street_address?: string }).street_address).toBe('Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
   });
@@ -456,8 +539,10 @@ describe('Rede: formulário novo', () => {
     await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://www.instagram.com/Org.Pet/');
     expect(screen.getByText('Aparece no app como @org.pet.')).toBeInTheDocument();
     expect(screen.getByText('Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.')).toBeInTheDocument();
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
-    expect(await screen.findByText('Evento publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    // A mensagem virou do avesso em 15/11/2026: a criacao salva RASCUNHO, e
+    // dizer "ja aparece na Rede do app" era afirmar o contrario do que acontece.
+    expect(await screen.findByText('Rascunho salvo. Ele não aparece no app até você publicar.')).toBeInTheDocument();
     // `instagram_url` com a URL COMPLETA, como a pessoa digitou: o campo de
     // entrada deixou de ser `instagram_handle` em 17/10/2026
     // (`NetworkEventInstagramUrlInput` em `api/openapi.yaml`, que diz
@@ -498,8 +583,8 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
     await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'http://sympla.com.br/e/1');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
-    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText('Corrija 1 campo para salvar o rascunho:')).toBeInTheDocument();
     expect(screen.getByLabelText('Link do convite ou ingresso')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
     expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
   });
@@ -508,8 +593,8 @@ describe('Rede: formulário novo', () => {
     const { duble, usuario } = montar('/rede/novo');
     await usuario.type(await screen.findByLabelText('Início *'), '2026-12-05T09:00');
     await usuario.type(screen.getByLabelText('Fim'), '2026-12-05T08:00');
-    await usuario.click(screen.getByRole('button', { name: 'Publicar evento' }));
-    expect(await screen.findByText('Corrija 6 campos para publicar:')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText('Corrija 6 campos para salvar o rascunho:')).toBeInTheDocument();
     expect(screen.getByText('Informe o título do evento.')).toBeInTheDocument();
     expect(screen.getByText('O fim precisa ser depois do início.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);

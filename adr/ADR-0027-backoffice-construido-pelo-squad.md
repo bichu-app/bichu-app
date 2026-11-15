@@ -1627,7 +1627,7 @@ Literal: "remova a solicitação de senha ao alterar ou salvar os cadastros".
    prevenção: o e-mail a todos os administradores e a trilha. Sem MFA (item 9),
    a senha na escrita era a única segunda barreira, e ela sai.
 
-### 25. O encontro do painel nasce em rascunho (decisão do cliente, 15/11/2026)
+### 25. O encontro do painel nasce em rascunho, e o rascunho se edita (decisões do cliente, 15/11/2026)
 
 Literal: *"preciso que novos eventos cadastrados sejam sempre salvos como
 Rascunho, para depois eu aprovar manualmente depois"*.
@@ -1635,6 +1635,10 @@ Rascunho, para depois eu aprovar manualmente depois"*.
 **Quem decidiu foi o cliente**, e o escopo foi fechado por ele na mesma
 conversa, em resposta a uma pergunta fechada: o rascunho vale **só para os
 encontros que ele cria no painel**.
+
+São **duas decisões dele no mesmo dia**, e os itens abaixo seguem essa ordem: a
+primeira criou o rascunho (itens 1 a 6); a segunda abriu a edição dele (item 8),
+respondendo à pergunta que a primeira deixou aberta e que o item 7 registra.
 
 1. **Isto altera o item 12.9, e só para o painel.** O 12.9 dizia *"O evento não
    tem rascunho, como a designer propôs: criar é publicar"*. Deixa de valer para
@@ -1673,6 +1677,13 @@ encontros que ele cria no painel**.
    - `AdminNetworkEvent.published_at` passa a admitir nulo.
    - A lista do painel mostra rascunho **por padrão**, com selo próprio e filtro
      "Rascunhos", e a linha ganha a ação "Publicar evento" com confirmação.
+   - `relocateAdminNetworkEvent` passa a aceitar `draft`, e **o aviso a todos os
+     administradores fica condicional ao estado** — ver o item 8, abaixo.
+   - O formulário do painel deixa de dizer "Publicar evento" e "Evento
+     publicado. Ele já aparece na Rede do app." na criação: agora é "Salvar
+     rascunho" e "Rascunho salvo. Ele não aparece no app até você publicar." O
+     texto antigo afirmava a quem opera exatamente o contrário do que passou a
+     acontecer.
 
 4. **O que NÃO muda.**
    - A comunidade (item 2 acima).
@@ -1680,8 +1691,10 @@ encontros que ele cria no painel**.
      (`network_events_ativos_do_autor`): ele filtra `origin = 'community'` **e**
      `publication_status = 'published'`, então o rascunho do painel está fora
      dele por dois filtros independentes, e a função não foi tocada.
-   - `cancelAdminNetworkEvent`, `relocateAdminNetworkEvent` e
-     `changeAdminNetworkEventAccess` continuam exigindo `published`.
+   - `cancelAdminNetworkEvent` e `changeAdminNetworkEventAccess` continuam
+     exigindo `published`. **`relocateAdminNetworkEvent` não** — ver o item 8.
+     O acesso (visibilidade e valor) continua fechado no rascunho porque a
+     decisão de abrir a edição nomeou **data, horário e lugar**, e só isso.
    - Nenhuma linha existente muda de estado: acrescentar valor a uma lista
      fechada só afrouxa o que ela aceita, e a migração não tem `UPDATE`.
 
@@ -1695,7 +1708,11 @@ encontros que ele cria no painel**.
    O que sobra nessa janela: a linha na trilha
    (`admin.network_event.created`), que é registro e não alerta, e o fato de que
    o encontro **não está no app** — ninguém leva um cão a lugar nenhum por causa
-   de um rascunho. O aviso volta a cobrir o caso no instante em que o encontro
+   de um rascunho. A decisão do item 8 alarga a janela em extensão, não em
+   natureza: dentro dela o invasor também pode mover o rascunho sem aviso. Mas o
+   rascunho só fica perigoso ao ser publicado, e **publicar avisa** — a barreira
+   fica no instante em que o encontro passa a existir para as pessoas, que é onde
+   T11 mora. O aviso volta a cobrir o caso no instante em que o encontro
    passa a ser visível, que é onde o dano de T11 mora. A troca é deliberada:
    avisar a equipe inteira a cada rascunho salvo transformaria o alerta em ruído,
    e alerta que todo mundo ignora não protege ninguém.
@@ -1708,13 +1725,66 @@ encontros que ele cria no painel**.
    *"Salvar pela metade fica no formulário do painel, não no banco."* O cliente
    decidiu o contrário.
 
-7. **Aberto, para decisão dele:** rascunho cuja data já passou não tem conserto
-   além de remover e criar outro. `relocateAdminNetworkEvent` é a única rota que
-   muda data, horário e lugar, e ela exige `published`
-   (`event_not_published`); abri-la ao rascunho obriga a decidir se mover um
-   rascunho avisa todos os administradores — e isso é pergunta de produto, não de
-   engenharia. Por ora a publicação recusa o rascunho vencido com
-   `event_in_past`, e o painel não oferece "Publicar" nele.
+7. **Comportamento anterior do rascunho vencido, para o histórico.** Entre a
+   decisão da manhã e a da tarde de 15/11/2026, um rascunho cuja data já tinha
+   passado não tinha conserto: `relocateAdminNetworkEvent` exigia `published`, a
+   publicação recusava com `event_in_past`, e a única saída era remover e
+   cadastrar de novo. Foi essa a pergunta levada ao cliente, e o item 8 é a
+   resposta dele.
+
+8. **Editar o rascunho antes de publicar (decisão do cliente, 15/11/2026).**
+   Pergunta fechada, com duas opções na tela. Escolhida:
+
+   > "Sim, editar antes de publicar" — ele corrige **data, horário e lugar**
+   > enquanto o encontro está em rascunho, **sem avisar ninguém**, porque não há
+   > quem avisar: o evento ainda não existe para o público.
+
+   Recusada: deixar como está (apagar e cadastrar de novo).
+
+   E a regra que fica: **encontro já publicado continua como hoje** — mexer nele
+   avisa todos os administradores. **O aviso é consequência de ser público, não
+   de ser mudado.**
+
+   1. **Forma: a rota existente, aberta ao `draft`.** `relocateAdminNetworkEvent`
+      passa a aceitar `draft` e `published`. Não há rota nova nem campo novo no
+      `PATCH`.
+
+      O motivo é o efeito colateral: ele tem de ser **condicional ao estado, num
+      lugar só**. Uma rota separada para o rascunho duplicaria a validação de
+      data, fuso, ponto e valor, a escrita do lugar e a linha da trilha em dois
+      caminhos que divergem na primeira correção de um deles — e o `PATCH` não
+      serve porque "o corpo não tem esses campos" é invariante dele desde o item
+      12, com isca própria (T11, item 21.4).
+
+   2. **O que distingue os dois estados é só o aviso:**
+
+      | estado | validação | trilha | e-mail a todos os administradores |
+      | ------ | --------- | ------ | --------------------------------- |
+      | `draft` | igual | sim | **não** |
+      | `published` | igual | sim | sim (D52) |
+
+      A trilha sai nos dois: rascunho sem aviso não é rascunho sem registro.
+
+   3. **`reason` continua obrigatório também no rascunho.** Ele vai para a
+      trilha, que existe nos dois estados; e um corpo cujos campos obrigatórios
+      dependessem do estado do recurso não teria como ser declarado no contrato.
+      O que muda é só o destino: no publicado ele sai também no e-mail; no
+      rascunho, só na trilha.
+
+   4. **Recusas que ficam de pé.** `cancelled` e `removed` continuam respondendo
+      `400 event_not_published` — e para esses dois o nome do código é literal:
+      eles **não estão mais** publicados. As regras de data, fuso, ponto e valor
+      valem igual no rascunho, e é a de data que dá a saída do item 7:
+      `starts_at` no passado recusa com `event_in_past`, então mover a data de um
+      rascunho vencido para o futuro o torna publicável de novo.
+
+   5. **No painel**, a trava do formulário deixou de ser uma e passou a ser duas.
+      Era `editando && !publicado`, e enquanto rascunho não existia ela estava
+      certa: os únicos estados não publicados eram `cancelled` e `removed`. Com o
+      rascunho, aquela expressão passou a trancar justamente o que o cliente
+      pediu para abrir. Agora o lugar e o horário destrancam no rascunho
+      (`cancelled`/`removed` seguem trancados) e o acesso continua trancado até a
+      publicação.
 
 ## Alternativas consideradas
 
