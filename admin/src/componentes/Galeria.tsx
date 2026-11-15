@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+import { Dialogo } from './Dialogo.tsx';
 import { DialogoDeRecorte } from './DialogoDeRecorte.tsx';
 import {
   conferirArquivo,
@@ -109,6 +110,14 @@ export function Galeria({
   marca,
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
+  /**
+   * A imagem que o visor esta mostrando INTEIRA (cliente, 05 e 15/11/2026: *"quando
+   * clicar para expandir deve mostrar a imagem inteira"*, *"ainda esta aparecendo
+   * cortado quando eu clico em cima"*). A miniatura corta na TELA -- ela e um quadrado
+   * com `object-fit: cover` --, e ate aqui o clique nela nao abria nada: nao havia
+   * onde ver a imagem sem corte.
+   */
+  const [ampliada, setAmpliada] = useState<{ endereco: string; rotulo: string }>();
   const [recorte, setRecorte] = useState<{
     imagem: ImagemParaRecorte;
     original: File;
@@ -343,7 +352,22 @@ export function Galeria({
               }}
             >
               <div className="tile-img">
-                {im.previa ? <img src={im.previa} alt="" /> : <Icone nome="image" />}
+                {im.previa ? (
+                  <button
+                    type="button"
+                    className="tile-abrir"
+                    data-abrir
+                    aria-label={`Ver inteira a imagem ${i + 1} de ${n}`}
+                    title="Ver a imagem inteira"
+                    onClick={() => {
+                      if (im.previa) setAmpliada({ endereco: im.previa, rotulo: `a imagem ${i + 1} de ${n}` });
+                    }}
+                  >
+                    <img src={im.previa} alt="" />
+                  </button>
+                ) : (
+                  <Icone nome="image" />
+                )}
                 {i === 0 && (
                   <span className="selo pub t-overline tile-principal">
                     <Icone nome="check" tamanho="s16" />
@@ -535,6 +559,18 @@ export function Galeria({
       <span className="sr" aria-live="polite">
         {anuncio}
       </span>
+      {ampliada && (
+        <Dialogo titulo="Imagem inteira" papel="dialog" aoFechar={() => setAmpliada(undefined)}>
+          <div className="visor-img" data-testid="visor-img">
+            <img src={ampliada.endereco} alt={`Visualização de ${ampliada.rotulo}`} />
+          </div>
+          <div className="acoes">
+            <button type="button" className="btn sec" data-foco-inicial data-fechar-visor onClick={() => setAmpliada(undefined)}>
+              Fechar
+            </button>
+          </div>
+        </Dialogo>
+      )}
       {recorte && (
         <DialogoDeRecorte
           imagem={recorte.imagem}
