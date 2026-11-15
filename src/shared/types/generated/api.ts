@@ -6406,16 +6406,34 @@ export interface paths {
          *     **Removido nao aparece por padrao**: removido some da lista (a UX o
          *     trata como apagado para quem opera), e so volta quando pedido pelo
          *     filtro fechado `publication_status=removed`, que devolve so os
-         *     removidos. Sem filtro vem publicado e cancelado.
+         *     removidos. Sem filtro vem **rascunho, publicado e cancelado**.
+         *
+         *     **O rascunho entra no padrao desde 15/11/2026** (ADR-0027 item 25), e
+         *     isto e o oposto do tratamento do removido: o rascunho e trabalho que
+         *     espera a aprovacao de uma pessoa, e esconde-lo do padrao esconderia
+         *     justamente a fila que a decisao do cliente criou. Era "publicado e
+         *     cancelado".
          */
         get: operations["listAdminNetworkEvents"];
         put?: never;
         /**
-         * Cria e publica um encontro
-         * @description **Criar e publicar** (ADR-0027 12.9): o encontro nao tem rascunho, e
-         *     nasce `published`, com `origin: admin`. Por isso esta operacao conta no
-         *     teto de publicacoes e **avisa todos os administradores** por e-mail com
-         *     o que foi criado (D52).
+         * Cria um encontro em rascunho
+         * @description **O encontro nasce em rascunho** (`publication_status: draft`,
+         *     `published_at` nulo), com `origin: admin`, e **nao aparece no app** ate
+         *     `publishAdminNetworkEvent`. Decisao do cliente de 15/11/2026 (ADR-0027
+         *     item 25): *"preciso que novos eventos cadastrados sejam sempre salvos
+         *     como Rascunho, para depois eu aprovar manualmente depois"*. **Altera o
+         *     item 12.9**, que era "criar e publicar", e **so para o painel**: o
+         *     encontro da comunidade continua publicando direto (ADR-0025 emenda 3).
+         *
+         *     **Dois efeitos sairam daqui e passaram para `publishAdminNetworkEvent`,
+         *     porque sao efeitos de PUBLICACAO e nao de rascunho:** o aviso por e-mail
+         *     a todos os administradores (D52) e o teto do balde
+         *     `admin_publication`. Guardar trabalho que ninguem ve nao avisa a equipe
+         *     inteira nem queima cota de publicacao; o que resta aqui e o balde
+         *     `admin_write` e a linha na trilha
+         *     (`admin.network_event.created`). Antes de 15/11/2026 esta operacao
+         *     disparava os dois.
          *
          *     O lugar sao tres rotulos obrigatorios e um ponto **opcional**, marcado
          *     no mapa (`geo_source = map_pin`, ADR-0006). O local e **logradouro
@@ -6474,13 +6492,20 @@ export interface paths {
         head?: never;
         /**
          * Altera titulo, resumo, capa ou endereco publico de um encontro
-         * @description **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
-         *     esta publicado desde a criacao: mudar onde e quando as pessoas levam
-         *     os caes e `relocateAdminNetworkEvent`, com aviso a todos os
+         * @description **Data, horario, fuso e lugar nao mudam aqui**: mudar onde e quando as
+         *     pessoas levam os caes e `relocateAdminNetworkEvent`, com aviso a todos os
          *     administradores. **Visibilidade e condicao de acesso
          *     tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
          *     O corpo nao tem esses campos. Encontro `removed` responde `400`
          *     (`code: event_removed`).
+         *
+         *     O motivo escrito aqui era "porque todo encontro esta publicado desde a
+         *     criacao", e ele **deixou de valer em 15/11/2026**, quando o encontro do
+         *     painel passou a nascer em rascunho (ADR-0027 item 25). A separacao fica
+         *     de pe por si: mover um encontro e T11 e tem aviso proprio, e e por isso
+         *     que ela mora numa rota propria. **Rascunho aceita este PATCH** (titulo,
+         *     resumo, capa, endereco publico, observacoes), e e assim que se acerta o
+         *     texto antes de publicar.
          *
          *     **Mudar `notes` avisa todos os administradores** com o antes e o
          *     depois (D60), sem reautenticacao: o detector de D59 ja tira o valor do
@@ -6488,6 +6513,75 @@ export interface paths {
          *     `slug`** (`400`, `code: private_slug_is_generated`).
          */
         patch: operations["updateAdminNetworkEvent"];
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Publica um encontro que esta em rascunho
+         * @description A aprovacao manual que o cliente pediu em 15/11/2026 (ADR-0027 item 25):
+         *     o rascunho passa a `published`, `published_at` recebe o instante da
+         *     publicacao, e **so aqui** o encontro passa a aparecer no app.
+         *
+         *     **Os dois efeitos de publicacao moram aqui, e nao mais na criacao:** o
+         *     aviso por e-mail a **todos os administradores** (D52), com o que foi
+         *     publicado, e o teto do balde `admin_publication`. Eles descreviam
+         *     publicacao desde sempre; o que mudou em 15/11/2026 foi a operacao que
+         *     publica.
+         *
+         *     **NAO e idempotente, e e aqui que o desenho diverge de
+         *     `publishAdminStoreItem`.** La, publicar de novo responde `200` sem nova
+         *     linha de trilha, porque a publicacao do item e reversivel
+         *     (`retireAdminStoreItem`) e republicar e o caminho de volta. Aqui ela nao
+         *     e: `cancelAdminNetworkEvent` nao tem volta ("um encontro cancelado que
+         *     vai acontecer de novo e um encontro novo"), e publicar dispara e-mail
+         *     para a equipe inteira. Um `200` silencioso diria a quem opera que a
+         *     chamada fez algo quando ela nao fez, ou reenviaria o aviso. Entao:
+         *
+         *     - encontro **ja publicado** responde `400`
+         *       (`code: event_not_draft`);
+         *     - encontro `cancelled` ou `removed` responde `400`, o mesmo
+         *       `event_not_draft`: publicar nao ressuscita, e o `CHECK
+         *       network_events_rascunho_so_do_painel` nao e o que barra isso -- o caso
+         *       de uso e;
+         *     - encontro que **ja passou** responde `400`
+         *       (`code: event_in_past`), o mesmo codigo da criacao: rascunho que
+         *       ficou esquecido ate depois da data nao entra no app como encontro
+         *       futuro.
+         *
+         *     **Rascunho com data errada ainda nao tem conserto, e isto esta dito de
+         *     proposito.** Data, horario e lugar mudam so em
+         *     `relocateAdminNetworkEvent`, que exige encontro `published`
+         *     (`event_not_published`) e nao foi aberta ao rascunho em 15/11/2026: abri-la
+         *     decide se mover um rascunho avisa todos os administradores, e essa e uma
+         *     pergunta de produto que o cliente nao viu. Hoje a saida para um rascunho
+         *     vencido e `removeAdminNetworkEvent` e criar outro. **Aberto, para
+         *     decisao dele.**
+         *
+         *     **Nao ha recusa por rascunho incompleto, e a ausencia e medida.** O
+         *     rascunho da `Loja` admite trabalho pela metade (`20261017000002` afrouxou
+         *     quatro `NOT NULL`), e por isso `publishAdminStoreItem` tem a regua de
+         *     cinco campos e o `missing_to_publish`. O rascunho do encontro **nasce
+         *     completo**: `createAdminNetworkEvent` cobra o conjunto inteiro na
+         *     criacao, e nenhuma coluna de `network_events` foi afrouxada em
+         *     15/11/2026. Nao existe campo que so a publicacao exija, entao nao existe
+         *     a recusa -- inventa-la seria codigo que nenhum estado alcanca.
+         */
+        put: operations["publishAdminNetworkEvent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/network/events/{eventSlug}/relocation": {
@@ -15759,19 +15853,33 @@ export interface components {
             note: string;
         };
         /**
-         * @description `published` desde a criacao, **tanto pelo painel quanto pela
-         *     comunidade** (nao ha rascunho, ADR-0027 12.9, e nao ha revisao,
-         *     ADR-0025 emenda 3); `cancelled` continua visivel no app como cancelado;
-         *     `removed` e terminal.
+         * @description **`draft` e o rascunho do PAINEL** (decisao do cliente de 15/11/2026,
+         *     ADR-0027 item 25): *"preciso que novos eventos cadastrados sejam sempre
+         *     salvos como Rascunho, para depois eu aprovar manualmente depois"*. O
+         *     encontro criado em `createAdminNetworkEvent` nasce nele, com
+         *     `published_at` nulo, e so vira `published` em
+         *     `publishAdminNetworkEvent`. **O rascunho nao sai em resposta nenhuma
+         *     fora de `/admin/`**: ele nao esta em `NetworkEventStatus`, e a leitura
+         *     publica e a do app filtram por estado visivel.
+         *
+         *     **So o painel tem rascunho.** O encontro da comunidade continua nascendo
+         *     `published` (decisao do cliente de 17/10/2026, ADR-0025 emenda 3), e o
+         *     `CHECK network_events_rascunho_so_do_painel` recusa `draft` em
+         *     `origin: community` no banco.
+         *
+         *     `published` aparece no app; `cancelled` continua visivel no app como
+         *     cancelado; `removed` e terminal.
          *
          *     **`pending_review` nao existe mais**: ele era o estado da fila de
          *     moderacao do encontro da comunidade, e a decisao do cliente de
          *     17/10/2026 trocou a fila pela publicacao direta de quem tem canal de
          *     contato verificado. A migracao `20261001000005` tirou o valor do
-         *     `CHECK` do banco, com o `CHECK` que o amarrava a origem.
+         *     `CHECK` do banco, com o `CHECK` que o amarrava a origem. `draft` **nao
+         *     e** o `pending_review` de volta: aquele era revisao de conteudo de
+         *     terceiro, este e a propria equipe guardando trabalho antes de publicar.
          * @enum {string}
          */
-        AdminNetworkEventPublicationStatus: "published" | "cancelled" | "removed";
+        AdminNetworkEventPublicationStatus: "draft" | "published" | "cancelled" | "removed";
         /**
          * @description Calculado no servidor pelo relogio dele (ADR-0025 item 6). Mesmos
          *     valores de `NetworkEventStatus` da leitura da `Rede`, sem `cancelled`,
@@ -15817,7 +15925,7 @@ export interface components {
             publication_status: components["schemas"]["AdminNetworkEventPublicationStatus"];
             timing: components["schemas"]["AdminNetworkEventTiming"];
             /** Format: date-time */
-            published_at: string;
+            published_at: string | null;
             /** Format: date-time */
             cancelled_at?: string | null;
             cancellation_note?: string | null;
@@ -24904,7 +25012,11 @@ export interface operations {
             query?: {
                 /** @description Busca em titulo, resumo e nome do lugar, no servidor. */
                 q?: string;
-                /** @description Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui. */
+                /**
+                 * @description Sem ele, `draft`, `published` e `cancelled`. `removed` so aparece
+                 *     quando pedido aqui. `publication_status=draft` e a fila de aprovacao
+                 *     do painel (ADR-0027 item 25).
+                 */
                 publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
                 timing?: components["schemas"]["AdminNetworkEventTiming"];
                 /**
@@ -24954,7 +25066,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Encontro criado e publicado. */
+            /** @description Encontro criado em rascunho. */
             201: {
                 headers: {
                     ETag: components["headers"]["ETag"];
@@ -25074,6 +25186,45 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    publishAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Encontro publicado. A partir daqui ele aparece no app. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];

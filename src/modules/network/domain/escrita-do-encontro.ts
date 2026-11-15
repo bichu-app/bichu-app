@@ -7,8 +7,21 @@ import {
 import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
-/** O estado de publicacao como o painel o ve. */
-export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
+/**
+ * O estado de publicacao como o painel o ve.
+ *
+ * `draft` entrou em 15/11/2026 (decisao do cliente, ADR-0027 item 25) e e **so
+ * do painel**: o encontro criado aqui nasce nele e so vira `published` em
+ * `publicarEncontro`. O encontro da comunidade continua nascendo `published`
+ * (ADR-0025 emenda 3), e o `CHECK network_events_rascunho_so_do_painel` recusa
+ * `draft` em `origin = 'community'` no banco.
+ *
+ * **Este tipo nao e o da leitura publica.** Quem o app ve e
+ * `PublicacaoVisivel` em `encontro-da-rede.ts`, que tem `published` e
+ * `cancelled` e nada mais -- e e essa separacao de tipos que faz o rascunho nao
+ * ter como atravessar para o app nem por descuido de quem escreve consulta.
+ */
+export type PublicacaoAdministrativa = 'draft' | 'published' | 'cancelled' | 'removed';
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
@@ -539,7 +552,8 @@ export interface EncontroAdministrativoProjetado {
   readonly pending_request_count: number;
   readonly publication_status: PublicacaoAdministrativa;
   readonly timing: TempoDoEncontro;
-  readonly published_at: string;
+  /** Nulo enquanto o encontro e rascunho (15/11/2026). */
+  readonly published_at: string | null;
   readonly cancelled_at: string | null;
   readonly cancellation_note: string | null;
   readonly created_at: string;
@@ -601,7 +615,12 @@ export function projetarEncontroAdministrativo(
     pending_request_count: e.visibilidade === 'private' ? e.pedidosPendentes : 0,
     publication_status: e.publicacao,
     timing: tempoDoEncontro(e, agora),
-    published_at: (e.publishedAt ?? e.createdAt).toISOString(),
+    // A reserva `?? e.createdAt` SAIU em 15/11/2026, e a saida e o ponto: para o
+    // rascunho ela devolveria a hora da criacao como se fosse a da publicacao --
+    // um instante de publicacao para algo que nunca foi publicado. Rascunho
+    // responde `null`, e o `CHECK network_events_visivel_foi_publicado` garante
+    // que `published` e `cancelled` sempre tenham o instante de verdade.
+    published_at: e.publishedAt === null ? null : e.publishedAt.toISOString(),
     cancelled_at: e.cancelledAt === null ? null : e.cancelledAt.toISOString(),
     cancellation_note: e.cancellationNote,
     created_at: e.createdAt.toISOString(),

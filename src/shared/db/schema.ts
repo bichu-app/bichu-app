@@ -1641,8 +1641,15 @@ export interface PetDeliveryAddressesTable {
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
-/** O `CHECK` `network_events_publicacao_conhecida`. */
-export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
+/**
+ * O `CHECK` `network_events_publicacao_conhecida`.
+ *
+ * `draft` entrou em 15/11/2026 (decisao do cliente) e existe **so para o
+ * painel**: `network_events_rascunho_so_do_painel` o amarra a
+ * `origin = 'admin'`. O encontro da comunidade continua nascendo `published`
+ * (ADR-0025 emenda 3).
+ */
+export type PublicacaoDoEncontro = 'draft' | 'published' | 'cancelled' | 'removed';
 
 /**
  * FATIA F (18/10/2026). A conexao entre pessoas: SIMETRICA, com pedido e aceite,

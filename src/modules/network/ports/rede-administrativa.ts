@@ -62,6 +62,13 @@ export interface MudancaDeEncontro {
   readonly linkDeIngresso?: string | null;
   readonly instagram?: string | null;
   readonly publicacao?: PublicacaoAdministrativa;
+  /**
+   * O instante da publicacao, gravado uma vez, quando o rascunho e publicado
+   * (15/11/2026). Nao e `| null`: nada despublica, e um `null` aqui seria a
+   * unica forma de tirar um encontro do ar deixando-o `published` -- estado que
+   * o `CHECK network_events_visivel_foi_publicado` recusa.
+   */
+  readonly publishedAt?: Date;
   readonly cancelledAt?: Date;
   readonly cancellationNote?: string;
 }

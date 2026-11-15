@@ -163,6 +163,8 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.store_tag.created',
   'admin.store_tag.updated',
   'admin.network_event.created',
+  /** O rascunho do painel vira publicado (15/11/2026, ADR-0027 item 25). */
+  'admin.network_event.published',
   'admin.network_event.updated',
   'admin.network_event.relocated',
   'admin.network_event.cancelled',

@@ -46,13 +46,39 @@ export const rotaDeListarEncontros = defineRoute({
   adminRoles: ADMIN,
 });
 
+/**
+ * **Cria em RASCUNHO** desde 15/11/2026 (decisao do cliente, ADR-0027 item 25).
+ *
+ * Por isso sairam daqui `effects: ['notifies']` e o `BALDE_DE_PUBLICACAO`: os
+ * dois descrevem publicacao, e publicacao agora e `rotaDePublicarEncontro`.
+ * Guardar rascunho nao avisa a equipe inteira nem queima cota de publicacao.
+ */
 export const rotaDeCriarEncontro = defineRoute({
   operationId: 'createAdminNetworkEvent',
   method: 'post',
   path: '/admin/network/events',
-  effects: ['notifies'],
+  effects: [],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.created', resourceKind: 'network_event' },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
+/**
+ * A aprovacao manual que o cliente pediu em 15/11/2026: o rascunho vira
+ * publicado, e e **aqui** que o aviso a todos os administradores (D52) e o
+ * balde `admin_publication` passaram a morar.
+ *
+ * `put`, como `publishAdminStoreItem`: publicar e o mesmo desenho nas duas
+ * secoes. A diferenca esta no caso de uso, nao na rota -- la republicar e
+ * idempotente, aqui publicar duas vezes recusa.
+ */
+export const rotaDePublicarEncontro = defineRoute({
+  operationId: 'publishAdminNetworkEvent',
+  method: 'put',
+  path: '/admin/network/events/:eventSlug/publication',
+  effects: ['notifies'],
+  adminRoles: ADMIN,
+  audit: { action: 'admin.network_event.published', resourceKind: 'network_event' },
   rateLimit: [BALDE_DE_PUBLICACAO, BALDE_DE_ESCRITA],
 });
 
@@ -256,6 +282,17 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(app, rotaDeRemoverEncontro, { resolvedores }, async (request: FastifyRequest, reply: FastifyReply) => {
     await rede.removerEncontro(atorAdministrativoDe(request), parametro(request, 'eventSlug'), ifMatch(request));
     return reply.status(204).send();
+  });
+
+  // Sem `schema.body`: a publicacao nao tem corpo. O que ela precisa esta no
+  // `slug` e no `If-Match`.
+  registrarRota(app, rotaDePublicarEncontro, { resolvedores }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const publicado = await rede.publicarEncontro(
+      atorAdministrativoDe(request),
+      parametro(request, 'eventSlug'),
+      ifMatch(request),
+    );
+    return reply.header('ETag', publicado.etag).send(publicado.recurso);
   });
 
   registrarRota(
