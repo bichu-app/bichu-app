@@ -1,3 +1,14 @@
+/*
+ * RASCUNHO (decisao do cliente de 15/11/2026, ADR-0027 item 25). O par de
+ * `warning`, e nao o de `info` nem o neutro: o rascunho nao e um estado estavel
+ * como "Agendado", e tambem nao e inerte como "Encerrado" -- ele e trabalho
+ * PARADO esperando uma pessoa, e o selo tem de puxar o olho na lista.
+ * A cor de urgencia nao entra: ela e do pet perdido.
+ */
+.selo-rascunho {
+  background: var(--bichu-cor-warning-container);
+  color: var(--bichu-cor-warning);
+}
 .selo-agendado {
   background: var(--bichu-cor-info-container);
   color: var(--bichu-cor-info);

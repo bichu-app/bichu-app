@@ -97,6 +97,118 @@ describe('Rede: lista', () => {
   });
 });
 
+/**
+ * O RASCUNHO DO PAINEL (decisao do cliente de 15/11/2026, ADR-0027 item 25).
+ *
+ * A massa e PROPRIA, e nao a de exemplo: acrescentar um rascunho a
+ * `encontrosDeExemplo()` mudaria a contagem que meia duzia de casos acima
+ * afirmam ("4 eventos"), e um teste que conserta outro teste nao prova nada.
+ */
+describe('Rede: rascunho, selo, filtro e publicar (15/11/2026)', () => {
+  /**
+   * FUNCAO, e nao constante: o duble MUTA o encontro no lugar (`salvar`), entao
+   * uma massa compartilhada entre casos carrega o `published` de um caso para o
+   * seguinte -- e foi exatamente isso que aconteceu na primeira escrita destes
+   * testes, com dois deles reprovando por nao achar "Publicar evento" num
+   * rascunho que outro caso ja havia publicado.
+   */
+  const comRascunho = () =>
+    criarDuble({
+      encontros: [
+        encontroDeExemplo({
+          slug: 'rascunho-para-aprovar',
+          title: 'Encontro em rascunho',
+          publication_status: 'draft',
+          published_at: null,
+          timing: 'upcoming',
+        }),
+        encontroDeExemplo({
+          slug: 'ja-publicado',
+          title: 'Encontro ja publicado',
+          publication_status: 'published',
+          timing: 'upcoming',
+        }),
+      ],
+    });
+
+  it('a lista mostra o selo Rascunho, e o publicado irmao segue com o selo dele', async () => {
+    montar('/rede', comRascunho());
+    expect(await screen.findByText('2 eventos')).toBeInTheDocument();
+    const linha = screen.getByRole('link', { name: 'Encontro em rascunho' }).closest('tr');
+    if (!linha) throw new Error('linha nao encontrada');
+    expect(within(linha).getByText('Rascunho', { selector: '.selo' })).toBeInTheDocument();
+    const outra = screen.getByRole('link', { name: 'Encontro ja publicado' }).closest('tr');
+    if (!outra) throw new Error('linha nao encontrada');
+    expect(within(outra).getByText('Agendado', { selector: '.selo' })).toBeInTheDocument();
+  });
+
+  it('o filtro Rascunhos vira publication_status=draft no contrato', async () => {
+    const { duble, usuario } = montar('/rede', comRascunho());
+    await screen.findByText('2 eventos');
+    await usuario.click(screen.getByRole('radio', { name: 'Rascunhos' }));
+    expect(await screen.findByText('1 evento em Rascunhos')).toBeInTheDocument();
+    // `caminho` e so o pathname no registro do duble; o recorte mora em `consulta`.
+    const listagens = duble.registro.filter((r) => r.metodo === 'GET' && r.caminho.endsWith('/admin/network/events'));
+    expect(listagens.at(-1)?.consulta.get('publication_status')).toBe('draft');
+  });
+
+  it('publicar confirma, publica com If-Match e o selo da linha vira Agendado', async () => {
+    const { duble, usuario } = montar('/rede', comRascunho());
+    await screen.findByText('2 eventos');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro em rascunho' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Publicar evento' }));
+
+    const dialogo = screen.getByRole('alertdialog', { name: 'Publicar “Encontro em rascunho”?' });
+    expect(within(dialogo).getByText(/todos os administradores recebem aviso por e-mail/)).toBeInTheDocument();
+    // Nada saiu antes da confirmacao.
+    expect(escritas(duble, 'PUT', /publication$/)).toHaveLength(0);
+
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Publicar' }));
+    expect(await screen.findByText('“Encontro em rascunho” foi publicado. Ele já aparece no app.')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    const [publicacao] = escritas(duble, 'PUT', /publication$/);
+    expect(publicacao?.cabecalhos['if-match']).toBe('"1"');
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
+    // A linha trocou de selo sem recarregar a lista inteira.
+    const linha = screen.getByRole('link', { name: 'Encontro em rascunho' }).closest('tr');
+    if (!linha) throw new Error('linha nao encontrada');
+    expect(within(linha).getByText('Agendado', { selector: '.selo' })).toBeInTheDocument();
+    expect(screen.queryByText('Rascunho', { selector: '.selo' })).toBeNull();
+  });
+
+  it('ISCA: o publicado NAO oferece publicar', async () => {
+    const { usuario } = montar('/rede', comRascunho());
+    await screen.findByText('2 eventos');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro ja publicado' }));
+    expect(screen.queryByRole('menuitem', { name: 'Publicar evento' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Cancelar evento' })).toBeInTheDocument();
+  });
+
+  it('ISCA: o rascunho oferece publicar e NAO oferece cancelar', async () => {
+    // Montagem propria, e nao o mesmo `montar` do caso acima com um Escape no
+    // meio: um menu que nao fechasse faria este caso medir o fechamento do
+    // menu, e nao o conteudo dele.
+    const { usuario } = montar('/rede', comRascunho());
+    await screen.findByText('2 eventos');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro em rascunho' }));
+    expect(screen.getByRole('menuitem', { name: 'Publicar evento' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Cancelar evento' })).toBeNull();
+  });
+
+  it('ISCA: publicar nao sai sem If-Match, e o duble responderia 428', async () => {
+    const { duble, usuario } = montar('/rede', comRascunho());
+    await screen.findByText('2 eventos');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro em rascunho' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Publicar evento' }));
+    const dialogo = screen.getByRole('alertdialog', { name: 'Publicar “Encontro em rascunho”?' });
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Publicar' }));
+    await screen.findByText('“Encontro em rascunho” foi publicado. Ele já aparece no app.');
+    const semIfMatch = escritas(duble, 'PUT', /publication$/).filter((r) => !r.cabecalhos['if-match']);
+    expect(semIfMatch).toEqual([]);
+  });
+});
+
 describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
   it('cancelar exige motivo, confirma e cancela sem pedir senha', async () => {
     const { duble, usuario } = montar('/rede');

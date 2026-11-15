@@ -313,6 +313,43 @@ void describe('o que o banco garante da regra "lugar publico" (ADR-0027 secao 13
     );
   });
 
+  /**
+   * O espelho invertido do caso acima, e a razao de os dois morarem lado a lado:
+   * o estado que a `20261001000005` apagou amarrava a revisao a `community`, e o
+   * que a `20261115000001` criou amarra o rascunho a `admin` (decisao do cliente
+   * de 15/11/2026, ADR-0027 item 25).
+   *
+   * **E este caso que torna "a comunidade publica direto" uma garantia de
+   * banco.** Sem ele, a decisao de 17/10/2026 dependeria de nenhum caso de uso
+   * escrever `draft` com `origin = 'community'` -- e disciplina nao e
+   * invariante.
+   */
+  void it('`draft` com origem `community` e recusado: so o painel tem rascunho', async () => {
+    await recusa(
+      `${BASE}, 'community', 'draft', NULL, NULL, NULL)`,
+      'network_events_rascunho_so_do_painel',
+    );
+  });
+
+  void it('`draft` com origem `admin` e ACEITO com `published_at` nulo: o controle positivo dos dois casos acima', async () => {
+    // Sem este caso, os dois acima ficariam verdes com um `draft` que o banco
+    // recusasse em QUALQUER origem -- a recusa certa pelo motivo errado.
+    const id = randomUUID();
+    await cliente.query(
+      `INSERT INTO network_events (id, slug, title, summary, place_name, neighborhood,
+         city, state, starts_at, origin, publication_status, published_at, geo, geo_source)
+       VALUES ($1, '${PREFIXO}rascunho-aceito', 'Titulo', 'Resumo', 'Praca', 'Bairro', 'Cidade', 'SP',
+               now() + interval '1 day', 'admin', 'draft', NULL, NULL, NULL)`,
+      [id],
+    );
+    const r = await cliente.query<{ publication_status: string; published_at: Date | null }>(
+      'SELECT publication_status, published_at FROM network_events WHERE id = $1',
+      [id],
+    );
+    assert.equal(r.rows[0]?.publication_status, 'draft');
+    assert.equal(r.rows[0]?.published_at, null);
+  });
+
   void it('ponto sem origem e recusado', async () => {
     await recusa(
       `${BASE}, 'admin', 'published', now(), ST_SetSRID(ST_MakePoint(-46.6, -23.5), 4326)::geography, NULL)`,

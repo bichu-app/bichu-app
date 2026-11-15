@@ -111,7 +111,27 @@ function corpo(ajuste: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Cria o encontro E O PUBLICA, que e o que `criarEncontro` sozinho fazia ate
+ * 15/11/2026 (ADR-0027 item 25, decisao do cliente).
+ *
+ * A composicao mora NO AUXILIAR, e nao espalhada pelos casos, porque quase todo
+ * caso deste arquivo mede uma operacao SOBRE encontro publicado -- mover,
+ * cancelar, mudar acesso, galeria, fila de pedidos -- e para eles "publicado" e
+ * ponto de partida, nao o objeto da medicao. Quem mede o rascunho usa
+ * `criarRascunho`, logo abaixo, e os dois nomes dizem em que estado o encontro
+ * esta.
+ *
+ * Devolve o resultado da PUBLICACAO: e dele que saem a versao e o `ETag` que as
+ * operacoes seguintes precisam.
+ */
 async function criar(ajuste: Record<string, unknown> = {}) {
+  const rascunho = await criarRascunho(ajuste);
+  return r.publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+}
+
+/** Cria e PARA no rascunho, para quem mede o rascunho. */
+async function criarRascunho(ajuste: Record<string, unknown> = {}) {
   const criado = await r.criarEncontro(autor, corpo(ajuste));
   slugs.push(criado.recurso.slug);
   return criado;
@@ -213,9 +233,13 @@ after(async () => {
 });
 
 void describe('a escrita administrativa da Rede, contra Postgres', () => {
-  void it('criar publica, grava UMA linha de trilha pelo id interno, com a sessao, e sem a coordenada', async () => {
-    const criado = await criar({ place: { ...corpo().place, point: { lat: -23.561, lon: -46.655 } } });
-    assert.equal(criado.recurso.publication_status, 'published');
+  void it('criar NASCE RASCUNHO com published_at nulo, grava UMA linha de trilha pelo id interno, com a sessao, e sem a coordenada', async () => {
+    // Era "criar publica". A decisao do cliente de 15/11/2026 (ADR-0027 item 25)
+    // virou a assercao do avesso, e por isso este caso usa `criarRascunho`: ele
+    // mede a CRIACAO, e nao o encontro publicado como ponto de partida.
+    const criado = await criarRascunho({ place: { ...corpo().place, point: { lat: -23.561, lon: -46.655 } } });
+    assert.equal(criado.recurso.publication_status, 'draft');
+    assert.equal(criado.recurso.published_at, null);
     assert.deepEqual(criado.recurso.place.point, { lat: -23.561, lon: -46.655 });
     const id = await idDoEncontro(criado.recurso.slug);
     const trilha = await trilhaDe(id);
@@ -229,6 +253,67 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     assert.ok(!JSON.stringify(trilha).includes('-23.561'), 'a coordenada foi para a trilha');
     const peloSlug = await banco.db.selectFrom('audit.events').select('id').where('resource_id', '=', criado.recurso.slug).execute();
     assert.equal(peloSlug.length, 0);
+  });
+
+  /**
+   * O ciclo inteiro contra o banco de verdade (ADR-0027 item 25). Aqui importa o
+   * que o `CHECK network_events_visivel_foi_publicado` faz nos dois sentidos: ele
+   * ACEITA `draft` com `published_at` nulo, e EXIGE o instante em `published`.
+   * Se a publicacao esquecesse de gravar `published_at`, o banco recusaria -- e e
+   * este caso que prova que ela nao esquece.
+   */
+  void it('publicar o rascunho grava published_at no banco, muda o estado e grava a trilha propria', async () => {
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+
+    const antes = await banco.db
+      .selectFrom('network_events')
+      .select(['publication_status', 'published_at'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+    assert.equal(antes.publication_status, 'draft');
+    assert.equal(antes.published_at, null, 'o rascunho nasceu com instante de publicacao');
+
+    const publicado = await r.publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+    assert.equal(publicado.recurso.publication_status, 'published');
+    assert.notEqual(publicado.recurso.published_at, null);
+
+    const depois = await banco.db
+      .selectFrom('network_events')
+      .select(['publication_status', 'published_at'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+    assert.equal(depois.publication_status, 'published');
+    assert.ok(depois.published_at instanceof Date, 'o banco ficou sem o instante da publicacao');
+
+    assert.deepEqual(
+      (await trilhaDe(id)).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.published'],
+    );
+
+    // Publicar de novo recusa: nao e idempotente (diverge de publishAdminStoreItem).
+    const erro = await r
+      .publicarEncontro(autor, rascunho.recurso.slug, publicado.etag)
+      .catch((e: unknown) => e);
+    assert.deepEqual(
+      ((erro as { errors?: { code: string }[] }).errors ?? []).map((c) => c.code),
+      ['event_not_draft'],
+    );
+  });
+
+  void it('ISCA: o banco recusa `published` sem instante, que e o que a publicacao grava', async () => {
+    // Sem este caso, o anterior ficaria verde mesmo se `published_at` fosse
+    // decorativo. Aqui o banco e quem fala.
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+    const recusado = await sql`update network_events set publication_status = 'published' where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal(
+      (recusado as { constraint?: string }).constraint,
+      'network_events_visivel_foi_publicado',
+      'o banco aceitou `published` sem `published_at`',
+    );
   });
 
   void it('fatia 7: autor do painel so em encontro admin, autor do app so em encontro community (CHECK)', async () => {

@@ -15,7 +15,7 @@ import {
   type EstadoDoFormulario,
 } from '../../src/rede/dominio/formulario.ts';
 import { campoDoInstante, dataCurta, faixaDeHorario, instanteDoCampo, mesPorExtenso } from '../../src/rede/dominio/horario.ts';
-import { acoesDoEncontro, consultaDaLista, seloDoEncontro, textosDoCancelamento, textoDaContagem, textoSemResultado } from '../../src/rede/dominio/lista.ts';
+import { acoesDoEncontro, consultaDaLista, SELOS, seloDoEncontro, textosDoCancelamento, textoDaContagem, textoSemResultado } from '../../src/rede/dominio/lista.ts';
 import { achadosNasObservacoes } from '../../src/rede/dominio/observacoes.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../../src/rede/dominio/valor.ts';
 import { encontroDeExemplo } from '../../src/rede/duble/massa.ts';
@@ -539,7 +539,43 @@ describe('lista', () => {
     expect(textoSemResultado('agendados', '').limpar).toBe('Limpar filtro');
   });
   it('menu: encerrado não cancela; removido não faz nada', () => {
-    expect(acoesDoEncontro({ publication_status: 'published', timing: 'ended', visibility: 'public' })).toEqual({ editar: true, pedidos: false, cancelar: false, remover: true });
-    expect(acoesDoEncontro({ publication_status: 'removed', timing: 'ended', visibility: 'private' })).toEqual({ editar: false, pedidos: false, cancelar: false, remover: false });
+    expect(acoesDoEncontro({ publication_status: 'published', timing: 'ended', visibility: 'public' })).toEqual({ editar: true, pedidos: false, publicar: false, cancelar: false, remover: true });
+    expect(acoesDoEncontro({ publication_status: 'removed', timing: 'ended', visibility: 'private' })).toEqual({ editar: false, pedidos: false, publicar: false, cancelar: false, remover: false });
+  });
+
+  // ---- Rascunho do painel (decisão do cliente, 15/11/2026, ADR-0027 item 25) --
+
+  it('rascunho: filtro próprio, sem recorte de tempo', () => {
+    // Sem `timing`: o rascunho vencido é justamente o que alguém precisa ver
+    // para decidir, e um `timing: upcoming` o esconderia da fila de aprovação.
+    expect(consultaDaLista('rascunhos', '', 'agenda', 1, 20)).toEqual({
+      sort: 'agenda', page: 1, limit: 20, publication_status: 'draft',
+    });
+  });
+
+  it('rascunho: o selo vence o momento, inclusive quando a data já passou', () => {
+    expect(seloDoEncontro({ publication_status: 'draft', timing: 'upcoming' })).toBe('rascunho');
+    // ISCA: cair em "Encerrado" diria que o encontro aconteceu, e o rascunho
+    // nunca esteve no app.
+    expect(seloDoEncontro({ publication_status: 'draft', timing: 'ended' })).toBe('rascunho');
+    expect(SELOS.rascunho).toBe('Rascunho');
+  });
+
+  it('rascunho: o menu oferece publicar, e só ele; publicado e cancelado não oferecem', () => {
+    expect(acoesDoEncontro({ publication_status: 'draft', timing: 'upcoming', visibility: 'public' })).toEqual({
+      editar: true, pedidos: false, publicar: true, cancelar: false, remover: true,
+    });
+    // ISCA: rascunho VENCIDO não oferece publicar -- o servidor recusaria com
+    // `event_in_past`, e oferecer o botão seria prometer o que não se cumpre.
+    expect(acoesDoEncontro({ publication_status: 'draft', timing: 'ended', visibility: 'public' }).publicar).toBe(false);
+    expect(acoesDoEncontro({ publication_status: 'published', timing: 'upcoming', visibility: 'public' }).publicar).toBe(false);
+    expect(acoesDoEncontro({ publication_status: 'cancelled', timing: 'upcoming', visibility: 'public' }).publicar).toBe(false);
+    // Rascunho não cancela: não há o que desmarcar. Quem desiste dele remove.
+    expect(acoesDoEncontro({ publication_status: 'draft', timing: 'upcoming', visibility: 'public' }).cancelar).toBe(false);
+  });
+
+  it('rascunho: a contagem e o sem resultado nomeiam o filtro', () => {
+    expect(textoDaContagem(2, 2, 'rascunhos', '')).toBe('2 eventos em Rascunhos');
+    expect(textoSemResultado('rascunhos', '').frase).toBe('Nenhum evento em Rascunhos.');
   });
 });

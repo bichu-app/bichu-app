@@ -118,6 +118,18 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
         }),
       ),
 
+    /**
+     * Publica o rascunho (decisao do cliente de 15/11/2026, ADR-0027 item 25).
+     * `PUT`, como a publicacao da `Loja`, e sem corpo: o que ela precisa esta no
+     * `slug` e no `If-Match`.
+     */
+    publicar: (slug: string, etag: string) =>
+      executar(() =>
+        cliente.PUT('/admin/network/events/{eventSlug}/publication', {
+          params: { ...evento(slug), header: { 'If-Match': etag } },
+        }),
+      ),
+
     cancelar: (slug: string, etag: string, motivo: string) =>
       executar(() =>
         cliente.POST('/admin/network/events/{eventSlug}/cancellation', {

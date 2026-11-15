@@ -33,6 +33,7 @@ export default function ListaDeEncontros() {
   const [p, mudar] = useParametrosDaLista(PADROES);
   const [aviso, fecharAviso] = useAvisoDaNavegacao();
   const [avisoLocal, setAvisoLocal] = useState<{ tipo: 'ok' | 'erro'; texto: string }>();
+  const [publicar, setPublicar] = useState<Encontro>();
   const [cancelar, setCancelar] = useState<Encontro>();
   const [remover, setRemover] = useState<Encontro>();
 
@@ -71,6 +72,17 @@ export default function ListaDeEncontros() {
     return { ok: false, mensagem: mensagemDaFalha(r.falha, 'cancelar o evento') };
   }
 
+  async function executarPublicacao(e: Encontro): Promise<ResultadoDaAcaoConfirmada> {
+    const r = await rede.publicar(e.slug, etagDe(e));
+    if (r.ok) {
+      substituir((x) => x.slug === e.slug, r.dados);
+      mostrar('ok', `“${e.title}” foi publicado. Ele já aparece no app.`);
+      return { ok: true };
+    }
+    if (precisaReler(r.falha)) recarregar();
+    return { ok: false, mensagem: mensagemDaFalha(r.falha, 'publicar o evento') };
+  }
+
   async function executarRemocao(e: Encontro): Promise<ResultadoDaAcaoConfirmada> {
     const r = await rede.remover(e.slug, etagDe(e));
     if (r.ok) {
@@ -85,6 +97,7 @@ export default function ListaDeEncontros() {
   function itensDoMenu(e: Encontro): ItemDoMenu[] {
     const a = acoesDoEncontro(e);
     const itens: ItemDoMenu[] = [];
+    if (a.publicar) itens.push({ rotulo: 'Publicar evento', icone: 'check', aoEscolher: () => setPublicar(e) });
     if (a.editar) itens.push({ rotulo: 'Editar', icone: 'edit', aoEscolher: () => void navigate(`/rede/${e.slug}`) });
     if (a.pedidos) itens.push({ rotulo: 'Ver pedidos para participar', icone: 'groups', aoEscolher: () => void navigate(`/rede/${e.slug}/pedidos`) });
     if (a.cancelar) itens.push({ rotulo: 'Cancelar evento', icone: 'close', perigo: true, aoEscolher: () => setCancelar(e) });
@@ -120,6 +133,16 @@ export default function ListaDeEncontros() {
 
   const dialogos = (
     <>
+      {publicar && (
+        <DialogoDeConfirmacao
+          titulo={`Publicar “${publicar.title}”?`}
+          corpo="O evento passa a aparecer no app para os tutores, e todos os administradores recebem aviso por e-mail. Para desmarcá-lo depois, use Cancelar evento."
+          rotuloDaAcao="Publicar"
+          perigo={false}
+          executar={() => executarPublicacao(publicar)}
+          aoFechar={() => setPublicar(undefined)}
+        />
+      )}
       {cancelar && (
         <DialogoComMotivo
           titulo={`Cancelar “${cancelar.title}”?`}
