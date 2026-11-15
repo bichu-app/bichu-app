@@ -522,19 +522,23 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
   void it('ISCA (hml 05/10): If-Match com o sufixo da borda ("-gzip", "-zstd") passa; versao velha com sufixo continua 412', async () => {
     const criado = await criar();
     const slug = criado.recurso.slug;
-    assert.equal(criado.etag, '"1"');
-    const comGzip = await r.alterarEncontro(autor, slug, '"1-gzip"', { title: 'Titulo pela borda gzip' });
-    assert.equal(comGzip.etag, '"2"');
-    const comZstd = await r.alterarEncontro(autor, slug, 'W/"2-zstd"', { title: 'Titulo pela borda zstd' });
-    assert.equal(comZstd.etag, '"3"');
+    // `"2"`, e nao `"1"`: desde 15/11/2026 chegar a `published` sao DUAS
+    // escritas (criar o rascunho e publicar), e `criar()` faz as duas. Os
+    // numeros abaixo andaram um, todos pelo mesmo motivo -- o que o caso mede e
+    // o sufixo da borda no `If-Match`, e nao a versao de partida.
+    assert.equal(criado.etag, '"2"');
+    const comGzip = await r.alterarEncontro(autor, slug, '"2-gzip"', { title: 'Titulo pela borda gzip' });
+    assert.equal(comGzip.etag, '"3"');
+    const comZstd = await r.alterarEncontro(autor, slug, 'W/"3-zstd"', { title: 'Titulo pela borda zstd' });
+    assert.equal(comZstd.etag, '"4"');
     // A mudanca de lugar, que foi a do log de hml, pelo mesmo caminho.
-    const movido = await r.moverEncontro(autor, slug, '"3-gzip"', { starts_at: emDias(11, 12), ends_at: emDias(11, 14), reason: 'Chuva.' });
-    assert.equal(movido.etag, '"4"');
+    const movido = await r.moverEncontro(autor, slug, '"4-gzip"', { starts_at: emDias(11, 12), ends_at: emDias(11, 14), reason: 'Chuva.' });
+    assert.equal(movido.etag, '"5"');
 
-    const velha = await r.alterarEncontro(autor, slug, '"3-gzip"', { title: 'Nao deve gravar' }).catch((e: unknown) => e);
+    const velha = await r.alterarEncontro(autor, slug, '"4-gzip"', { title: 'Nao deve gravar' }).catch((e: unknown) => e);
     assert.equal(codigo(velha), 'precondition-failed');
     const linha = await banco.db.selectFrom('network_events').select(['title', 'version']).where('slug', '=', slug).executeTakeFirstOrThrow();
-    assert.deepEqual(linha, { title: 'Titulo pela borda zstd', version: 4 });
+    assert.deepEqual(linha, { title: 'Titulo pela borda zstd', version: 5 });
   });
 
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {
