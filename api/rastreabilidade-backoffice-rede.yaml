@@ -336,6 +336,15 @@ telas:
           - resp:cancellation_note
           - enum:AdminNetworkEventPublicationStatus.cancelled
           - problem:reauthentication-required
+      - operationId: publishAdminNetworkEvent
+        situacao: contrato
+        nota: "item de menu Publicar, com confirmacao (decisao do cliente de 15/11/2026, ADR-0027 item 25); so aparece em rascunho; e aqui que o aviso a todos os administradores sai"
+        usa:
+          - header:If-Match
+          - resp:publication_status
+          - resp:published_at
+          - enum:AdminNetworkEventPublicationStatus.draft
+          - enum:AdminNetworkEventPublicationStatus.published
 
   - tela: "4 · Rede: formulario"
     prototipo: backoffice.html
@@ -350,7 +359,7 @@ telas:
           - resp:place.point.lon
       - operationId: createAdminNetworkEvent
         situacao: contrato
-        nota: "Publicar encontro: criar e publicar (12.9)"
+        nota: "Salvar rascunho: desde 15/11/2026 o encontro do painel nasce `draft` e quem publica e publishAdminNetworkEvent (ADR-0027 item 25, que altera o 12.9 'criar e publicar')"
         usa:
           - req:title
           - req:summary
@@ -424,7 +433,7 @@ telas:
           - header:If-Match
       - operationId: relocateAdminNetworkEvent
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de local?'; sem senha desde 07/10 (ADR-0027 item 23)"
+        nota: "dialogo 'Salvar a mudanca de local?'; sem senha desde 07/10 (ADR-0027 item 23); aceita rascunho desde 15/11/2026 (ADR-0027 item 25, item 8) e so avisa os administradores quando o encontro esta publicado -- no rascunho o dialogo nao promete o e-mail"
         usa:
           - req:place.point.lat
           - req:place.point.lon
@@ -435,7 +444,7 @@ telas:
           - header:If-Match
       - operationId: changeAdminNetworkEventAccess
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de acesso?'; sem senha desde 07/10 (ADR-0027 item 23)"
+        nota: "dialogo 'Salvar a mudanca de acesso?'; sem senha desde 07/10 (ADR-0027 item 23); aceita rascunho desde 15/11/2026 (ADR-0027 item 25, item 9) e so avisa os administradores quando o encontro esta publicado -- em rascunho o dialogo nao promete e-mail nem diz que o app mostra"
         usa:
           - req:visibility
           - req:admission.kind

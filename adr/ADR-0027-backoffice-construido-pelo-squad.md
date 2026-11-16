@@ -20,6 +20,11 @@ aceito; a rota de reautenticação fica obsoleta, sem remover.
 administrativa vai de **30 para 60 minutos**, a pedido do cliente e por decisão
 dele. O **teto absoluto de 12 horas desde a senha não muda**, e nada mais do
 item 2 muda.
+**Emenda de 15/11 (item 25):** o encontro criado **no painel** nasce em
+**rascunho** e só aparece na Rede depois de publicado à mão, por decisão do
+cliente; o encontro da comunidade continua publicando direto (decisão dele de
+17/10), e o rascunho se edita — data, hora, lugar, valor e visibilidade —
+antes de publicar.
 **Data:** 2026-09-23 (emendas de 2026-09-28, 2026-10-01, 2026-10-07 e
 2026-11-15)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
@@ -594,7 +599,13 @@ preenchido, `origin = 'admin'`, e
 pelo menos um evento com ponto e um sem, para a tela mostrar os dois casos.
 
 **12.9 O evento não tem rascunho**, como a designer propôs: criar é publicar
-(`publication_status = 'published'` na criação). O modelo concorda, com uma
+(`publication_status = 'published'` na criação).
+
+> **ALTERADO pelo item 25 (decisão do cliente, 15/11/2026), só para o
+> painel.** O encontro criado no painel passou a nascer `draft`, e quem publica
+> é `publishAdminNetworkEvent`. O parágrafo abaixo descreve o comportamento até
+> aquela data, e fica como está porque o motivo dele continua valendo para a
+> comunidade, que publica direto (ADR-0025 emenda 3). O modelo concorda, com uma
 consequência que precisa estar dita: criar evento dispara o aviso a todos os
 administradores e conta no teto de publicações, e corrigir o lugar ou o
 horário de um evento recém-criado já é mudança de evento publicado, com
@@ -1667,6 +1678,210 @@ minutos". **Quem decidiu foi o cliente, em 15/11/2026, a pedido dele.**
    administradores e trilha —, mais a revogação manual e o teto de 12 horas,
    que não se move.
 
+### 25. O encontro do painel nasce em rascunho, e o rascunho se edita (decisões do cliente, 15/11/2026)
+
+Literal: *"preciso que novos eventos cadastrados sejam sempre salvos como
+Rascunho, para depois eu aprovar manualmente depois"*.
+
+**Quem decidiu foi o cliente**, e o escopo foi fechado por ele na mesma
+conversa, em resposta a uma pergunta fechada: o rascunho vale **só para os
+encontros que ele cria no painel**.
+
+São **três decisões dele no mesmo dia**, e os itens abaixo seguem essa ordem: a
+primeira criou o rascunho (itens 1 a 6); a segunda abriu a edição de data,
+horário e lugar (item 8), respondendo à pergunta que a primeira deixou aberta e
+que o item 7 registra; a terceira abriu também a visibilidade e o valor (item 9),
+respondendo à pergunta que a segunda deixou aberta.
+
+1. **Isto altera o item 12.9, e só para o painel.** O 12.9 dizia *"O evento não
+   tem rascunho, como a designer propôs: criar é publicar"*. Deixa de valer para
+   `createAdminNetworkEvent`: o encontro do painel nasce
+   `publication_status: 'draft'`, com `published_at` nulo, e só aparece no app
+   depois de `publishAdminNetworkEvent`. O resto do 12.9 fica: título, resumo e
+   capa continuam se editando livremente, e data/horário/lugar continuam
+   mudando só por `relocateAdminNetworkEvent`.
+
+   O apêndice A.4 já havia previsto a forma desta mudança, e é a forma que foi
+   usada: *"Um rascunho no futuro é valor novo na lista, aditivo."* Não há
+   coluna nova; `publication_status` continua respondendo sozinha "isto
+   aparece?".
+
+2. **A ADR-0025 emenda 3 e a decisão de 17/10/2026 CONTINUAM VALENDO.** O
+   encontro criado por tutor no app publica direto, sem revisão e sem rascunho,
+   pelas palavras dele naquele dia: *"porque teria evento recusado? o usuario
+   validado pode criar eventos sem aprovacao"*. Esta emenda **não a reabre**.
+
+   E isso não ficou como disciplina de código: a migração `20261115000001`
+   acrescenta o `CHECK network_events_rascunho_so_do_painel`
+   (`origin = 'admin' OR publication_status <> 'draft'`), que é o espelho
+   invertido do `network_events_revisao_so_da_comunidade` que a
+   `20261001000005` apagou. O banco recusa `draft` em `origin: community`.
+
+3. **O que muda.**
+   - `createAdminNetworkEvent`: `summary` passa a ser "Cria um encontro em
+     rascunho", `x-effects` vai de `[notifies]` para `[]`, e o balde
+     `admin_publication` sai da rota. A validação do corpo fica inteira na
+     criação.
+   - `publishAdminNetworkEvent` (`PUT
+     /admin/network/events/{eventSlug}/publication`): sessão com CSRF, papel
+     `admin`, `If-Match`/`ETag`, trilha própria
+     (`admin.network_event.published`), baldes `admin_publication` e
+     `admin_write`. Grava `published_at`.
+   - `AdminNetworkEvent.published_at` passa a admitir nulo.
+   - A lista do painel mostra rascunho **por padrão**, com selo próprio e filtro
+     "Rascunhos", e a linha ganha a ação "Publicar evento" com confirmação.
+   - `relocateAdminNetworkEvent` passa a aceitar `draft`, e **o aviso a todos os
+     administradores fica condicional ao estado** — ver o item 8, abaixo.
+   - O formulário do painel deixa de dizer "Publicar evento" e "Evento
+     publicado. Ele já aparece na Rede do app." na criação: agora é "Salvar
+     rascunho" e "Rascunho salvo. Ele não aparece no app até você publicar." O
+     texto antigo afirmava a quem opera exatamente o contrário do que passou a
+     acontecer.
+
+4. **O que NÃO muda.**
+   - A comunidade (item 2 acima).
+   - O teto por conta de encontro da comunidade
+     (`network_events_ativos_do_autor`): ele filtra `origin = 'community'` **e**
+     `publication_status = 'published'`, então o rascunho do painel está fora
+     dele por dois filtros independentes, e a função não foi tocada.
+   - **`cancelAdminNetworkEvent` continua exigindo `published`, e é a única que
+     continua.** `relocateAdminNetworkEvent` abriu ao rascunho no item 8 e
+     `changeAdminNetworkEventAccess` no item 9.
+   - Nenhuma linha existente muda de estado: acrescentar valor a uma lista
+     fechada só afrouxa o que ela aceita, e a migração não tem `UPDATE`.
+
+5. **O risco, e ele é o preço da decisão: o e-mail a todos os administradores
+   passou da criação para a publicação.** O aviso de D52 existia contra T11 — um
+   invasor com a sessão criando ou mexendo em encontro —, e ele continua
+   existindo, mas **mais tarde**. Entre criar e publicar há agora uma janela em
+   que um encontro escrito por quem não devia existe no banco **sem que ninguém
+   tenha sido avisado**.
+
+   O que sobra nessa janela: a linha na trilha
+   (`admin.network_event.created`), que é registro e não alerta, e o fato de que
+   o encontro **não está no app** — ninguém leva um cão a lugar nenhum por causa
+   de um rascunho. **Reavaliado depois dos itens 8 e 9:** a janela sem aviso agora
+   cobre criar, mover e mudar acesso de um rascunho, e ela continua alargando em
+   **extensão e não em natureza** — tudo o que ela permite é montar, em silêncio,
+   um encontro que ninguém pode ver, e nada do que se monta ali tem efeito sobre
+   pessoa alguma até a publicação, que **avisa todos os administradores**. A
+   barreira não se move: ela está no instante em que o encontro passa a existir
+   para as pessoas, que é onde T11 mora. O que mudou é que esse instante agora é
+   um só e é explícito — antes dos itens 8 e 9, quem precisasse corrigir data,
+   lugar ou valor tinha de publicar primeiro e corrigir depois, o que punha no app
+   um encontro errado e gastava dois avisos para arrumar um. O aviso volta a cobrir o caso no instante em que o encontro
+   passa a ser visível, que é onde o dano de T11 mora. A troca é deliberada:
+   avisar a equipe inteira a cada rascunho salvo transformaria o alerta em ruído,
+   e alerta que todo mundo ignora não protege ninguém.
+
+6. **Comportamento anterior, para o histórico.** Até 15/11/2026,
+   `createAdminNetworkEvent` criava **e publicava** numa chamada: o encontro
+   nascia `published` com `published_at`, aparecia no app na hora, consumia o
+   balde `admin_publication` e disparava o e-mail a todos os administradores. Não
+   havia como guardar um encontro sem publicá-lo, e o 12.9 dizia por quê:
+   *"Salvar pela metade fica no formulário do painel, não no banco."* O cliente
+   decidiu o contrário.
+
+7. **Comportamento anterior do rascunho vencido, para o histórico.** Entre a
+   decisão da manhã e a da tarde de 15/11/2026, um rascunho cuja data já tinha
+   passado não tinha conserto: `relocateAdminNetworkEvent` exigia `published`, a
+   publicação recusava com `event_in_past`, e a única saída era remover e
+   cadastrar de novo. Foi essa a pergunta levada ao cliente, e o item 8 é a
+   resposta dele.
+
+8. **Editar o rascunho antes de publicar (decisão do cliente, 15/11/2026).**
+   Pergunta fechada, com duas opções na tela. Escolhida:
+
+   > "Sim, editar antes de publicar" — ele corrige **data, horário e lugar**
+   > enquanto o encontro está em rascunho, **sem avisar ninguém**, porque não há
+   > quem avisar: o evento ainda não existe para o público.
+
+   Recusada: deixar como está (apagar e cadastrar de novo).
+
+   E a regra que fica: **encontro já publicado continua como hoje** — mexer nele
+   avisa todos os administradores. **O aviso é consequência de ser público, não
+   de ser mudado.**
+
+   1. **Forma: a rota existente, aberta ao `draft`.** `relocateAdminNetworkEvent`
+      passa a aceitar `draft` e `published`. Não há rota nova nem campo novo no
+      `PATCH`.
+
+      O motivo é o efeito colateral: ele tem de ser **condicional ao estado, num
+      lugar só**. Uma rota separada para o rascunho duplicaria a validação de
+      data, fuso, ponto e valor, a escrita do lugar e a linha da trilha em dois
+      caminhos que divergem na primeira correção de um deles — e o `PATCH` não
+      serve porque "o corpo não tem esses campos" é invariante dele desde o item
+      12, com isca própria (T11, item 21.4).
+
+   2. **O que distingue os dois estados é só o aviso:**
+
+      | estado | validação | trilha | e-mail a todos os administradores |
+      | ------ | --------- | ------ | --------------------------------- |
+      | `draft` | igual | sim | **não** |
+      | `published` | igual | sim | sim (D52) |
+
+      A trilha sai nos dois: rascunho sem aviso não é rascunho sem registro.
+
+   3. **`reason` continua obrigatório também no rascunho.** Ele vai para a
+      trilha, que existe nos dois estados; e um corpo cujos campos obrigatórios
+      dependessem do estado do recurso não teria como ser declarado no contrato.
+      O que muda é só o destino: no publicado ele sai também no e-mail; no
+      rascunho, só na trilha.
+
+   4. **Recusas que ficam de pé.** `cancelled` e `removed` continuam respondendo
+      `400 event_not_published` — e para esses dois o nome do código é literal:
+      eles **não estão mais** publicados. As regras de data, fuso, ponto e valor
+      valem igual no rascunho, e é a de data que dá a saída do item 7:
+      `starts_at` no passado recusa com `event_in_past`, então mover a data de um
+      rascunho vencido para o futuro o torna publicável de novo.
+
+   5. **No painel**, a trava do formulário deixou de ser uma e passou a ser duas.
+      Era `editando && !publicado`, e enquanto rascunho não existia ela estava
+      certa: os únicos estados não publicados eram `cancelled` e `removed`. Com o
+      rascunho, aquela expressão passou a trancar justamente o que o cliente
+      pediu para abrir. O lugar e o horário destrancaram, e o acesso ficou
+      trancado — até o item 9, que o destrancou e devolveu a trava a uma
+      expressão só.
+
+9. **Visibilidade e valor também (decisão do cliente, 15/11/2026).** Pergunta
+   fechada, duas opções na tela. Escolhida:
+
+   > "Sim, abrir junto" — ele ajusta **valor e visibilidade (público/privado)**
+   > enquanto o encontro está em rascunho, **sem avisar ninguém**.
+
+   Recusada: deixar como está (publicar primeiro e corrigir depois, avisando
+   todos).
+
+   1. **Mesmo desenho do item 8, no mesmo ponto.**
+      `changeAdminNetworkEventAccess` passa a aceitar `draft` e `published`, com
+      a guarda escrita na mesma forma que a de `relocateAdminNetworkEvent` — as
+      duas respondem à mesma pergunta ("este encontro ainda se edita?") e
+      divergir na escrita de uma delas seria a divergência que o desenho veio
+      evitar. Validação e trilha iguais nos dois estados; e-mail só no publicado.
+
+      O aviso dessa rota tem **duas** condições, e as duas são de propósitos
+      diferentes: mudança que não muda nada nunca avisou (nem no publicado), e
+      rascunho não avisa porque não há quem avisar.
+
+   2. **A troca de `slug` acontece igual no rascunho.** Público que vira privado
+      ganha `slug` novo, e no rascunho isso não custa nada: o endereço antigo
+      nunca saiu do painel.
+
+   3. **`cancelAdminNetworkEvent` fica de fora, e por um motivo de produto, não
+      por inércia.** Cancelar existe para dizer a quem **já viu** o encontro no
+      app que ele não vai acontecer — o cancelado continua visível até o fim
+      previsto (decisão de 23/09). Rascunho nunca esteve no app: não há a quem
+      dizer, e quem desiste de um rascunho usa `removeAdminNetworkEvent`, que
+      funciona nele. Há isca de escopo cobrando essa recusa, no teste de rota e
+      contra o Postgres.
+
+   4. **No painel, as duas travas voltaram a ser uma.** Com o acesso aberto, as
+      duas condições ficaram idênticas, e manter duas expressões iguais com
+      nomes diferentes é convite a divergirem na próxima mudança de uma delas.
+      É a terceira forma dessa linha no mesmo dia, agora com a condição certa:
+      **o que fecha a edição é o encontro ter saído de circulação
+      (`cancelled`/`removed`), e não ele ainda não ter entrado.**
+
 ## Alternativas consideradas
 
 | Opção | Prós | Contras | Por que não |
@@ -1859,6 +2074,11 @@ Na migração da `Rede`, além de 12.1 e 12.2:
 - Não há `draft` (12.9): o evento de administrador nasce `published`, e o da
   comunidade nascerá `pending_review`. Um rascunho no futuro é valor novo na
   lista, aditivo.
+  - **O "futuro" chegou em 15/11/2026** (item 25): `draft` é valor novo na
+    lista, aditivo, exatamente como previsto aqui, e vale só para
+    `origin = 'admin'`. `pending_review` nunca existiu em produção: a
+    `20261001000005` o tirou antes, quando o cliente desfez a fila de moderação
+    em 17/10/2026.
 - `CHECK (origin = 'community' OR publication_status <> 'pending_review')`.
 - `CHECK (created_by_user_id IS NULL OR origin = 'community')` e
   `CHECK (created_by_admin_id IS NULL OR origin = 'admin')`. A massa grava

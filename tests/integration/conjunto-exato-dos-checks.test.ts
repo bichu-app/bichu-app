@@ -482,9 +482,20 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'origin',
     valores: ['admin', 'community'],
   },
+  // **`draft` ENTROU EM 15/11/2026** (decisao do cliente, ADR-0027 item 25,
+  // migracao `20261115000001`): *"preciso que novos eventos cadastrados sejam
+  // sempre salvos como Rascunho, para depois eu aprovar manualmente depois"*. O
+  // encontro do painel nasce nele. Sao QUATRO valores, e nao tres.
+  //
+  // Ele nao e `pending_review` de volta: aquele era revisao de conteudo de
+  // terceiro e valia so para `community`; este e a propria equipe guardando
+  // trabalho e vale so para `admin` -- ver
+  // `network_events_rascunho_so_do_painel` em
+  // CHECKS_QUE_NAO_SAO_LISTA_FECHADA, que e o espelho invertido do
+  // `network_events_revisao_so_da_comunidade` que saiu.
   'public.network_events.network_events_publicacao_conhecida': {
     coluna: 'publication_status',
-    valores: ['published', 'cancelled', 'removed'],
+    valores: ['draft', 'published', 'cancelled', 'removed'],
   },
   // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
   // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
@@ -1344,6 +1355,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // 17/10/2026 (ADR-0025 emenda 3). Mantida a entrada, o caso "restricao
   // declarada que o banco nao tem mais" reprovaria -- que e o portao certo,
   // pedindo que alguem olhasse. Alguem olhou, e a resposta esta aqui.
+  //
+  // E a linha ABAIXO e a mesma ideia virada do avesso, um mes e meio depois: o
+  // rascunho do painel (`20261115000001`, decisao do cliente de 15/11/2026,
+  // ADR-0027 item 25) pede a mesma amarra na direcao OPOSTA -- `draft` so
+  // existe para `origin = 'admin'`. E isto que torna "a comunidade publica
+  // direto" invariante de banco, e nao disciplina de quem escreve codigo: o
+  // encontro da comunidade nao tem rascunho em origem nenhuma.
+  'public.network_events.network_events_rascunho_so_do_painel':
+    "CHECK (((origin = 'admin'::text) OR (publication_status <> 'draft'::text)))",
   // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
   // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
   'public.network_events.network_events_autor_da_comunidade':

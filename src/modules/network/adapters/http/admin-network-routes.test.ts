@@ -57,6 +57,8 @@ interface Bancada {
   readonly avisos: { assunto: string; linhas: readonly string[] }[];
   readonly janelas: string[];
   quebrarTrilha: boolean;
+  /** O relogio da bancada, mutavel: ver o comentario em `bancada()`. */
+  agora: Instant;
 }
 
 let contador = 0;
@@ -86,10 +88,14 @@ function bancada(): Bancada {
     },
   };
   const avisos: { assunto: string; linhas: readonly string[] }[] = [];
-  const b = { quebrarTrilha: false } as { quebrarTrilha: boolean };
+  // `agora` e MUTAVEL desde 15/11/2026: publicar confere o relogio
+  // (`event_in_past`), e so dava para medir isso fazendo o tempo andar entre a
+  // criacao do rascunho e a publicacao. Todo caso que nao o escreve ve `AGORA`,
+  // como antes.
+  const b = { quebrarTrilha: false, agora: AGORA } as { quebrarTrilha: boolean; agora: Instant };
   const { repo, estado, semear } = repositorioDaRedeEmMemoria({
     trilhaFalha: () => b.quebrarTrilha,
-    relogio: () => AGORA,
+    relogio: () => b.agora,
   });
   let aleatorio = 0;
   const rede = new RedeAdministrativa({
@@ -111,7 +117,7 @@ function bancada(): Bancada {
         throw new Error('nao usado');
       },
     },
-    clock: { now: () => AGORA },
+    clock: { now: () => b.agora },
     urlDeMidia: (chave) => `https://midia.bichu.test/${chave}`,
     baseDoPerfilDoInstagram: 'https://perfil.exemplo.test',
     registrarOcorrencia: () => undefined,
@@ -126,7 +132,7 @@ function bancada(): Bancada {
   return Object.assign(b, { app, rede, estado, semear, avisos, janelas });
 }
 
-type Metodo = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 async function chamar(
   b: Bancada,
@@ -188,25 +194,381 @@ function acoesNaTrilha(b: Bancada): string[] {
   return b.estado().trilha.map((t) => t.action);
 }
 
+/**
+ * Cria E PUBLICA, que e o que a criacao sozinha fazia ate 15/11/2026 (ADR-0027
+ * item 25). Existe para os casos que precisam de encontro PUBLICADO como ponto
+ * de partida -- cancelar, mover, mudar acesso, fila de pedidos --, e nao para
+ * esconder o rascunho: os casos que medem a criacao chamam o POST direto e
+ * afirmam `draft`.
+ *
+ * Devolve a resposta da PUBLICACAO, porque e dela que saem o `ETag` e a versao
+ * que as operacoes seguintes precisam no `If-Match`.
+ */
+async function criarPublicado(
+  b: Bancada,
+  corpo: Record<string, unknown> = PRACA,
+): Promise<Awaited<ReturnType<typeof chamar>>> {
+  const criado = await chamar(b, 'POST', '/admin/network/events', { corpo });
+  assert.equal(criado.status, 201, criado.bruto);
+  const slug = criado.corpo['slug'] as string;
+  const publicado = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: criado.etag ?? '' });
+  assert.equal(publicado.status, 200, publicado.bruto);
+  return publicado;
+}
+
 void describe('rotas da escrita administrativa da Rede, dentro da guarda', () => {
   let b: Bancada;
   beforeEach(() => {
     b = bancada();
   });
 
-  void it('criar publica, devolve ETag, nao leva UUID nem autor, grava a trilha e avisa os administradores', async () => {
+  /**
+   * O caso virou do avesso em 15/11/2026 (ADR-0027 item 25). Ele se chamava
+   * "criar publica (...) e avisa os administradores", e media exatamente o que o
+   * cliente pediu para PARAR de acontecer. As duas assercoes que mudaram de
+   * sinal -- `publication_status` e a contagem de avisos -- sao a decisao dele.
+   */
+  void it('criar NASCE RASCUNHO, sem published_at e SEM avisar ninguem, devolve ETag, nao leva UUID nem autor e grava a trilha', async () => {
     const r = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     assert.equal(r.status, 201, r.bruto);
     assert.equal(r.etag, '"1"');
-    assert.equal(r.corpo['publication_status'], 'published');
+    assert.equal(r.corpo['publication_status'], 'draft');
+    assert.equal(r.corpo['published_at'], null, 'rascunho ganhou instante de publicacao');
     assert.equal(r.corpo['origin'], 'admin');
     assert.equal(r.corpo['slug'], 'caminhada-no-parque');
     assert.deepEqual(r.corpo['accepted_sizes'], ['P', 'M', 'G', 'GG']);
     assert.doesNotMatch(r.bruto, UUID);
     assert.doesNotMatch(r.bruto, /created_by/);
     assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
+    assert.equal(b.avisos.length, 0, 'criar rascunho avisou os administradores');
+  });
+
+  void it('publicar o rascunho: vira published com published_at, grava a trilha propria e SO AI avisa os administradores', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    const r = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: criado.etag ?? '' });
+    assert.equal(r.status, 200, r.bruto);
+    assert.equal(r.etag, '"2"');
+    assert.equal(r.corpo['publication_status'], 'published');
+    assert.equal(r.corpo['published_at'], new Date(AGORA).toISOString());
+    assert.doesNotMatch(r.bruto, UUID);
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.published']);
     assert.equal(b.avisos.length, 1);
-    assert.match(b.avisos[0]?.assunto ?? '', /Evento criado/);
+    assert.match(b.avisos[0]?.assunto ?? '', /Evento publicado/);
+    assert.match(b.avisos[0]?.linhas.join('\n') ?? '', /ja aparece no app|já aparece no app/);
+  });
+
+  void it('publicar duas vezes recusa: NAO e idempotente, ao contrario da Loja, e o segundo aviso nao sai', async () => {
+    const publicado = await criarPublicado(b);
+    const slug = String(publicado.corpo['slug']);
+    const denovo = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: publicado.etag ?? '' });
+    assert.equal(denovo.status, 400, denovo.bruto);
+    assert.deepEqual(codigos(denovo.corpo), ['event_not_draft']);
+    assert.equal(b.avisos.length, 1, 'o aviso saiu duas vezes para a mesma publicacao');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.published']);
+  });
+
+  void it('publicar o cancelado e o removido recusa com o mesmo event_not_draft: publicar nao ressuscita', async () => {
+    const publicado = await criarPublicado(b);
+    const slug = String(publicado.corpo['slug']);
+    const cancelado = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
+      corpo: { note: 'Obra na praca.' },
+      ifMatch: publicado.etag ?? '',
+    });
+    assert.equal(cancelado.status, 200, cancelado.bruto);
+    const tentativa = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: cancelado.etag ?? '' });
+    assert.equal(tentativa.status, 400, tentativa.bruto);
+    assert.deepEqual(codigos(tentativa.corpo), ['event_not_draft']);
+
+    const outro = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, slug: 'para-remover' } });
+    const removido = await chamar(b, 'DELETE', '/admin/network/events/para-remover', { ifMatch: outro.etag ?? '' });
+    assert.equal(removido.status, 204, removido.bruto);
+    const depois = await chamar(b, 'PUT', '/admin/network/events/para-remover/publication', { ifMatch: '"2"' });
+    assert.equal(depois.status, 400, depois.bruto);
+    assert.deepEqual(codigos(depois.corpo), ['event_not_draft']);
+  });
+
+  void it('publicar rascunho que ja passou recusa com event_in_past, e o rascunho continua draft', async () => {
+    // Comeca no futuro -- a criacao recusa encontro passado --, e e o RELOGIO da
+    // bancada que anda para depois do fim.
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    assert.equal(criado.status, 201, criado.bruto);
+    const slug = String(criado.corpo['slug']);
+    b.agora = Date.UTC(2026, 9, 11, 12, 0, 0) as Instant;
+    const r = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: criado.etag ?? '' });
+    assert.equal(r.status, 400, r.bruto);
+    assert.deepEqual(codigos(r.corpo), ['event_in_past']);
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['publication_status'], 'draft');
+    assert.equal(b.avisos.length, 0);
+  });
+
+  void it('publicar sem If-Match e com If-Match velho: 428 e 412, e nada publica', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    const sem = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`);
+    assert.equal(sem.status, 428, sem.bruto);
+    const velho = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: '"99"' });
+    assert.equal(velho.status, 412, velho.bruto);
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['publication_status'], 'draft');
+    assert.equal(b.avisos.length, 0);
+  });
+
+  void it('ISCA: publicar sem sessao e 401, e como tutor e 403; o rascunho nao publica nos dois', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    const semSessao = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, {
+      conta: 'nenhuma',
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(semSessao.status, 401, semSessao.bruto);
+    const tutor = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, {
+      conta: 'tutor',
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(tutor.status, 403, tutor.bruto);
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['publication_status'], 'draft');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
+    assert.equal(b.avisos.length, 0);
+  });
+
+  // ------------------------------------------------------------------------
+  // Editar o rascunho antes de publicar (decisao do cliente, 15/11/2026)
+  // ------------------------------------------------------------------------
+
+  /**
+   * O CASO QUE PROVA A CONDICAO, com os dois estados LADO A LADO na mesma
+   * bancada, movidos pela MESMA rota e com o MESMO corpo.
+   *
+   * **Ele reprova se alguem tirar a condicao do aviso**, nos dois sentidos: se o
+   * rascunho passar a avisar, a primeira contagem vai de 0 para 1; se o
+   * publicado parar de avisar, a segunda nao acha o assunto. Um caso que so
+   * afirmasse "rascunho nao avisa" ficaria verde com o aviso desligado para
+   * todo mundo -- e seria a pior forma de passar, porque apagaria a trava de T11
+   * sem reprovar em lugar nenhum.
+   */
+  void it('mover rascunho NAO avisa; mover publicado AVISA; a trilha sai nos DOIS', async () => {
+    const mudanca = {
+      corpo: { starts_at: '2026-10-12T12:00:00Z', ends_at: '2026-10-12T14:00:00Z', reason: 'Corrigindo a data.' },
+    };
+
+    // --- rascunho: muda, grava na trilha, e NAO avisa ---------------------
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slugR = String(rascunho.corpo['slug']);
+    const movidoR = await chamar(b, 'POST', `/admin/network/events/${slugR}/relocation`, {
+      ...mudanca,
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(movidoR.status, 200, movidoR.bruto);
+    assert.equal(movidoR.corpo['starts_at'], '2026-10-12T12:00:00.000Z');
+    assert.equal(movidoR.corpo['publication_status'], 'draft', 'mover publicou o rascunho');
+    assert.equal(movidoR.corpo['published_at'], null);
+    assert.equal(b.avisos.length, 0, 'mover um rascunho avisou os administradores: ninguem ve esse encontro ainda');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.relocated']);
+
+    // --- publicado: o CONTROLE POSITIVO, mesma rota, mesmo corpo ----------
+    const publicado = await criarPublicado(b, { ...PRACA, slug: 'outro-para-mover' });
+    const antesDoAviso = b.avisos.length;
+    const movidoP = await chamar(b, 'POST', '/admin/network/events/outro-para-mover/relocation', {
+      ...mudanca,
+      ifMatch: publicado.etag ?? '',
+    });
+    assert.equal(movidoP.status, 200, movidoP.bruto);
+    assert.equal(
+      b.avisos.length,
+      antesDoAviso + 1,
+      'mover um encontro PUBLICADO parou de avisar os administradores: a trava de T11 caiu',
+    );
+    assert.match(b.avisos.at(-1)?.assunto ?? '', /Evento movido/);
+    assert.match(b.avisos.at(-1)?.linhas.join('\n') ?? '', /Motivo informado: Corrigindo a data\./);
+    assert.deepEqual(acoesNaTrilha(b), [
+      'admin.network_event.created',
+      'admin.network_event.relocated',
+      'admin.network_event.created',
+      'admin.network_event.published',
+      'admin.network_event.relocated',
+    ]);
+  });
+
+  void it('rascunho VENCIDO volta a ser publicavel depois de mover a data', async () => {
+    // O caminho de saida que a decisao de 15/11/2026 abriu. Antes dela a unica
+    // saida era remover e cadastrar outro.
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(rascunho.corpo['slug']);
+    b.agora = Date.UTC(2026, 9, 11, 12, 0, 0) as Instant;
+
+    // Vencido: publicar recusa.
+    const recusado = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, {
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(recusado.status, 400, recusado.bruto);
+    assert.deepEqual(codigos(recusado.corpo), ['event_in_past']);
+
+    // Mover para o passado continua recusado, e com o mesmo codigo: a regra de
+    // horario vale igual no rascunho.
+    const paraOPassado = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { starts_at: '2026-10-05T12:00:00Z', ends_at: '2026-10-05T14:00:00Z', reason: 'Para tras.' },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(paraOPassado.status, 400, paraOPassado.bruto);
+    assert.deepEqual(codigos(paraOPassado.corpo), ['event_in_past']);
+
+    // Para o futuro: passa, sem aviso.
+    const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { starts_at: '2026-10-20T12:00:00Z', ends_at: '2026-10-20T14:00:00Z', reason: 'Remarcando.' },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(movido.status, 200, movido.bruto);
+    assert.equal(b.avisos.length, 0);
+
+    // E agora publica.
+    const publicado = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, {
+      ifMatch: movido.etag ?? '',
+    });
+    assert.equal(publicado.status, 200, publicado.bruto);
+    assert.equal(publicado.corpo['publication_status'], 'published');
+    assert.equal(b.avisos.length, 1, 'o aviso da publicacao nao saiu');
+    assert.match(b.avisos[0]?.assunto ?? '', /Evento publicado/);
+  });
+
+  void it('mover cancelado e removido continua recusando com event_not_published', async () => {
+    const publicado = await criarPublicado(b);
+    const slug = String(publicado.corpo['slug']);
+    const cancelado = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
+      corpo: { note: 'Obra na praca.' },
+      ifMatch: publicado.etag ?? '',
+    });
+    assert.equal(cancelado.status, 200, cancelado.bruto);
+    const mover = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { starts_at: '2026-10-12T12:00:00Z', reason: 'Tentando mover o cancelado.' },
+      ifMatch: cancelado.etag ?? '',
+    });
+    assert.equal(mover.status, 400, mover.bruto);
+    assert.deepEqual(codigos(mover.corpo), ['event_not_published']);
+
+    const outro = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, slug: 'rascunho-removido' } });
+    const removido = await chamar(b, 'DELETE', '/admin/network/events/rascunho-removido', { ifMatch: outro.etag ?? '' });
+    assert.equal(removido.status, 204, removido.bruto);
+    const depois = await chamar(b, 'POST', '/admin/network/events/rascunho-removido/relocation', {
+      corpo: { starts_at: '2026-10-12T12:00:00Z', reason: 'Tentando mover o removido.' },
+      ifMatch: '"2"',
+    });
+    assert.equal(depois.status, 400, depois.bruto);
+    assert.deepEqual(codigos(depois.corpo), ['event_not_published']);
+  });
+
+  /**
+   * O par do caso de mover, para a condicao de acesso (decisao do cliente de
+   * 15/11/2026, a terceira do dia): *"Sim, abrir junto"*.
+   *
+   * Mesma forma e mesma razao: os dois estados lado a lado, mesma rota, mesmo
+   * corpo, e a assercao reprova nos DOIS sentidos.
+   */
+  void it('mudar acesso do rascunho NAO avisa; do publicado AVISA; a trilha sai nos DOIS', async () => {
+    const fechar = { corpo: { visibility: 'private', reason: 'Passou a ser fechado.' } };
+
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slugR = String(rascunho.corpo['slug']);
+    const mudadoR = await chamar(b, 'POST', `/admin/network/events/${slugR}/access`, {
+      ...fechar,
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(mudadoR.status, 200, mudadoR.bruto);
+    assert.equal(mudadoR.corpo['visibility'], 'private');
+    assert.equal(mudadoR.corpo['publication_status'], 'draft', 'mudar o acesso publicou o rascunho');
+    assert.equal(b.avisos.length, 0, 'mudar o acesso de um rascunho avisou os administradores');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.access_changed']);
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criarPublicado(b, { ...PRACA, slug: 'outro-para-acesso' });
+    const antesDoAviso = b.avisos.length;
+    const mudadoP = await chamar(b, 'POST', '/admin/network/events/outro-para-acesso/access', {
+      ...fechar,
+      ifMatch: publicado.etag ?? '',
+    });
+    assert.equal(mudadoP.status, 200, mudadoP.bruto);
+    assert.equal(
+      b.avisos.length,
+      antesDoAviso + 1,
+      'mudar o acesso de um encontro PUBLICADO parou de avisar: a trava caiu junto com a do rascunho',
+    );
+    assert.match(b.avisos.at(-1)?.assunto ?? '', /Condição de acesso alterada/);
+  });
+
+  void it('ISCA: valor do rascunho se corrige sem aviso, e o `slug` do privado e gerado igual', async () => {
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(rascunho.corpo['slug']);
+    const pago = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: {
+        admission: { kind: 'paid', price: { amount: 2500, currency: 'BRL', unit: 'per_dog' } },
+        reason: 'O valor estava errado no rascunho.',
+      },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(pago.status, 200, pago.bruto);
+    assert.deepEqual(pago.corpo['admission'], {
+      kind: 'paid',
+      price: { amount: 2500, currency: 'BRL', unit: 'per_dog' },
+    });
+    assert.equal(pago.corpo['slug'], slug, 'o slug mudou sem a visibilidade mudar');
+    assert.equal(b.avisos.length, 0);
+
+    // Publico que vira privado ganha slug novo tambem no rascunho; ali a troca
+    // nao custa nada, porque o endereco antigo nunca saiu do painel.
+    const privado = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: { visibility: 'private', reason: 'Fechando antes de publicar.' },
+      ifMatch: pago.etag ?? '',
+    });
+    assert.equal(privado.status, 200, privado.bruto);
+    assert.notEqual(privado.corpo['slug'], slug);
+    assert.equal((await chamar(b, 'GET', `/admin/network/events/${slug}`)).status, 404);
+    assert.equal(b.avisos.length, 0);
+  });
+
+  /**
+   * A ISCA DE ESCOPO, ATUALIZADA. Ela nasceu cobrando que
+   * `changeAdminNetworkEventAccess` NAO fosse aberta ao rascunho sem decisao, e
+   * o cliente decidiu abri-la em 15/11/2026. Ela nao foi removida: passou a
+   * cobrar a UNICA rota administrativa do encontro que ainda exige `published` e
+   * que ninguem decidiu abrir -- `cancelAdminNetworkEvent`.
+   *
+   * E ela tem de continuar fechada pelo motivo do produto, nao por inercia:
+   * cancelar existe para dizer a quem JA VIU o encontro no app que ele nao vai
+   * acontecer (o cancelado fica visivel ate o fim previsto, decisao de 23/09).
+   * Rascunho nunca esteve no app, nao ha a quem dizer, e quem desiste de um
+   * rascunho usa `removeAdminNetworkEvent` -- que funciona nele.
+   */
+  void it('ISCA DE ESCOPO: cancelar o rascunho continua recusando, e remover funciona nele', async () => {
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(rascunho.corpo['slug']);
+    const cancelar = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
+      corpo: { note: 'Tentando cancelar um rascunho.' },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(cancelar.status, 400, cancelar.bruto);
+    assert.deepEqual(codigos(cancelar.corpo), ['event_not_published']);
+    assert.equal(b.avisos.length, 0);
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
+
+    // E a saida que existe para o rascunho: remover.
+    const removido = await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: rascunho.etag ?? '' });
+    assert.equal(removido.status, 204, removido.bruto);
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.removed']);
+  });
+
+  void it('ISCA: com a trilha falhando, publicar NAO muda o estado e ninguem e avisado', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    b.quebrarTrilha = true;
+    const r = await chamar(b, 'PUT', `/admin/network/events/${slug}/publication`, { ifMatch: criado.etag ?? '' });
+    assert.equal(r.status, 500, r.bruto);
+    b.quebrarTrilha = false;
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['publication_status'], 'draft', 'a publicacao sobreviveu a falha da trilha');
+    assert.equal(lido.corpo['published_at'], null);
+    assert.equal(b.avisos.length, 0, 'o aviso saiu de uma publicacao desfeita');
   });
 
   void it('ISCA: tutor e recusado com 403, sem escrita e sem linha de trilha', async () => {
@@ -228,7 +590,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('ISCA (07/10): sem sessao, cancelar, remover, mover e mudar acesso continuam 401, e nada muda', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const criado = await criarPublicado(b);
     const slug = String(criado.corpo['slug']);
     const etag = criado.etag ?? '';
     const semSessao = { conta: 'nenhuma' as const, ifMatch: etag };
@@ -250,12 +612,14 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     }
     const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
     assert.equal(lido.corpo['publication_status'], 'published');
-    assert.equal(lido.etag, '"1"');
-    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
+    // `"2"`, e nao `"1"`: desde 15/11/2026 chegar a `published` sao duas escritas,
+    // criar o rascunho e publicar.
+    assert.equal(lido.etag, '"2"');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.published']);
   });
 
   void it('ISCA (07/10): so com a sessao, mover e mudar acesso passam sem senha, avisam e gravam; nenhuma janela e consumida', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const criado = await criarPublicado(b);
     const slug = String(criado.corpo['slug']);
     const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
       corpo: { starts_at: '2026-10-11T12:00:00Z', ends_at: '2026-10-11T14:00:00Z', reason: 'Chuva no sabado.' },
@@ -270,14 +634,18 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.deepEqual(b.janelas, [], 'alguma escrita ainda pediu janela de reautenticacao');
     assert.deepEqual(acoesNaTrilha(b), [
       'admin.network_event.created',
+      'admin.network_event.published',
       'admin.network_event.relocated',
       'admin.network_event.access_changed',
     ]);
+    // 3, como antes de 15/11/2026, mas por outra conta: era criar + mover +
+    // acesso, agora e publicar + mover + acesso. O aviso nao foi acrescentado,
+    // foi MOVIDO da criacao para a publicacao.
     assert.equal(b.avisos.length, 3);
   });
 
   void it('so com a sessao (07/10): cancelar avisa e grava; remover e terminal e responde 204', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const criado = await criarPublicado(b);
     const slug = String(criado.corpo['slug']);
     const cancelado = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
       corpo: { note: 'A praca vai estar em obra.' },
@@ -285,6 +653,8 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     });
     assert.equal(cancelado.status, 200, cancelado.bruto);
     assert.equal(cancelado.corpo['publication_status'], 'cancelled');
+    // 2, como antes, mas por outra conta: era criar + cancelar, agora e publicar
+    // + cancelar. Criar rascunho nao avisa (15/11/2026).
     assert.equal(b.avisos.length, 2);
 
     const deNovo = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
@@ -300,11 +670,12 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.equal(removido.status, 204, removido.bruto);
     const editar = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
       corpo: { title: 'Outro titulo' },
-      ifMatch: '"3"',
+      ifMatch: '"4"',
     });
     assert.deepEqual(codigos(editar.corpo), ['event_removed']);
     assert.deepEqual(acoesNaTrilha(b), [
       'admin.network_event.created',
+      'admin.network_event.published',
       'admin.network_event.cancelled',
       'admin.network_event.removed',
     ]);
@@ -354,7 +725,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('mover grava point_changed e NUNCA a coordenada na trilha; o aviso diz o antes e o depois', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    const criado = await criarPublicado(b, PRIVADO);
     const slug = String(criado.corpo['slug']);
     const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
       corpo: {
@@ -393,7 +764,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('publico que vira privado ganha slug novo, e o antigo passa a 404', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const criado = await criarPublicado(b);
     const antigo = String(criado.corpo['slug']);
     const mudado = await chamar(b, 'POST', `/admin/network/events/${antigo}/access`, {
       corpo: { visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } }, reason: 'Passou a ser fechado.' },
@@ -481,6 +852,13 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.equal(criado.status, 201, criado.bruto);
     assert.equal(criado.corpo['street_address'], ENDERECO);
     assert.equal((criado.corpo['place'] as Record<string, unknown>)['point'], null);
+    // O endereco continua sendo cobrado e aparado NA CRIACAO; o que mudou em
+    // 15/11/2026 e que ele chega ao aviso na PUBLICACAO, porque e la que o aviso
+    // passou a sair. A criacao nao avisa ninguem.
+    assert.equal(b.avisos.length, 0);
+    await chamar(b, 'PUT', `/admin/network/events/${String(criado.corpo['slug'])}/publication`, {
+      ifMatch: criado.etag ?? '',
+    });
     assert.match(b.avisos.at(-1)?.linhas.join('\n') ?? '', /Fradique Coutinho/);
 
     const semEndereco = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, title: 'Sem endereco' } });
@@ -494,9 +872,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('ISCA T11 (01/10): o endereco NAO muda pelo PATCH; muda so por mover, com motivo e aviso (sem senha desde 07/10)', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', {
-      corpo: { ...PRACA, street_address: 'Praca Benedito Calixto, s/n - Pinheiros' },
-    });
+    const criado = await criarPublicado(b, { ...PRACA, street_address: 'Praca Benedito Calixto, s/n - Pinheiros' });
     const slug = String(criado.corpo['slug']);
     const pelaEdicao = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
       corpo: { street_address: 'Rua Outra, 99 - Centro' },
@@ -605,7 +981,10 @@ void describe('a fila de pedidos (D53 a D56)', () => {
 
   beforeEach(async () => {
     b = bancada();
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    // PUBLICADO, e nao so criado: a fila so decide pedido de encontro aberto
+    // (`encontroAbertoParaDecisao` exige `published`), e desde 15/11/2026 criar
+    // nao publica.
+    const criado = await criarPublicado(b, PRIVADO);
     slug = String(criado.corpo['slug']);
     const eventoId = [...b.estado().encontros.values()][0]?.id ?? '';
     b.semear((e) => {
@@ -749,8 +1128,8 @@ void describe('ISCA (02/11): a edicao administrativa da Rede nao recebe valor qu
   const PAGO = { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } as const;
 
   void it('encontro PRIVADO que muda so a condicao de acesso continua PRIVADO', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
-    assert.equal(criado.status, 201, criado.bruto);
+    // Publicado: `mudarAcesso` exige `published` (`event_not_published`).
+    const criado = await criarPublicado(b, PRIVADO);
     assert.equal(criado.corpo['visibility'], 'private');
     const slug = String(criado.corpo['slug']);
 
@@ -792,7 +1171,9 @@ void describe('ISCA (02/11): a edicao administrativa da Rede nao recebe valor qu
     assert.equal(lido.corpo['visibility'], 'private', 'um corpo que nao muda nada mudou a visibilidade');
     assert.equal(lido.etag, criado.etag, 'a versao andou sem ninguem mandar mudanca');
     assert.ok(!acoesNaTrilha(b).includes('admin.network_event.access_changed'));
-    assert.equal(b.avisos.length, 1, 'saiu aviso de mudanca de acesso que ninguem pediu');
+    // 0, e nao 1: era o aviso da criacao, que saiu dela em 15/11/2026. O
+    // encontro aqui e rascunho, e nenhum aviso deve ter saido.
+    assert.equal(b.avisos.length, 0, 'saiu aviso de mudanca de acesso que ninguem pediu');
   });
 
   void it('`nothing_to_change`: o ramo da aplicacao que a borda nunca alcanca, por `minProperties: 2`', async () => {

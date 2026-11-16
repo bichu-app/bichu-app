@@ -188,9 +188,26 @@ export default function FormularioDoEncontro() {
 
   const sujo = fase === 'pronto' && comparavel(f) !== comparavel(editando ? base : formularioVazio());
   const publicado = encontro?.publication_status === 'published';
+  const rascunho = encontro?.publication_status === 'draft';
   const cancelado = encontro?.publication_status === 'cancelled';
   const removido = encontro?.publication_status === 'removed';
-  const travarLugarEAcesso = editando && !publicado;
+  /**
+   * UMA trava, de novo, e e a terceira forma que esta linha tem no mesmo dia.
+   *
+   * Ela era `editando && !publicado`, e estava certa enquanto rascunho nao
+   * existia: os unicos estados nao-publicados eram `cancelled` e `removed`, que
+   * de fato nao mudam mais nada. Com o rascunho ela passou a trancar o que o
+   * cliente pediu para abrir, e virou DUAS -- lugar aberto no rascunho, acesso
+   * ainda fechado -- porque a decisao daquele momento nomeava *"data, horario e
+   * lugar"* e o servidor ainda recusava a mudanca de acesso.
+   *
+   * Com *"Sim, abrir junto"* (15/11/2026) as duas condicoes ficaram IDENTICAS, e
+   * manter duas expressoes iguais com nomes diferentes e convite a divergirem na
+   * proxima mudanca de uma delas. Voltam a ser uma, agora com a condicao certa:
+   * o que fecha a edicao e o encontro ter saido de circulacao
+   * (`cancelled`/`removed`), e nao ele ainda nao ter entrado.
+   */
+  const travarLugarEAcesso = editando && (cancelado || removido);
 
   function sair(aviso: string) {
     liberado.current = true;
@@ -221,8 +238,11 @@ export default function FormularioDoEncontro() {
       setSalvando(true);
       const r = await rede.criar(montarCriacao(f));
       setSalvando(false);
-      if (r.ok) sair('Evento publicado. Ele já aparece na Rede do app.');
-      else tratarFalha(r.falha, 'publicar o evento');
+      // "Rascunho salvo", e nao "Evento publicado": desde 15/11/2026 a criacao
+      // NAO publica (ADR-0027 item 25), e a mensagem antiga dizia a quem opera
+      // que o encontro estava no app quando ele nao estava em lugar nenhum.
+      if (r.ok) sair('Rascunho salvo. Ele não aparece no app até você publicar.');
+      else tratarFalha(r.falha, 'salvar o rascunho');
       return;
     }
     if (!encontro || !etag) return;
@@ -339,6 +359,12 @@ export default function FormularioDoEncontro() {
       {encontro?.timing === 'ended' && publicado && (
         <Banner tipo="info">Este evento já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.</Banner>
       )}
+      {rascunho && (
+        <Banner tipo="info">
+          Este evento está em rascunho e não aparece no app. Você pode corrigir qualquer dado, inclusive data, horário, local,
+          quem pode participar e o valor, e ninguém é avisado.
+        </Banner>
+      )}
       {cancelado && (
         <Banner tipo="info">
           Este evento foi cancelado. Você ainda pode corrigir título, descrição, fotos e detalhes; data, local e acesso não mudam mais.
@@ -350,7 +376,7 @@ export default function FormularioDoEncontro() {
         <ResumoDosCampos
           referencia={resumo}
           erros={erros.map((e) => ({ campo: idDoCampo(e.campo), rotulo: e.rotulo }))}
-          acao={editando ? 'salvar' : 'publicar'}
+          acao={editando ? 'salvar' : 'salvar o rascunho'}
         />
       )}
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
@@ -536,7 +562,7 @@ export default function FormularioDoEncontro() {
         </Link>
         <button type="submit" className="btn pri" aria-busy={salvando || undefined}>
           {salvando && <span className="spin" aria-hidden="true" />}
-          {editando ? 'Salvar alterações' : 'Publicar evento'}
+          {editando ? 'Salvar alterações' : 'Salvar rascunho'}
         </button>
       </div>
 
@@ -546,7 +572,11 @@ export default function FormularioDoEncontro() {
           titulo={tituloDaMudanca(dialogo.plano)}
           corpo={corpoDaMudanca(encontro, f, dialogo.plano)}
           rotuloDoMotivo="Motivo"
-          ajudaDoMotivo="Vai no e-mail que avisa os administradores. Não aparece no app."
+          ajudaDoMotivo={
+            rascunho
+              ? 'Fica registrado para a equipe. Em rascunho ninguém é avisado por e-mail.'
+              : 'Vai no e-mail que avisa os administradores. Não aparece no app.'
+          }
           rotuloDaAcao="Salvar a mudança"
           perigo={false}
           executar={(motivo) => executarComMotivo(dialogo.plano, motivo)}
@@ -557,6 +587,11 @@ export default function FormularioDoEncontro() {
   );
 }
 
+/**
+ * O que a trava devolve ao valor original antes de montar o plano. Voltou a ser
+ * uma funcao so quando as duas travas voltaram a ser uma (15/11/2026): ver
+ * `travarLugarEAcesso`.
+ */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
   const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
   return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };

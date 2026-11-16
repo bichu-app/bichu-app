@@ -431,6 +431,14 @@ export function tituloDaMudanca(plano: PlanoDeEdicao): string {
 
 export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano: PlanoDeEdicao): string[] {
   const frases: string[] = [];
+  /**
+   * RASCUNHO fala de outra coisa (decisao do cliente de 15/11/2026, ADR-0027
+   * item 25). O texto antigo prometia "O app passa a mostrar ..." e tranquilizava
+   * com "Quem usa o app nao e avisado da mudanca" -- as duas frases falsas para
+   * um encontro que nao esta no app. O estado vem de `original`, que a funcao ja
+   * recebia: nenhum parametro novo.
+   */
+  const ehRascunho = original.publication_status === 'draft';
   if (plano.mudanca) {
     const dados: string[] = [];
     if (plano.oQueMudou.includes('data') || plano.oQueMudou.includes('horário')) {
@@ -440,13 +448,31 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     }
     if (plano.mudanca.place) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
     const partes: string[] = [];
-    if (dados.length) partes.push(`O app passa a mostrar ${dados.join(', em ')}.`);
-    if (plano.mudanca.street_address !== undefined) {
-      partes.push(plano.mudanca.street_address ? `O endereço passa a ser ${plano.mudanca.street_address}.` : 'O endereço deixa de aparecer no app.');
+    if (dados.length) {
+      partes.push(ehRascunho ? `O rascunho passa a valer para ${dados.join(', em ')}.` : `O app passa a mostrar ${dados.join(', em ')}.`);
     }
-    partes.push('Quem usa o app não é avisado da mudança.');
+    if (plano.mudanca.street_address !== undefined) {
+      partes.push(
+        plano.mudanca.street_address
+          ? `O endereço passa a ser ${plano.mudanca.street_address}.`
+          : ehRascunho
+            ? 'O endereço sai do rascunho.'
+            : 'O endereço deixa de aparecer no app.',
+      );
+    }
+    partes.push(
+      ehRascunho
+        ? 'O evento continua fora do app, e ninguém é avisado: ele só aparece quando você publicar.'
+        : 'Quem usa o app não é avisado da mudança.',
+    );
     frases.push(partes.join(' '));
-    if (plano.mudanca.place?.point === null) frases.push('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
+    if (plano.mudanca.place?.point === null) {
+      frases.push(
+        ehRascunho
+          ? 'O ponto no mapa sai do rascunho, porque marcava o lugar anterior.'
+          : 'O mapa deixa de aparecer no app, porque mostrava o lugar anterior.',
+      );
+    }
     if (plano.mudanca.place && plano.mudanca.street_address === undefined && original.street_address) {
       frases.push(`O endereço continua: ${original.street_address}. Se mudou, corrija antes de confirmar.`);
     }
@@ -461,15 +487,38 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       if (adm.kind === 'paid' && adm.price && eraPago) novoValor = valorComoOAppMostra(adm.price.amount, adm.price.unit);
       else doEncontro.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
+    // "e o app mostra isso na hora" e falso no rascunho, pelo mesmo motivo das
+    // frases do lugar: o encontro nao esta no app (15/11/2026, ADR-0027 item 25).
+    //
+    // As tres frases do PUBLICADO ficam LETRA POR LETRA como estavam, virgula
+    // inclusive: elas passaram por QA (r5) e por UX (30 B3), e `dominio.test.ts`
+    // as fixa. A primeira escrita deste trecho juntou as duas variantes numa
+    // interpolacao comum e trocou ", e o app" por ". O app" -- reescrita de
+    // copy aprovada, de graca, que os testes pegaram.
+    const noApp = ehRascunho ? 'e nada disso aparece no app até você publicar' : 'e o app mostra isso na hora';
     if (doEncontro.length && novoValor) {
-      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. ${ehRascunho ? 'Nada disso aparece no app até você publicar.' : 'O app mostra isso na hora.'}`);
     } else if (novoValor) {
-      frases.push(`O valor do evento muda para ${novoValor}, e o app mostra isso na hora.`);
+      frases.push(`O valor do evento muda para ${novoValor}, ${noApp}.`);
     } else {
-      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, ${noApp}.`);
     }
-    if (plano.acesso.visibility === 'private') frases.push('O link antigo do evento para de funcionar.');
+    if (plano.acesso.visibility === 'private') {
+      // No rascunho o endereco antigo nunca saiu do painel, entao nao ha link
+      // circulando para "parar de funcionar" -- mas o `slug` muda igual, e quem
+      // tiver a aba aberta precisa saber.
+      frases.push(
+        ehRascunho
+          ? 'O endereço do evento é trocado por um gerado, e o anterior deixa de abrir.'
+          : 'O link antigo do evento para de funcionar.',
+      );
+    }
   }
-  if (plano.mudanca || plano.acesso) frases.push('Todos os administradores recebem um e-mail com o antes e o depois.');
+  // O e-mail a todos os administradores e CONDICIONAL AO ESTADO desde
+  // 15/11/2026 (ADR-0027 item 25): mover um rascunho nao avisa ninguem. Prometer
+  // o e-mail aqui seria descrever um efeito que nao acontece.
+  if ((plano.mudanca || plano.acesso) && !ehRascunho) {
+    frases.push('Todos os administradores recebem um e-mail com o antes e o depois.');
+  }
   return frases;
 }

@@ -111,7 +111,27 @@ function corpo(ajuste: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Cria o encontro E O PUBLICA, que e o que `criarEncontro` sozinho fazia ate
+ * 15/11/2026 (ADR-0027 item 25, decisao do cliente).
+ *
+ * A composicao mora NO AUXILIAR, e nao espalhada pelos casos, porque quase todo
+ * caso deste arquivo mede uma operacao SOBRE encontro publicado -- mover,
+ * cancelar, mudar acesso, galeria, fila de pedidos -- e para eles "publicado" e
+ * ponto de partida, nao o objeto da medicao. Quem mede o rascunho usa
+ * `criarRascunho`, logo abaixo, e os dois nomes dizem em que estado o encontro
+ * esta.
+ *
+ * Devolve o resultado da PUBLICACAO: e dele que saem a versao e o `ETag` que as
+ * operacoes seguintes precisam.
+ */
 async function criar(ajuste: Record<string, unknown> = {}) {
+  const rascunho = await criarRascunho(ajuste);
+  return r.publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+}
+
+/** Cria e PARA no rascunho, para quem mede o rascunho. */
+async function criarRascunho(ajuste: Record<string, unknown> = {}) {
   const criado = await r.criarEncontro(autor, corpo(ajuste));
   slugs.push(criado.recurso.slug);
   return criado;
@@ -213,9 +233,13 @@ after(async () => {
 });
 
 void describe('a escrita administrativa da Rede, contra Postgres', () => {
-  void it('criar publica, grava UMA linha de trilha pelo id interno, com a sessao, e sem a coordenada', async () => {
-    const criado = await criar({ place: { ...corpo().place, point: { lat: -23.561, lon: -46.655 } } });
-    assert.equal(criado.recurso.publication_status, 'published');
+  void it('criar NASCE RASCUNHO com published_at nulo, grava UMA linha de trilha pelo id interno, com a sessao, e sem a coordenada', async () => {
+    // Era "criar publica". A decisao do cliente de 15/11/2026 (ADR-0027 item 25)
+    // virou a assercao do avesso, e por isso este caso usa `criarRascunho`: ele
+    // mede a CRIACAO, e nao o encontro publicado como ponto de partida.
+    const criado = await criarRascunho({ place: { ...corpo().place, point: { lat: -23.561, lon: -46.655 } } });
+    assert.equal(criado.recurso.publication_status, 'draft');
+    assert.equal(criado.recurso.published_at, null);
     assert.deepEqual(criado.recurso.place.point, { lat: -23.561, lon: -46.655 });
     const id = await idDoEncontro(criado.recurso.slug);
     const trilha = await trilhaDe(id);
@@ -229,6 +253,192 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     assert.ok(!JSON.stringify(trilha).includes('-23.561'), 'a coordenada foi para a trilha');
     const peloSlug = await banco.db.selectFrom('audit.events').select('id').where('resource_id', '=', criado.recurso.slug).execute();
     assert.equal(peloSlug.length, 0);
+  });
+
+  /**
+   * O ciclo inteiro contra o banco de verdade (ADR-0027 item 25). Aqui importa o
+   * que o `CHECK network_events_visivel_foi_publicado` faz nos dois sentidos: ele
+   * ACEITA `draft` com `published_at` nulo, e EXIGE o instante em `published`.
+   * Se a publicacao esquecesse de gravar `published_at`, o banco recusaria -- e e
+   * este caso que prova que ela nao esquece.
+   */
+  void it('publicar o rascunho grava published_at no banco, muda o estado e grava a trilha propria', async () => {
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+
+    const antes = await banco.db
+      .selectFrom('network_events')
+      .select(['publication_status', 'published_at'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+    assert.equal(antes.publication_status, 'draft');
+    assert.equal(antes.published_at, null, 'o rascunho nasceu com instante de publicacao');
+
+    const publicado = await r.publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+    assert.equal(publicado.recurso.publication_status, 'published');
+    assert.notEqual(publicado.recurso.published_at, null);
+
+    const depois = await banco.db
+      .selectFrom('network_events')
+      .select(['publication_status', 'published_at'])
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+    assert.equal(depois.publication_status, 'published');
+    assert.ok(depois.published_at instanceof Date, 'o banco ficou sem o instante da publicacao');
+
+    assert.deepEqual(
+      (await trilhaDe(id)).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.published'],
+    );
+
+    // Publicar de novo recusa: nao e idempotente (diverge de publishAdminStoreItem).
+    const erro = await r
+      .publicarEncontro(autor, rascunho.recurso.slug, publicado.etag)
+      .catch((e: unknown) => e);
+    assert.deepEqual(
+      ((erro as { errors?: { code: string }[] }).errors ?? []).map((c) => c.code),
+      ['event_not_draft'],
+    );
+  });
+
+  /**
+   * O aviso condicional ao estado, contra o Postgres (decisao do cliente de
+   * 15/11/2026): *"Sim, editar antes de publicar"*, e mover um rascunho nao
+   * avisa ninguem *"porque nao ha quem avisar"*.
+   *
+   * Os dois estados andam LADO A LADO, pela mesma rota e com o mesmo corpo, e a
+   * contagem de avisos e medida POR DIFERENCA -- `avisos` e um array de modulo
+   * que nenhum caso zera, entao contagem absoluta aqui mediria a ordem dos casos.
+   *
+   * Reprova nos dois sentidos: rascunho que passe a avisar quebra a primeira
+   * assercao, publicado que pare de avisar quebra a segunda.
+   */
+  void it('mover rascunho NAO avisa e mover publicado AVISA, com a trilha nos dois (contra Postgres)', async () => {
+    const mudanca = { starts_at: emDias(12, 12), ends_at: emDias(12, 14), reason: 'Corrigindo a data.' };
+
+    const rascunho = await criarRascunho();
+    const antesDoRascunho = avisos.length;
+    const movidoR = await r.moverEncontro(autor, rascunho.recurso.slug, rascunho.etag, mudanca);
+    assert.equal(movidoR.recurso.publication_status, 'draft', 'mover publicou o rascunho');
+    assert.equal(movidoR.recurso.published_at, null);
+    assert.equal(
+      avisos.length,
+      antesDoRascunho,
+      'mover um rascunho avisou os administradores: ninguem ve esse encontro ainda',
+    );
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(rascunho.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.relocated'],
+    );
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criar();
+    const antesDoPublicado = avisos.length;
+    await r.moverEncontro(autor, publicado.recurso.slug, publicado.etag, mudanca);
+    assert.equal(
+      avisos.length,
+      antesDoPublicado + 1,
+      'mover um encontro PUBLICADO parou de avisar os administradores: a trava de T11 caiu',
+    );
+    assert.match(avisos.at(-1) ?? '', /Evento movido/);
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(publicado.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.published', 'admin.network_event.relocated'],
+    );
+  });
+
+  /**
+   * O par do caso acima para a condicao de acesso (decisao do cliente de
+   * 15/11/2026, a terceira do dia): *"Sim, abrir junto"*. Mesma forma, mesma
+   * medicao por diferenca, e reprova nos dois sentidos.
+   */
+  void it('mudar acesso do rascunho NAO avisa e do publicado AVISA, com a trilha nos dois (contra Postgres)', async () => {
+    const fechar = { visibility: 'private' as const, reason: 'Fechando antes de publicar.' };
+
+    const rascunho = await criarRascunho();
+    const antesDoRascunho = avisos.length;
+    const mudadoR = await r.mudarAcesso(autor, rascunho.recurso.slug, rascunho.etag, fechar);
+    slugs.push(mudadoR.recurso.slug);
+    assert.equal(mudadoR.recurso.visibility, 'private');
+    assert.equal(mudadoR.recurso.publication_status, 'draft', 'mudar o acesso publicou o rascunho');
+    assert.equal(avisos.length, antesDoRascunho, 'mudar o acesso de um rascunho avisou os administradores');
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(mudadoR.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.access_changed'],
+    );
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criar();
+    const antesDoPublicado = avisos.length;
+    const mudadoP = await r.mudarAcesso(autor, publicado.recurso.slug, publicado.etag, fechar);
+    slugs.push(mudadoP.recurso.slug);
+    assert.equal(
+      avisos.length,
+      antesDoPublicado + 1,
+      'mudar o acesso de um encontro PUBLICADO parou de avisar: a trava caiu junto com a do rascunho',
+    );
+    assert.match(avisos.at(-1) ?? '', /Condição de acesso alterada/);
+  });
+
+  void it('ISCA DE ESCOPO (contra Postgres): cancelar o rascunho continua recusando; remover funciona nele', async () => {
+    // A unica rota administrativa do encontro que ainda exige `published`.
+    // Cancelar existe para avisar quem JA VIU o encontro no app; rascunho nunca
+    // esteve la, e quem desiste dele remove.
+    const rascunho = await criarRascunho();
+    const erro = await r
+      .cancelarEncontro(autor, rascunho.recurso.slug, rascunho.etag, { note: 'Tentando cancelar um rascunho.' })
+      .catch((e: unknown) => e);
+    assert.equal(codigo(erro), 'event_not_published');
+    await r.removerEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(rascunho.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.removed'],
+    );
+  });
+
+  void it('rascunho vencido volta a ser publicavel depois de mover a data (contra Postgres)', async () => {
+    // Nasce no FUTURO, porque a criacao recusa encontro passado, e o relogio
+    // deste arquivo e o de verdade. O que envelhece o rascunho e o UPDATE
+    // abaixo: ele simula o tempo que passou, que e a situacao que a decisao de
+    // 15/11/2026 veio consertar.
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+    await sql`update network_events
+                 set starts_at = now() - interval '3 days',
+                     ends_at   = now() - interval '3 days' + interval '2 hours'
+               where id = ${id}::uuid`.execute(banco.db);
+
+    const vencido = await r
+      .publicarEncontro(autor, rascunho.recurso.slug, rascunho.etag)
+      .catch((e: unknown) => e);
+    // `codigo()` devolve o codigo do CAMPO, e nao o tipo do problema: a
+    // assercao certa aqui e `event_in_past`, que diz por que a publicacao
+    // recusou, e nao so que ela recusou.
+    assert.equal(codigo(vencido), 'event_in_past');
+
+    const movido = await r.moverEncontro(autor, rascunho.recurso.slug, rascunho.etag, {
+      starts_at: emDias(14, 12),
+      ends_at: emDias(14, 14),
+      reason: 'Remarcando o rascunho vencido.',
+    });
+    const publicado = await r.publicarEncontro(autor, rascunho.recurso.slug, movido.etag);
+    assert.equal(publicado.recurso.publication_status, 'published');
+    assert.notEqual(publicado.recurso.published_at, null);
+  });
+
+  void it('ISCA: o banco recusa `published` sem instante, que e o que a publicacao grava', async () => {
+    // Sem este caso, o anterior ficaria verde mesmo se `published_at` fosse
+    // decorativo. Aqui o banco e quem fala.
+    const rascunho = await criarRascunho();
+    const id = await idDoEncontro(rascunho.recurso.slug);
+    const recusado = await sql`update network_events set publication_status = 'published' where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal(
+      (recusado as { constraint?: string }).constraint,
+      'network_events_visivel_foi_publicado',
+      'o banco aceitou `published` sem `published_at`',
+    );
   });
 
   void it('fatia 7: autor do painel so em encontro admin, autor do app so em encontro community (CHECK)', async () => {
@@ -437,19 +647,23 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
   void it('ISCA (hml 05/10): If-Match com o sufixo da borda ("-gzip", "-zstd") passa; versao velha com sufixo continua 412', async () => {
     const criado = await criar();
     const slug = criado.recurso.slug;
-    assert.equal(criado.etag, '"1"');
-    const comGzip = await r.alterarEncontro(autor, slug, '"1-gzip"', { title: 'Titulo pela borda gzip' });
-    assert.equal(comGzip.etag, '"2"');
-    const comZstd = await r.alterarEncontro(autor, slug, 'W/"2-zstd"', { title: 'Titulo pela borda zstd' });
-    assert.equal(comZstd.etag, '"3"');
+    // `"2"`, e nao `"1"`: desde 15/11/2026 chegar a `published` sao DUAS
+    // escritas (criar o rascunho e publicar), e `criar()` faz as duas. Os
+    // numeros abaixo andaram um, todos pelo mesmo motivo -- o que o caso mede e
+    // o sufixo da borda no `If-Match`, e nao a versao de partida.
+    assert.equal(criado.etag, '"2"');
+    const comGzip = await r.alterarEncontro(autor, slug, '"2-gzip"', { title: 'Titulo pela borda gzip' });
+    assert.equal(comGzip.etag, '"3"');
+    const comZstd = await r.alterarEncontro(autor, slug, 'W/"3-zstd"', { title: 'Titulo pela borda zstd' });
+    assert.equal(comZstd.etag, '"4"');
     // A mudanca de lugar, que foi a do log de hml, pelo mesmo caminho.
-    const movido = await r.moverEncontro(autor, slug, '"3-gzip"', { starts_at: emDias(11, 12), ends_at: emDias(11, 14), reason: 'Chuva.' });
-    assert.equal(movido.etag, '"4"');
+    const movido = await r.moverEncontro(autor, slug, '"4-gzip"', { starts_at: emDias(11, 12), ends_at: emDias(11, 14), reason: 'Chuva.' });
+    assert.equal(movido.etag, '"5"');
 
-    const velha = await r.alterarEncontro(autor, slug, '"3-gzip"', { title: 'Nao deve gravar' }).catch((e: unknown) => e);
+    const velha = await r.alterarEncontro(autor, slug, '"4-gzip"', { title: 'Nao deve gravar' }).catch((e: unknown) => e);
     assert.equal(codigo(velha), 'precondition-failed');
     const linha = await banco.db.selectFrom('network_events').select(['title', 'version']).where('slug', '=', slug).executeTakeFirstOrThrow();
-    assert.deepEqual(linha, { title: 'Titulo pela borda zstd', version: 4 });
+    assert.deepEqual(linha, { title: 'Titulo pela borda zstd', version: 5 });
   });
 
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {

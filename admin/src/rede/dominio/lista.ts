@@ -1,10 +1,16 @@
 import { dataEHora, hora } from './horario.ts';
 import type { Encontro, FiltrosDaLista, OrdemDaLista } from './tipos.ts';
 
-export type Filtro = 'todos' | 'agendados' | 'agora' | 'encerrados' | 'cancelados';
+export type Filtro = 'todos' | 'rascunhos' | 'agendados' | 'agora' | 'encerrados' | 'cancelados';
 
+/**
+ * `rascunhos` vem logo depois de `Todos`, e a posicao e a decisao: ele e a fila
+ * de aprovacao que o cliente pediu em 15/11/2026 (ADR-0027 item 25), e quem abre
+ * a tela para aprovar nao deve ter de caçar o filtro no fim da fileira.
+ */
 export const FILTROS: Record<Filtro, string> = {
   todos: 'Todos',
+  rascunhos: 'Rascunhos',
   agendados: 'Agendados',
   agora: 'Acontecendo agora',
   encerrados: 'Encerrados',
@@ -24,6 +30,10 @@ export function consultaDaLista(filtro: Filtro, q: string, ordem: OrdemDaLista, 
   const busca = q.trim();
   if (busca.length >= 2) base.q = busca.slice(0, 80);
   switch (filtro) {
+    case 'rascunhos':
+      // Sem `timing`: o rascunho vencido (data ja passada) e justamente o que
+      // alguem precisa ver para decidir, e recortar por `upcoming` o esconderia.
+      return { ...base, publication_status: 'draft' };
     case 'agendados':
       return { ...base, publication_status: 'published', timing: 'upcoming' };
     case 'agora':
@@ -37,9 +47,10 @@ export function consultaDaLista(filtro: Filtro, q: string, ordem: OrdemDaLista, 
   }
 }
 
-export type Selo = 'agendado' | 'agora' | 'encerrado' | 'cancelado' | 'removido';
+export type Selo = 'rascunho' | 'agendado' | 'agora' | 'encerrado' | 'cancelado' | 'removido';
 
 export const SELOS: Record<Selo, string> = {
+  rascunho: 'Rascunho',
   agendado: 'Agendado',
   agora: 'Acontecendo agora',
   encerrado: 'Encerrado',
@@ -50,6 +61,10 @@ export const SELOS: Record<Selo, string> = {
 export function seloDoEncontro(e: Pick<Encontro, 'publication_status' | 'timing'>): Selo {
   if (e.publication_status === 'removed') return 'removido';
   if (e.publication_status === 'cancelled') return 'cancelado';
+  // ANTES do `timing`, de proposito: o rascunho e rascunho mesmo quando a data
+  // dele ja passou. Cair em "Encerrado" diria que ele aconteceu, e ele nunca
+  // esteve no app (15/11/2026).
+  if (e.publication_status === 'draft') return 'rascunho';
   return e.timing === 'upcoming' ? 'agendado' : e.timing === 'happening' ? 'agora' : 'encerrado';
 }
 
@@ -77,6 +92,12 @@ export function acoesDoEncontro(e: Pick<Encontro, 'publication_status' | 'timing
   return {
     editar: vivo,
     pedidos: vivo && e.visibility === 'private',
+    // Publicar aparece SO em rascunho, e so enquanto o encontro nao terminou: o
+    // servidor recusa rascunho vencido com `event_in_past`, e oferecer o botao
+    // que vai recusar e prometer o que nao se cumpre.
+    publicar: e.publication_status === 'draft' && e.timing !== 'ended',
+    // Cancelar continua so para publicado: rascunho nao tem o que desmarcar, e
+    // quem desiste dele usa Remover.
     cancelar: e.publication_status === 'published' && e.timing !== 'ended',
     remover: vivo,
   };

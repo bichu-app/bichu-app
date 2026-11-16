@@ -525,9 +525,14 @@ interface Encontro {
   readonly versao: string;
 }
 
-async function encontroDaRede(extra: Record<string, unknown> = {}): Promise<Encontro> {
+/**
+ * O encontro em RASCUNHO, que e como ele nasce desde 15/11/2026 (ADR-0027 item
+ * 25). Serve a `publishAdminNetworkEvent`, que precisa de um rascunho para
+ * publicar.
+ */
+async function rascunhoDaRede(extra: Record<string, unknown> = {}): Promise<Encontro> {
   const slug = `encontro-${sufixo()}`;
-  const r = await montar('encontro da rede', 'POST', '/admin/network/events', {
+  const r = await montar('rascunho da rede', 'POST', '/admin/network/events', {
     corpo: {
       slug,
       title: 'Encontro de teste do portão de rastro',
@@ -542,7 +547,20 @@ async function encontroDaRede(extra: Record<string, unknown> = {}): Promise<Enco
       ...extra,
     },
   });
-  return { slug, versao: versaoDe(r, 'encontro da rede') };
+  return { slug, versao: versaoDe(r, 'rascunho da rede') };
+}
+
+/**
+ * O encontro PUBLICADO, que e o ponto de partida de mover, cancelar e mudar
+ * acesso -- as tres exigem `published`. Sao duas chamadas desde 15/11/2026,
+ * porque criar deixou de publicar.
+ */
+async function encontroDaRede(extra: Record<string, unknown> = {}): Promise<Encontro> {
+  const rascunho = await rascunhoDaRede(extra);
+  const r = await montar('encontro da rede publicado', 'PUT', `/admin/network/events/${rascunho.slug}/publication`, {
+    versao: rascunho.versao,
+  });
+  return { slug: rascunho.slug, versao: versaoDe(r, 'encontro da rede publicado') };
 }
 
 async function entradaDoDiretorio(): Promise<{ slug: string; versao: string }> {
@@ -800,6 +818,15 @@ const EXERCICIOS: Record<string, Exercicio> = {
         reason: 'A praça anterior está em obras.',
       },
       versao: encontro.versao,
+    };
+  },
+  // A publicacao do rascunho (15/11/2026, ADR-0027 item 25). Sem corpo: o que
+  // ela precisa esta no `slug` e no `If-Match`.
+  publishAdminNetworkEvent: async () => {
+    const rascunho = await rascunhoDaRede();
+    return {
+      caminho: `/admin/network/events/${rascunho.slug}/publication`,
+      versao: rascunho.versao,
     };
   },
   cancelAdminNetworkEvent: async () => {

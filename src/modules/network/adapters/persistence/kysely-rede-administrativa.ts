@@ -169,7 +169,12 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
   };
 }
 
-const DO_PAINEL = sql<SqlBool>`e.publication_status IN ('published', 'cancelled', 'removed')`;
+/**
+ * Tudo o que o painel pode ver, `draft` incluido desde 15/11/2026 (ADR-0027
+ * item 25). E uma lista POSITIVA de proposito: estado novo no banco nao entra
+ * aqui sozinho, e o que nao entra aqui nao e lido por rota nenhuma do painel.
+ */
+const DO_PAINEL = sql<SqlBool>`e.publication_status IN ('draft', 'published', 'cancelled', 'removed')`;
 
 async function lerEncontro(
   db: DbExecutor,
@@ -317,8 +322,13 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ticket_url: novo.linkDeIngresso,
             instagram_handle: novo.instagram,
             origin: 'admin',
-            publication_status: 'published',
-            published_at: agora,
+            // NASCE RASCUNHO (decisao do cliente de 15/11/2026, ADR-0027 item
+            // 25). Era `'published'` com `published_at: agora`, de "criar e
+            // publicar" (12.9). `published_at` fica nulo ate `publicarEncontro`,
+            // e o `CHECK network_events_visivel_foi_publicado` so cobra o
+            // instante de `published` e `cancelled` -- `draft` passa com nulo.
+            publication_status: 'draft',
+            published_at: null,
             cancelled_at: null,
             cancellation_note: null,
             created_at: agora,
@@ -367,6 +377,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ...(m.linkDeIngresso === undefined ? {} : { ticket_url: m.linkDeIngresso }),
             ...(m.instagram === undefined ? {} : { instagram_handle: m.instagram }),
             ...(m.publicacao === undefined ? {} : { publication_status: m.publicacao }),
+            ...(m.publishedAt === undefined ? {} : { published_at: m.publishedAt }),
             ...(m.cancelledAt === undefined ? {} : { cancelled_at: m.cancelledAt }),
             ...(m.cancellationNote === undefined ? {} : { cancellation_note: m.cancellationNote }),
             updated_at: new Date(agora),
@@ -513,9 +524,13 @@ export function criarRedeAdministrativaRepository(
           sql<SqlBool>`(e.title ILIKE ${padrao} OR e.summary ILIKE ${padrao} OR e.place_name ILIKE ${padrao})`,
         );
       }
+      // Sem filtro: rascunho, publicado e cancelado. O `draft` entrou no padrao
+      // em 15/11/2026 (ADR-0027 item 25) pelo oposto do motivo do `removed`: o
+      // rascunho e a fila de aprovacao que a decisao do cliente criou, e tira-lo
+      // do padrao esconderia exatamente o trabalho que espera por ele.
       condicoes.push(
         recorte.publicacao === undefined
-          ? sql<SqlBool>`e.publication_status IN ('published', 'cancelled')`
+          ? sql<SqlBool>`e.publication_status IN ('draft', 'published', 'cancelled')`
           : sql<SqlBool>`e.publication_status = ${recorte.publicacao}`,
       );
       if (recorte.visibilidade !== undefined) condicoes.push(sql<SqlBool>`e.visibility = ${recorte.visibilidade}`);

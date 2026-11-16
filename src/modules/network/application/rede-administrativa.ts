@@ -30,6 +30,7 @@ import {
   slugDoPrivado,
   slugDoTitulo,
   sufixoCurto,
+  tempoDoEncontro,
   TAMANHO_MAXIMO_DA_PAGINA_DA_FILA,
   TETO_DE_IMAGENS,
   TETO_DE_LINHAS_DA_FILA_POR_HORA,
@@ -340,8 +341,19 @@ export class RedeAdministrativa {
   }
 
   /**
-   * Criar e publicar (12.9): nasce `published`, `origin = admin`, e avisa todos os
-   * administradores (D52).
+   * **Cria em RASCUNHO** (decisao do cliente de 15/11/2026, ADR-0027 item 25):
+   * *"preciso que novos eventos cadastrados sejam sempre salvos como Rascunho,
+   * para depois eu aprovar manualmente depois"*. Nasce `draft`,
+   * `origin = admin`, `published_at` nulo, e **nao aparece no app**.
+   *
+   * Isto ALTERA o item 12.9 ("criar e publicar"), e so para o painel: o
+   * encontro da comunidade continua publicando direto (ADR-0025 emenda 3).
+   *
+   * **Nao avisa os administradores, e a ausencia e a decisao.** O aviso (D52) e
+   * o balde `admin_publication` passaram para `publicarEncontro`: os dois
+   * descrevem publicacao, e esta operacao parou de publicar. A validacao do
+   * corpo fica INTEIRA aqui -- o rascunho do encontro nasce completo, ao
+   * contrario do da `Loja`.
    */
   async criarEncontro(autor: Autor, corpo: CorpoDeEncontro): Promise<Escrito<EncontroAdministrativoProjetado>> {
     const agora = this.agora();
@@ -416,17 +428,78 @@ export class RedeAdministrativa {
       return completo;
     });
 
-    await this.avisarAdministradores(autor, `Evento criado: ${criado.title}`, [
-      `Um evento foi criado e publicado no painel da Rede.`,
-      `Título: ${criado.title}`,
-      `Visibilidade: ${criado.visibilidade === 'private' ? 'privado' : 'público'}`,
-      `Lugar: ${descreverLugar(criado.lugar)}${criado.lugar.ponto === null ? '' : ' (com ponto no mapa)'}`,
-      `Endereço: ${criado.endereco ?? '(sem endereço)'}`,
-      `Início: ${criado.startsAt.toISOString()} (${criado.timeZone})`,
-      `Condição de acesso: ${descreverEntrada(criado.entrada)}`,
-      'Se você não reconhece esta criação, avise o responsável pelo painel.',
-    ]);
+    // SEM aviso aos administradores. Ver o cabecalho deste metodo: o e-mail de
+    // D52 mora em `publicarEncontro` desde 15/11/2026.
     return this.escrito(criado);
+  }
+
+  /**
+   * **Publica o rascunho** (decisao do cliente de 15/11/2026, ADR-0027 item 25).
+   * E a "aprovacao manual" que ele pediu, e e aqui que o encontro passa a
+   * aparecer no app.
+   *
+   * **NAO e idempotente, ao contrario de `publishAdminStoreItem`.** La,
+   * republicar responde 200 sem nova linha de trilha, porque a publicacao do
+   * item e reversivel e republicar e o caminho de volta. Aqui ela nao e --
+   * cancelar nao tem volta --, e publicar dispara e-mail para a equipe inteira.
+   * Um 200 silencioso diria a quem opera que a chamada fez algo quando ela nao
+   * fez, ou reenviaria o aviso. `published`, `cancelled` e `removed` recusam, os
+   * tres com o mesmo `event_not_draft`.
+   *
+   * **Nao ha recusa por rascunho incompleto.** O rascunho do encontro nasce
+   * completo (`criarEncontro` cobra o corpo inteiro), nenhuma coluna de
+   * `network_events` foi afrouxada, e por isso nao existe campo que so a
+   * publicacao exija -- a regua de cinco campos da `Loja` nao tem analogo aqui.
+   * O que a publicacao confere e o RELOGIO: rascunho esquecido ate depois da
+   * data nao entra no app como encontro futuro.
+   */
+  async publicarEncontro(
+    autor: Autor,
+    slug: string,
+    ifMatch: string | string[] | undefined,
+  ): Promise<Escrito<EncontroAdministrativoProjetado>> {
+    const versao = versaoExigida(ifMatch);
+    const agora = this.agora();
+
+    const publicado = await this.deps.repositorio.emTransacao(async (tx) => {
+      const atual = await tx.encontroPorSlug(slug);
+      if (atual === null) throw problemas.naoEncontrado();
+      if (atual.publicacao !== 'draft') {
+        throw recusa('publication_status', 'event_not_draft', 'Só encontro em rascunho pode ser publicado.');
+      }
+      if (tempoDoEncontro(atual, agora) === 'ended') {
+        throw recusa('starts_at', 'event_in_past', 'Este rascunho já passou. Não dá para publicar um encontro que terminou.');
+      }
+      const ok = await tx.atualizarEncontro(
+        atual.id,
+        versao,
+        { publicacao: 'published', publishedAt: comoDataDoRelogio(agora) },
+        agora,
+      );
+      if (!ok) throw versaoMudou();
+      const completo = await tx.recarregarEncontro(atual.id);
+      await tx.registrarNaTrilha(
+        this.evento(autor, 'admin.network_event.published', 'network_event', atual.id, {
+          before: { publication_status: 'draft', published_at: null },
+          after: { publication_status: 'published', published_at: completo.publishedAt?.toISOString() ?? null },
+        }),
+      );
+      return completo;
+    });
+
+    // O aviso de D52, que ate 15/11/2026 saia da criacao. Depois do COMMIT, como
+    // todos os outros: a falha fica no log e nao desfaz a publicacao.
+    await this.avisarAdministradores(autor, `Evento publicado: ${publicado.title}`, [
+      'Um evento da Rede foi publicado no painel. Ele já aparece no app.',
+      `Título: ${publicado.title}`,
+      `Visibilidade: ${publicado.visibilidade === 'private' ? 'privado' : 'público'}`,
+      `Lugar: ${descreverLugar(publicado.lugar)}${publicado.lugar.ponto === null ? '' : ' (com ponto no mapa)'}`,
+      `Endereço: ${publicado.endereco ?? '(sem endereço)'}`,
+      `Início: ${publicado.startsAt.toISOString()} (${publicado.timeZone})`,
+      `Condição de acesso: ${descreverEntrada(publicado.entrada)}`,
+      'Se você não reconhece esta publicação, avise o responsável pelo painel.',
+    ]);
+    return this.escrito(publicado);
   }
 
   private async inserirComSlugDerivado(
@@ -572,8 +645,13 @@ export class RedeAdministrativa {
     const { antes, depois } = await this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.encontroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
-      if (atual.publicacao !== 'published') {
-        throw recusa('publication_status', 'event_not_published', 'Só encontro publicado muda de lugar ou horário.');
+      // RASCUNHO TAMBEM MUDA (decisao do cliente de 15/11/2026): "Sim, editar
+      // antes de publicar" -- ele corrige data, horario e lugar enquanto o
+      // encontro esta em rascunho. `cancelled` e `removed` continuam recusando,
+      // e o codigo `event_not_published` descreve exatamente esses dois ("nao
+      // esta MAIS publicado"), que e o que o contrato ja dizia.
+      if (atual.publicacao !== 'draft' && atual.publicacao !== 'published') {
+        throw recusa('publication_status', 'event_not_published', 'Só encontro em rascunho ou publicado muda de lugar ou horário.');
       }
       const startsAt = corpo.starts_at === undefined ? atual.startsAt : comoData(corpo.starts_at, 'starts_at');
       const endsAt =
@@ -604,6 +682,20 @@ export class RedeAdministrativa {
       );
       return { antes: atual, depois: completo };
     });
+
+    // O AVISO E CONDICIONAL AO ESTADO, e e a unica coisa que distingue mover um
+    // rascunho de mover um publicado (decisao do cliente de 15/11/2026): *"sem
+    // avisar ninguem, porque nao ha quem avisar: o evento ainda nao existe para
+    // o publico"*. O aviso e consequencia de ser PUBLICO, nao de ser mudado.
+    //
+    // A trilha, ao contrario, sai nos dois casos -- ela esta dentro da transacao,
+    // acima, e e o registro de quem mudou o que. Rascunho sem aviso nao e
+    // rascunho sem registro.
+    //
+    // `antes.publicacao`, e nao `depois`: mover nao muda estado de publicacao, e
+    // ler o estado de antes deixa dito que a decisao e sobre o encontro que
+    // ESTAVA la, nao sobre um efeito da propria operacao.
+    if (antes.publicacao !== 'published') return this.escrito(depois);
 
     await this.avisarAdministradores(autor, `Evento movido: ${depois.title}`, [
       'Um evento publicado mudou de lugar ou de horário (T11).',
@@ -647,8 +739,14 @@ export class RedeAdministrativa {
     const resultado = await this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.encontroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
-      if (atual.publicacao !== 'published') {
-        throw recusa('publication_status', 'event_not_published', 'Só encontro publicado muda a condição de acesso.');
+      // RASCUNHO TAMBEM MUDA (decisao do cliente de 15/11/2026, a terceira do
+      // dia): *"Sim, abrir junto"* -- ele ajusta valor e visibilidade enquanto o
+      // encontro esta em rascunho. Mesma guarda do `moverEncontro`, no mesmo
+      // ponto e na mesma forma, de proposito: as duas rotas respondem a mesma
+      // pergunta ("este encontro ainda se edita?") e divergir na escrita de uma
+      // delas seria a divergencia que o desenho veio evitar.
+      if (atual.publicacao !== 'draft' && atual.publicacao !== 'published') {
+        throw recusa('publication_status', 'event_not_published', 'Só encontro em rascunho ou publicado muda a condição de acesso.');
       }
       const novaEntrada = entrada !== undefined && 'entrada' in entrada ? entrada.entrada : atual.entrada;
       const novaVisibilidade = corpo.visibility ?? atual.visibilidade;
@@ -674,7 +772,12 @@ export class RedeAdministrativa {
       return { antes: atual, depois: completo, mudou };
     });
 
-    if (resultado.mudou) {
+    // Duas condicoes, e as duas sao velhas de propositos diferentes: `mudou`
+    // existe para nao avisar sobre mudanca que nao aconteceu, e
+    // `antes.publicacao === 'published'` e a MESMA condicao de estado que
+    // `moverEncontro` usa (15/11/2026) -- em rascunho nao ha quem avisar. A
+    // trilha fica dentro da transacao, acima, e sai nos dois estados.
+    if (resultado.mudou && resultado.antes.publicacao === 'published') {
       const { antes, depois } = resultado;
       await this.avisarAdministradores(autor, `Condição de acesso alterada: ${depois.title}`, [
         'A visibilidade ou a condição de acesso de um evento publicado mudou.',

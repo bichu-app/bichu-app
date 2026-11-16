@@ -245,9 +245,12 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
           instagram_handle: corpo.instagram_url ? handleDoInstagram(corpo.instagram_url) : null,
           instagram_url: corpo.instagram_url ?? null,
           pending_request_count: 0,
-          publication_status: 'published',
+          // NASCE RASCUNHO, como o servidor de verdade (decisao do cliente de
+          // 15/11/2026, ADR-0027 item 25). Era `'published'` com
+          // `published_at: agora`.
+          publication_status: 'draft',
           timing: 'upcoming',
-          published_at: agora,
+          published_at: null,
           cancelled_at: null,
           cancellation_note: null,
           created_at: agora,
@@ -293,12 +296,40 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         return new Response(null, { status: 204 });
       }
 
+      // Publicar o rascunho (15/11/2026). `PUT`, sem corpo, com `If-Match`.
+      // NAO e idempotente: `published`, `cancelled` e `removed` recusam com o
+      // mesmo `event_not_draft`, como o servidor de verdade.
+      if (sub === 'publication' && req.metodo === 'PUT') {
+        const semVersao = exigirIfMatch(req);
+        if (semVersao) return semVersao;
+        const v = exigirVersao(req, e);
+        if (v) return v;
+        if (e.publication_status !== 'draft') {
+          return problema(400, 'validation-failed', 'Nao e rascunho', [
+            { field: 'publication_status', code: 'event_not_draft' },
+          ]);
+        }
+        if (e.timing === 'ended') {
+          return problema(400, 'validation-failed', 'Rascunho vencido', [
+            { field: 'starts_at', code: 'event_in_past' },
+          ]);
+        }
+        return salvar(e, (x) => {
+          x.publication_status = 'published';
+          x.published_at = new Date().toISOString();
+        });
+      }
+
       if (sub === 'relocation' && req.metodo === 'POST') {
         const semVersao = exigirIfMatch(req);
         if (semVersao) return semVersao;
         const v = exigirVersao(req, e);
         if (v) return v;
-        if (e.publication_status !== 'published') return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
+        // Rascunho TAMBEM move (15/11/2026, ADR-0027 item 25); `cancelled` e
+        // `removed` continuam recusando, como no servidor de verdade.
+        if (e.publication_status !== 'draft' && e.publication_status !== 'published') {
+          return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
+        }
         const corpo = req.corpo as Mudanca;
         if (!corpo.reason) return problema(400, 'validation-failed', 'Falta o motivo', [{ field: 'reason', code: 'required' }]);
         const recusaDoEnderecoNovo = recusaDeEndereco(corpo.street_address);
