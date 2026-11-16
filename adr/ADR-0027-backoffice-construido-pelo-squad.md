@@ -16,7 +16,17 @@ públicos, exceção explícita ao D59 só nesses dois campos.
 **Emenda de 07/10 (item 23):** as escritas do painel deixam de pedir senha
 (reautenticação), por decisão do cliente, com o risco de sessão sequestrada
 aceito; a rota de reautenticação fica obsoleta, sem remover.
-**Data:** 2026-09-23 (emendas de 2026-09-28, 2026-10-01 e 2026-10-07)
+**Emenda de 15/11 (item 24):** a janela de **inatividade** da sessão
+administrativa vai de **30 para 60 minutos**, a pedido do cliente e por decisão
+dele. O **teto absoluto de 12 horas desde a senha não muda**, e nada mais do
+item 2 muda.
+**Emenda de 15/11 (item 25):** o encontro criado **no painel** nasce em
+**rascunho** e só aparece na Rede depois de publicado à mão, por decisão do
+cliente; o encontro da comunidade continua publicando direto (decisão dele de
+17/10), e o rascunho se edita — data, hora, lugar, valor e visibilidade —
+antes de publicar.
+**Data:** 2026-09-23 (emendas de 2026-09-28, 2026-10-01, 2026-10-07 e
+2026-11-15)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
 ADR-0026, seções 2.2 e 2.3; a BICHUS-189 (catálogo em arquivo versionado)
 **Emenda:** ADR-0023 (emenda 1), ADR-0016 (emenda 2), ADR-0010 (emenda 1),
@@ -130,9 +140,11 @@ navegador, e os prazos reais são do servidor.
   plantá-lo nem sobrescrevê-lo.
 - O banco guarda só o **SHA-256** do valor (tabela `admin_sessions`, apêndice
   A.1). Entropia de 256 bits dispensa sal.
-- **Inatividade: 30 minutos. Teto absoluto: 12 horas** desde a senha, que o uso
+- **Inatividade: 60 minutos. Teto absoluto: 12 horas** desde a senha, que o uso
   não empurra (D38). `last_seen_at` renova no máximo uma vez por minuto, para
-  não ser uma escrita por clique.
+  não ser uma escrita por clique. **A inatividade era 30 minutos até
+  15/11/2026**; foi o cliente que pediu 60 (emenda do item 24). O teto de 12
+  horas não mudou.
 - **Identificador novo no login e na reautenticação**; o anterior deixa de
   valer (fixação de sessão, D38).
 - **Cada requisição confere, no servidor:** o hash existe; não foi revogado;
@@ -426,10 +438,11 @@ como estava.
 
 Este ADR **não** trata MFA como bloqueante. O que cabe dentro da escolha, e
 está decidido: conta própria, fora de `users`; reCAPTCHA e teto no login; senha de 15 com
-recusa de vazada; aviso a cada sessão com "não fui eu"; sessão de 30 minutos e
-12 horas; revogação na próxima requisição; reautenticação para mover e cancelar
-encontro; teto de dano por conta (item 11); aviso a todos os administradores a
-cada encontro criado, movido ou cancelado; trilha de toda escrita. O registro
+recusa de vazada; aviso a cada sessão com "não fui eu"; sessão de 60 minutos e
+12 horas (eram 30 minutos até 15/11/2026, item 24); revogação na próxima
+requisição; reautenticação para mover e cancelar encontro; teto de dano por
+conta (item 11); aviso a todos os administradores a cada encontro criado,
+movido ou cancelado; trilha de toda escrita. O registro
 formal é o RA-01 de `04-seguranca.md` 22.7, e os gatilhos de revisão são os
 dele.
 
@@ -1626,6 +1639,44 @@ Literal: "remova a solicitação de senha ao alterar ou salvar os cadastros".
    hora de um encontro (T11). O que resta contra isso é detecção, não
    prevenção: o e-mail a todos os administradores e a trilha. Sem MFA (item 9),
    a senha na escrita era a única segunda barreira, e ela sai.
+
+### 24. A inatividade da sessão vai a 60 minutos (decisão do cliente, 15/11)
+
+Literal: "aumente o tempo de expiração da sessão do backoffice para 60
+minutos". **Quem decidiu foi o cliente, em 15/11/2026, a pedido dele.**
+
+1. **O que muda, e só isso.** A janela de **inatividade** da sessão
+   administrativa passa de **30 para 60 minutos**. O valor anterior, decidido
+   em 23/09/2026 e escrito no item 2, **era 30 minutos**; esta emenda o
+   substitui sem apagar o histórico. Um ponto só no código:
+   `INATIVIDADE_EM_MS`, em
+   `src/modules/admin-access/domain/sessao-administrativa.ts`, que
+   `prazosDeNovaSessao` e `inatividadeRenovada` leem.
+2. **O que NÃO muda.** O **teto absoluto de 12 horas desde a senha**, que o uso
+   não empurra (D38), fica igual — e continua sendo ele o limite de cima:
+   `inatividadeRenovada` faz `min(agora + inatividade, teto)`, então a sessão
+   usada a 11 h 30 da senha continua morrendo às 12 h, e não 60 minutos depois.
+   Também ficam iguais o intervalo mínimo de renovação de `last_seen_at` (1
+   minuto), a janela de reautenticação de 5 minutos — que desde o item 23 não
+   tem uso, porque as escritas do painel deixaram de pedir senha —, as cinco
+   conferências por requisição do item 2, a revogação na próxima requisição e o
+   aviso de 2 minutos antes do fim, no painel.
+3. **Sem migração, e isso foi medido.** `admin_sessions`
+   (`migrations/20260928000002_sessao-administrativa.sql`) tem dois `CHECK` de
+   prazo — `idle_expires_at <= absolute_expires_at` e
+   `absolute_expires_at <= created_at + interval '12 hours'` —, e **nenhum
+   limita a inatividade**. 60 minutos cabe nos dois. Nenhuma outra migração
+   toca essas colunas.
+4. **O painel acompanha sozinho.** `admin/src/sessao/prazos.ts` deriva
+   `duracaoDaInatividadeMs` de `idle_expires_at` da resposta, e não de uma
+   constante do navegador: a contagem e o aviso de 2 minutos passam a 60
+   minutos sem edição. O que mudou em `admin/` foi só o dublê de servidor do
+   desenvolvimento local.
+5. **O risco, declarado.** Uma sessão sequestrada vale o dobro do tempo sem uso
+   antes de cair sozinha. Com o item 23 (escrita sem senha) e o item 9 (sem
+   MFA), o que resta contra isso continua sendo detecção — e-mail a todos os
+   administradores e trilha —, mais a revogação manual e o teto de 12 horas,
+   que não se move.
 
 ### 25. O encontro do painel nasce em rascunho, e o rascunho se edita (decisões do cliente, 15/11/2026)
 

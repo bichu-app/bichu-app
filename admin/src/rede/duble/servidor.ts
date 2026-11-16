@@ -162,7 +162,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         display_name: 'Marina Rocha',
         roles: ['admin'],
         csrf_token: aleatorio(40),
-        idle_expires_at: new Date(agora + 30 * 60_000).toISOString(),
+        idle_expires_at: new Date(agora + 60 * 60_000).toISOString(),
         absolute_expires_at: new Date(agora + 12 * 3_600_000).toISOString(),
       } satisfies AdminSession);
     }
