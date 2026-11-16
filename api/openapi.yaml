@@ -14190,7 +14190,7 @@ components:
       description: |
         Sessao do backoffice (ADR-0027 item 2). Token opaco de 256 bits,
         guardado no servidor so como SHA-256, em cookie `__Host-` `HttpOnly`,
-        `Secure`, `SameSite=Strict`, sem `Domain` e sem `Max-Age`. 30 minutos
+        `Secure`, `SameSite=Strict`, sem `Domain` e sem `Max-Age`. 60 minutos
         de inatividade e 12 horas de teto desde a senha. O papel e lido do
         banco a cada requisicao, nunca de claim.
 

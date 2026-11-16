@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 
 import type { Instant } from '../../../shared/types/brands.js';
 
-export const INATIVIDADE_EM_MS = 30 * 60 * 1000;
+export const INATIVIDADE_EM_MS = 60 * 60 * 1000;
 export const TETO_ABSOLUTO_EM_MS = 12 * 60 * 60 * 1000;
 export const JANELA_DE_REAUTENTICACAO_ADMINISTRATIVA_EM_MS = 5 * 60 * 1000;
 export const INTERVALO_MINIMO_DE_RENOVACAO_EM_MS = 60 * 1000;

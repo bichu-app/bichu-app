@@ -22,13 +22,16 @@ const em = (ms: number): Instant => (T0 + ms) as Instant;
 void describe('prazos da sessao administrativa (D38)', () => {
   const prazos = prazosDeNovaSessao(T0);
 
-  void it('nasce com 30 min de inatividade e 12 h de teto desde a senha', () => {
-    assert.equal(prazos.idleExpiresAt, em(30 * MIN));
+  void it('nasce com 60 min de inatividade e 12 h de teto desde a senha', () => {
+    assert.equal(prazos.idleExpiresAt, em(60 * MIN));
     assert.equal(prazos.absoluteExpiresAt, em(12 * HORA));
   });
 
-  void it('31 min sem uso: inativa', () => {
-    assert.equal(avaliarSessao({ ...prazos, revokedAt: null }, T0, em(31 * MIN)), 'inativa');
+  // Os DOIS lados da janela, e nao so o de fora: com a conferencia de 61 min
+  // sozinha, encurtar a janela para 10 min deixaria este teste verde.
+  void it('59 min sem uso: ainda valida; 61 min sem uso: inativa', () => {
+    assert.equal(avaliarSessao({ ...prazos, revokedAt: null }, T0, em(59 * MIN)), 'valida');
+    assert.equal(avaliarSessao({ ...prazos, revokedAt: null }, T0, em(61 * MIN)), 'inativa');
   });
 
   void it('uso continuo por 12 h 01 min: vencida, mesmo renovando a inatividade a cada minuto', () => {
