@@ -739,8 +739,14 @@ export class RedeAdministrativa {
     const resultado = await this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.encontroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
-      if (atual.publicacao !== 'published') {
-        throw recusa('publication_status', 'event_not_published', 'Só encontro publicado muda a condição de acesso.');
+      // RASCUNHO TAMBEM MUDA (decisao do cliente de 15/11/2026, a terceira do
+      // dia): *"Sim, abrir junto"* -- ele ajusta valor e visibilidade enquanto o
+      // encontro esta em rascunho. Mesma guarda do `moverEncontro`, no mesmo
+      // ponto e na mesma forma, de proposito: as duas rotas respondem a mesma
+      // pergunta ("este encontro ainda se edita?") e divergir na escrita de uma
+      // delas seria a divergencia que o desenho veio evitar.
+      if (atual.publicacao !== 'draft' && atual.publicacao !== 'published') {
+        throw recusa('publication_status', 'event_not_published', 'Só encontro em rascunho ou publicado muda a condição de acesso.');
       }
       const novaEntrada = entrada !== undefined && 'entrada' in entrada ? entrada.entrada : atual.entrada;
       const novaVisibilidade = corpo.visibility ?? atual.visibilidade;
@@ -766,7 +772,12 @@ export class RedeAdministrativa {
       return { antes: atual, depois: completo, mudou };
     });
 
-    if (resultado.mudou) {
+    // Duas condicoes, e as duas sao velhas de propositos diferentes: `mudou`
+    // existe para nao avisar sobre mudanca que nao aconteceu, e
+    // `antes.publicacao === 'published'` e a MESMA condicao de estado que
+    // `moverEncontro` usa (15/11/2026) -- em rascunho nao ha quem avisar. A
+    // trilha fica dentro da transacao, acima, e sai nos dois estados.
+    if (resultado.mudou && resultado.antes.publicacao === 'published') {
       const { antes, depois } = resultado;
       await this.avisarAdministradores(autor, `Condição de acesso alterada: ${depois.title}`, [
         'A visibilidade ou a condição de acesso de um evento publicado mudou.',

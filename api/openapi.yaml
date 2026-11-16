@@ -11349,8 +11349,8 @@ paths:
         pessoas levam os caes e `relocateAdminNetworkEvent` -- que desde
         15/11/2026 aceita rascunho tambem, e avisa todos os administradores
         **so quando o encontro esta publicado**. **Visibilidade e condicao de
-        acesso tambem nao**: sao `changeAdminNetworkEventAccess`, que continua
-        exigindo `published`.
+        acesso tambem nao**: sao `changeAdminNetworkEventAccess`, que desde
+        15/11/2026 tambem aceita rascunho e tambem avisa so no publicado.
         O corpo nao tem esses campos. Encontro `removed` responde `400`
         (`code: event_removed`).
 
@@ -11683,17 +11683,42 @@ paths:
       operationId: changeAdminNetworkEventAccess
       tags: [admin]
       x-effects: [notifies]
-      summary: Muda visibilidade, gratuidade ou valor de um encontro
+      summary: Muda visibilidade, gratuidade ou valor de um encontro em rascunho ou publicado
       description: |
+        **Aceita `draft` e `published`** (decisao do cliente de 15/11/2026,
+        ADR-0027 item 25): *"Sim, abrir junto"* -- ele ajusta valor e
+        visibilidade enquanto o encontro esta em rascunho. Antes dessa decisao a
+        rota exigia `published`, e o valor errado num rascunho so se corrigia
+        publicando primeiro e avisando todos os administradores depois.
+
+        **O aviso e condicional ao estado**, pela mesma regra de
+        `relocateAdminNetworkEvent` e com a mesma tabela:
+
+        | estado | validacao | trilha | e-mail a todos os administradores |
+        | ------ | --------- | ------ | --------------------------------- |
+        | `draft` | igual | sim | **nao** |
+        | `published` | igual | sim | sim (D52) |
+
+        O aviso e consequencia de ser publico, nao de ser mudado. **E o aviso
+        continua tendo DUAS condicoes**, nao uma: mudanca que nao muda nada nunca
+        avisou, nem no publicado.
+
         Trocar o valor de um encontro publicado muda o que as pessoas esperam
         pagar na porta, e tornar publico um encontro privado entrega o lugar a
-        quem nao foi aprovado. Por isso as mesmas travas de
+        quem nao foi aprovado. Por isso, **para o publicado**, as mesmas travas de
         `relocateAdminNetworkEvent`: aviso a todos os administradores com o
-        antes e o depois, e trilha. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Privado que vira publico deixa os pedidos
+        antes e o depois, e trilha. No rascunho nao ha nenhuma das duas coisas a
+        proteger -- ninguem viu o valor e ninguem recebeu o lugar. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Privado que vira publico deixa os pedidos
         como estao, sem efeito, e mantem o `slug` gerado. Publico que vira
         privado passa a exigir pedido de todos e **ganha `slug` novo, gerado**:
         o antigo ja circulou e pode dizer o lugar, e ele passa a responder 404,
-        sem redirecionamento.
+        sem redirecionamento. No rascunho a troca de `slug` acontece igual, e
+        ali ela nao custa nada: o endereco antigo nunca saiu do painel.
+
+        Encontro cancelado ou removido responde `400`
+        (`code: event_not_published`) -- os dois estados que sobraram na recusa
+        depois de 15/11/2026, e para os quais o nome do codigo e literal: eles
+        **nao estao mais** publicados.
       security:
         - adminSession: []
           adminCsrf: []

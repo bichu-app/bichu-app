@@ -459,19 +459,103 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.deepEqual(codigos(depois.corpo), ['event_not_published']);
   });
 
-  void it('mudar a condicao de acesso do rascunho continua recusando: a decisao foi sobre data, horario e lugar', async () => {
-    // ISCA de escopo: o cliente abriu a EDICAO DO LUGAR ao rascunho, e nao a
-    // visibilidade nem o valor. `changeAdminNetworkEventAccess` segue exigindo
-    // `published`, e este caso reprova se alguem a abrir de carona.
+  /**
+   * O par do caso de mover, para a condicao de acesso (decisao do cliente de
+   * 15/11/2026, a terceira do dia): *"Sim, abrir junto"*.
+   *
+   * Mesma forma e mesma razao: os dois estados lado a lado, mesma rota, mesmo
+   * corpo, e a assercao reprova nos DOIS sentidos.
+   */
+  void it('mudar acesso do rascunho NAO avisa; do publicado AVISA; a trilha sai nos DOIS', async () => {
+    const fechar = { corpo: { visibility: 'private', reason: 'Passou a ser fechado.' } };
+
     const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
-    const slug = String(rascunho.corpo['slug']);
-    const r = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
-      corpo: { visibility: 'private', reason: 'Passou a ser fechado.' },
+    const slugR = String(rascunho.corpo['slug']);
+    const mudadoR = await chamar(b, 'POST', `/admin/network/events/${slugR}/access`, {
+      ...fechar,
       ifMatch: rascunho.etag ?? '',
     });
-    assert.equal(r.status, 400, r.bruto);
-    assert.deepEqual(codigos(r.corpo), ['event_not_published']);
+    assert.equal(mudadoR.status, 200, mudadoR.bruto);
+    assert.equal(mudadoR.corpo['visibility'], 'private');
+    assert.equal(mudadoR.corpo['publication_status'], 'draft', 'mudar o acesso publicou o rascunho');
+    assert.equal(b.avisos.length, 0, 'mudar o acesso de um rascunho avisou os administradores');
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.access_changed']);
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criarPublicado(b, { ...PRACA, slug: 'outro-para-acesso' });
+    const antesDoAviso = b.avisos.length;
+    const mudadoP = await chamar(b, 'POST', '/admin/network/events/outro-para-acesso/access', {
+      ...fechar,
+      ifMatch: publicado.etag ?? '',
+    });
+    assert.equal(mudadoP.status, 200, mudadoP.bruto);
+    assert.equal(
+      b.avisos.length,
+      antesDoAviso + 1,
+      'mudar o acesso de um encontro PUBLICADO parou de avisar: a trava caiu junto com a do rascunho',
+    );
+    assert.match(b.avisos.at(-1)?.assunto ?? '', /Condição de acesso alterada/);
+  });
+
+  void it('ISCA: valor do rascunho se corrige sem aviso, e o `slug` do privado e gerado igual', async () => {
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(rascunho.corpo['slug']);
+    const pago = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: {
+        admission: { kind: 'paid', price: { amount: 2500, currency: 'BRL', unit: 'per_dog' } },
+        reason: 'O valor estava errado no rascunho.',
+      },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(pago.status, 200, pago.bruto);
+    assert.deepEqual(pago.corpo['admission'], {
+      kind: 'paid',
+      price: { amount: 2500, currency: 'BRL', unit: 'per_dog' },
+    });
+    assert.equal(pago.corpo['slug'], slug, 'o slug mudou sem a visibilidade mudar');
     assert.equal(b.avisos.length, 0);
+
+    // Publico que vira privado ganha slug novo tambem no rascunho; ali a troca
+    // nao custa nada, porque o endereco antigo nunca saiu do painel.
+    const privado = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: { visibility: 'private', reason: 'Fechando antes de publicar.' },
+      ifMatch: pago.etag ?? '',
+    });
+    assert.equal(privado.status, 200, privado.bruto);
+    assert.notEqual(privado.corpo['slug'], slug);
+    assert.equal((await chamar(b, 'GET', `/admin/network/events/${slug}`)).status, 404);
+    assert.equal(b.avisos.length, 0);
+  });
+
+  /**
+   * A ISCA DE ESCOPO, ATUALIZADA. Ela nasceu cobrando que
+   * `changeAdminNetworkEventAccess` NAO fosse aberta ao rascunho sem decisao, e
+   * o cliente decidiu abri-la em 15/11/2026. Ela nao foi removida: passou a
+   * cobrar a UNICA rota administrativa do encontro que ainda exige `published` e
+   * que ninguem decidiu abrir -- `cancelAdminNetworkEvent`.
+   *
+   * E ela tem de continuar fechada pelo motivo do produto, nao por inercia:
+   * cancelar existe para dizer a quem JA VIU o encontro no app que ele nao vai
+   * acontecer (o cancelado fica visivel ate o fim previsto, decisao de 23/09).
+   * Rascunho nunca esteve no app, nao ha a quem dizer, e quem desiste de um
+   * rascunho usa `removeAdminNetworkEvent` -- que funciona nele.
+   */
+  void it('ISCA DE ESCOPO: cancelar o rascunho continua recusando, e remover funciona nele', async () => {
+    const rascunho = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(rascunho.corpo['slug']);
+    const cancelar = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
+      corpo: { note: 'Tentando cancelar um rascunho.' },
+      ifMatch: rascunho.etag ?? '',
+    });
+    assert.equal(cancelar.status, 400, cancelar.bruto);
+    assert.deepEqual(codigos(cancelar.corpo), ['event_not_published']);
+    assert.equal(b.avisos.length, 0);
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
+
+    // E a saida que existe para o rascunho: remover.
+    const removido = await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: rascunho.etag ?? '' });
+    assert.equal(removido.status, 204, removido.bruto);
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created', 'admin.network_event.removed']);
   });
 
   void it('ISCA: com a trilha falhando, publicar NAO muda o estado e ninguem e avisado', async () => {

@@ -444,7 +444,7 @@ telas:
           - header:If-Match
       - operationId: changeAdminNetworkEventAccess
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de acesso?'; sem senha desde 07/10 (ADR-0027 item 23)"
+        nota: "dialogo 'Salvar a mudanca de acesso?'; sem senha desde 07/10 (ADR-0027 item 23); aceita rascunho desde 15/11/2026 (ADR-0027 item 25, item 9) e so avisa os administradores quando o encontro esta publicado -- em rascunho o dialogo nao promete e-mail nem diz que o app mostra"
         usa:
           - req:visibility
           - req:admission.kind

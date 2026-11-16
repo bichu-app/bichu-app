@@ -1636,9 +1636,11 @@ Rascunho, para depois eu aprovar manualmente depois"*.
 conversa, em resposta a uma pergunta fechada: o rascunho vale **só para os
 encontros que ele cria no painel**.
 
-São **duas decisões dele no mesmo dia**, e os itens abaixo seguem essa ordem: a
-primeira criou o rascunho (itens 1 a 6); a segunda abriu a edição dele (item 8),
-respondendo à pergunta que a primeira deixou aberta e que o item 7 registra.
+São **três decisões dele no mesmo dia**, e os itens abaixo seguem essa ordem: a
+primeira criou o rascunho (itens 1 a 6); a segunda abriu a edição de data,
+horário e lugar (item 8), respondendo à pergunta que a primeira deixou aberta e
+que o item 7 registra; a terceira abriu também a visibilidade e o valor (item 9),
+respondendo à pergunta que a segunda deixou aberta.
 
 1. **Isto altera o item 12.9, e só para o painel.** O 12.9 dizia *"O evento não
    tem rascunho, como a designer propôs: criar é publicar"*. Deixa de valer para
@@ -1691,10 +1693,9 @@ respondendo à pergunta que a primeira deixou aberta e que o item 7 registra.
      (`network_events_ativos_do_autor`): ele filtra `origin = 'community'` **e**
      `publication_status = 'published'`, então o rascunho do painel está fora
      dele por dois filtros independentes, e a função não foi tocada.
-   - `cancelAdminNetworkEvent` e `changeAdminNetworkEventAccess` continuam
-     exigindo `published`. **`relocateAdminNetworkEvent` não** — ver o item 8.
-     O acesso (visibilidade e valor) continua fechado no rascunho porque a
-     decisão de abrir a edição nomeou **data, horário e lugar**, e só isso.
+   - **`cancelAdminNetworkEvent` continua exigindo `published`, e é a única que
+     continua.** `relocateAdminNetworkEvent` abriu ao rascunho no item 8 e
+     `changeAdminNetworkEventAccess` no item 9.
    - Nenhuma linha existente muda de estado: acrescentar valor a uma lista
      fechada só afrouxa o que ela aceita, e a migração não tem `UPDATE`.
 
@@ -1708,11 +1709,16 @@ respondendo à pergunta que a primeira deixou aberta e que o item 7 registra.
    O que sobra nessa janela: a linha na trilha
    (`admin.network_event.created`), que é registro e não alerta, e o fato de que
    o encontro **não está no app** — ninguém leva um cão a lugar nenhum por causa
-   de um rascunho. A decisão do item 8 alarga a janela em extensão, não em
-   natureza: dentro dela o invasor também pode mover o rascunho sem aviso. Mas o
-   rascunho só fica perigoso ao ser publicado, e **publicar avisa** — a barreira
-   fica no instante em que o encontro passa a existir para as pessoas, que é onde
-   T11 mora. O aviso volta a cobrir o caso no instante em que o encontro
+   de um rascunho. **Reavaliado depois dos itens 8 e 9:** a janela sem aviso agora
+   cobre criar, mover e mudar acesso de um rascunho, e ela continua alargando em
+   **extensão e não em natureza** — tudo o que ela permite é montar, em silêncio,
+   um encontro que ninguém pode ver, e nada do que se monta ali tem efeito sobre
+   pessoa alguma até a publicação, que **avisa todos os administradores**. A
+   barreira não se move: ela está no instante em que o encontro passa a existir
+   para as pessoas, que é onde T11 mora. O que mudou é que esse instante agora é
+   um só e é explícito — antes dos itens 8 e 9, quem precisasse corrigir data,
+   lugar ou valor tinha de publicar primeiro e corrigir depois, o que punha no app
+   um encontro errado e gastava dois avisos para arrumar um. O aviso volta a cobrir o caso no instante em que o encontro
    passa a ser visível, que é onde o dano de T11 mora. A troca é deliberada:
    avisar a equipe inteira a cada rascunho salvo transformaria o alerta em ruído,
    e alerta que todo mundo ignora não protege ninguém.
@@ -1782,9 +1788,48 @@ respondendo à pergunta que a primeira deixou aberta e que o item 7 registra.
       Era `editando && !publicado`, e enquanto rascunho não existia ela estava
       certa: os únicos estados não publicados eram `cancelled` e `removed`. Com o
       rascunho, aquela expressão passou a trancar justamente o que o cliente
-      pediu para abrir. Agora o lugar e o horário destrancam no rascunho
-      (`cancelled`/`removed` seguem trancados) e o acesso continua trancado até a
-      publicação.
+      pediu para abrir. O lugar e o horário destrancaram, e o acesso ficou
+      trancado — até o item 9, que o destrancou e devolveu a trava a uma
+      expressão só.
+
+9. **Visibilidade e valor também (decisão do cliente, 15/11/2026).** Pergunta
+   fechada, duas opções na tela. Escolhida:
+
+   > "Sim, abrir junto" — ele ajusta **valor e visibilidade (público/privado)**
+   > enquanto o encontro está em rascunho, **sem avisar ninguém**.
+
+   Recusada: deixar como está (publicar primeiro e corrigir depois, avisando
+   todos).
+
+   1. **Mesmo desenho do item 8, no mesmo ponto.**
+      `changeAdminNetworkEventAccess` passa a aceitar `draft` e `published`, com
+      a guarda escrita na mesma forma que a de `relocateAdminNetworkEvent` — as
+      duas respondem à mesma pergunta ("este encontro ainda se edita?") e
+      divergir na escrita de uma delas seria a divergência que o desenho veio
+      evitar. Validação e trilha iguais nos dois estados; e-mail só no publicado.
+
+      O aviso dessa rota tem **duas** condições, e as duas são de propósitos
+      diferentes: mudança que não muda nada nunca avisou (nem no publicado), e
+      rascunho não avisa porque não há quem avisar.
+
+   2. **A troca de `slug` acontece igual no rascunho.** Público que vira privado
+      ganha `slug` novo, e no rascunho isso não custa nada: o endereço antigo
+      nunca saiu do painel.
+
+   3. **`cancelAdminNetworkEvent` fica de fora, e por um motivo de produto, não
+      por inércia.** Cancelar existe para dizer a quem **já viu** o encontro no
+      app que ele não vai acontecer — o cancelado continua visível até o fim
+      previsto (decisão de 23/09). Rascunho nunca esteve no app: não há a quem
+      dizer, e quem desiste de um rascunho usa `removeAdminNetworkEvent`, que
+      funciona nele. Há isca de escopo cobrando essa recusa, no teste de rota e
+      contra o Postgres.
+
+   4. **No painel, as duas travas voltaram a ser uma.** Com o acesso aberto, as
+      duas condições ficaram idênticas, e manter duas expressões iguais com
+      nomes diferentes é convite a divergirem na próxima mudança de uma delas.
+      É a terceira forma dessa linha no mesmo dia, agora com a condição certa:
+      **o que fecha a edição é o encontro ter saído de circulação
+      (`cancelled`/`removed`), e não ele ainda não ter entrado.**
 
 ## Alternativas consideradas
 

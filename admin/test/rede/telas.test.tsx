@@ -207,15 +207,48 @@ describe('Rede: rascunho, selo, filtro e publicar (15/11/2026)', () => {
 
   // ---- Editar o rascunho antes de publicar (decisao do cliente, 15/11/2026) --
 
-  it('o rascunho destranca data, horario e local, e o acesso continua trancado', async () => {
+  it('o rascunho destranca TUDO: data, horario, local, visibilidade e valor', async () => {
+    // O acesso entrou aqui com *"Sim, abrir junto"* (15/11/2026): entre as duas
+    // decisoes do dia a visibilidade e o valor ficavam trancados, e este caso
+    // afirmava isso. Agora as duas travas voltaram a ser uma.
     montar('/rede/rascunho-para-aprovar', comRascunho());
     expect(await screen.findByLabelText('Início *')).toBeEnabled();
     expect(screen.getByLabelText('Nome do lugar *')).toBeEnabled();
     expect(screen.getByLabelText('Cidade *')).toBeEnabled();
-    // O acesso NAO: a decisao dele nomeou data, horario e lugar, e
-    // `changeAdminNetworkEventAccess` segue exigindo `published`.
-    expect(screen.getByRole('radio', { name: /Público/ })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /Público/ })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: /Gratuito/ })).toBeEnabled();
     expect(screen.getByText(/Este evento está em rascunho e não aparece no app/)).toBeInTheDocument();
+    expect(screen.getByText(/quem pode participar e o valor, e ninguém é avisado/)).toBeInTheDocument();
+  });
+
+  it('mudar o acesso do rascunho vai por access e o dialogo NAO promete e-mail nem o app', async () => {
+    const { duble, usuario } = montar('/rede/rascunho-para-aprovar', comRascunho());
+    await screen.findByLabelText('Início *');
+    await usuario.click(screen.getByRole('radio', { name: /Privado/ }));
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de acesso?' });
+    expect(within(dialogo).getByText('O evento agora é privado, e nada disso aparece no app até você publicar.')).toBeInTheDocument();
+    expect(within(dialogo).queryByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeNull();
+    expect(within(dialogo).getByText('Fica registrado para a equipe. Em rascunho ninguém é avisado por e-mail.')).toBeInTheDocument();
+
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Fechando antes de publicar.');
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    const [acesso] = escritas(duble, 'POST', /access$/);
+    expect(acesso?.corpo).toMatchObject({ visibility: 'private', reason: 'Fechando antes de publicar.' });
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
+  });
+
+  it('ISCA: o acesso do PUBLICADO continua prometendo o e-mail e o app', async () => {
+    // O controle positivo do caso acima: se alguem tirar a condicao e apagar as
+    // duas promessas para todo mundo, este caso reprova.
+    const { usuario } = montar('/rede/ja-publicado', comRascunho());
+    await screen.findByLabelText('Início *');
+    await usuario.click(screen.getByRole('radio', { name: /Privado/ }));
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de acesso?' });
+    expect(within(dialogo).getByText('O evento agora é privado, e o app mostra isso na hora.')).toBeInTheDocument();
+    expect(within(dialogo).getByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeInTheDocument();
   });
 
   it('ISCA: o cancelado continua com data e local trancados -- o controle positivo da trava', async () => {

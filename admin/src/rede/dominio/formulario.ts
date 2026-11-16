@@ -487,14 +487,32 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       if (adm.kind === 'paid' && adm.price && eraPago) novoValor = valorComoOAppMostra(adm.price.amount, adm.price.unit);
       else doEncontro.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
+    // "e o app mostra isso na hora" e falso no rascunho, pelo mesmo motivo das
+    // frases do lugar: o encontro nao esta no app (15/11/2026, ADR-0027 item 25).
+    //
+    // As tres frases do PUBLICADO ficam LETRA POR LETRA como estavam, virgula
+    // inclusive: elas passaram por QA (r5) e por UX (30 B3), e `dominio.test.ts`
+    // as fixa. A primeira escrita deste trecho juntou as duas variantes numa
+    // interpolacao comum e trocou ", e o app" por ". O app" -- reescrita de
+    // copy aprovada, de graca, que os testes pegaram.
+    const noApp = ehRascunho ? 'e nada disso aparece no app até você publicar' : 'e o app mostra isso na hora';
     if (doEncontro.length && novoValor) {
-      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. ${ehRascunho ? 'Nada disso aparece no app até você publicar.' : 'O app mostra isso na hora.'}`);
     } else if (novoValor) {
-      frases.push(`O valor do evento muda para ${novoValor}, e o app mostra isso na hora.`);
+      frases.push(`O valor do evento muda para ${novoValor}, ${noApp}.`);
     } else {
-      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, ${noApp}.`);
     }
-    if (plano.acesso.visibility === 'private') frases.push('O link antigo do evento para de funcionar.');
+    if (plano.acesso.visibility === 'private') {
+      // No rascunho o endereco antigo nunca saiu do painel, entao nao ha link
+      // circulando para "parar de funcionar" -- mas o `slug` muda igual, e quem
+      // tiver a aba aberta precisa saber.
+      frases.push(
+        ehRascunho
+          ? 'O endereço do evento é trocado por um gerado, e o anterior deixa de abrir.'
+          : 'O link antigo do evento para de funcionar.',
+      );
+    }
   }
   // O e-mail a todos os administradores e CONDICIONAL AO ESTADO desde
   // 15/11/2026 (ADR-0027 item 25): mover um rascunho nao avisa ninguem. Prometer

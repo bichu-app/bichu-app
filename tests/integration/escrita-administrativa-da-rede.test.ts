@@ -347,6 +347,55 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     );
   });
 
+  /**
+   * O par do caso acima para a condicao de acesso (decisao do cliente de
+   * 15/11/2026, a terceira do dia): *"Sim, abrir junto"*. Mesma forma, mesma
+   * medicao por diferenca, e reprova nos dois sentidos.
+   */
+  void it('mudar acesso do rascunho NAO avisa e do publicado AVISA, com a trilha nos dois (contra Postgres)', async () => {
+    const fechar = { visibility: 'private' as const, reason: 'Fechando antes de publicar.' };
+
+    const rascunho = await criarRascunho();
+    const antesDoRascunho = avisos.length;
+    const mudadoR = await r.mudarAcesso(autor, rascunho.recurso.slug, rascunho.etag, fechar);
+    slugs.push(mudadoR.recurso.slug);
+    assert.equal(mudadoR.recurso.visibility, 'private');
+    assert.equal(mudadoR.recurso.publication_status, 'draft', 'mudar o acesso publicou o rascunho');
+    assert.equal(avisos.length, antesDoRascunho, 'mudar o acesso de um rascunho avisou os administradores');
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(mudadoR.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.access_changed'],
+    );
+
+    // CONTROLE POSITIVO: o publicado, mesma rota, mesmo corpo.
+    const publicado = await criar();
+    const antesDoPublicado = avisos.length;
+    const mudadoP = await r.mudarAcesso(autor, publicado.recurso.slug, publicado.etag, fechar);
+    slugs.push(mudadoP.recurso.slug);
+    assert.equal(
+      avisos.length,
+      antesDoPublicado + 1,
+      'mudar o acesso de um encontro PUBLICADO parou de avisar: a trava caiu junto com a do rascunho',
+    );
+    assert.match(avisos.at(-1) ?? '', /Condição de acesso alterada/);
+  });
+
+  void it('ISCA DE ESCOPO (contra Postgres): cancelar o rascunho continua recusando; remover funciona nele', async () => {
+    // A unica rota administrativa do encontro que ainda exige `published`.
+    // Cancelar existe para avisar quem JA VIU o encontro no app; rascunho nunca
+    // esteve la, e quem desiste dele remove.
+    const rascunho = await criarRascunho();
+    const erro = await r
+      .cancelarEncontro(autor, rascunho.recurso.slug, rascunho.etag, { note: 'Tentando cancelar um rascunho.' })
+      .catch((e: unknown) => e);
+    assert.equal(codigo(erro), 'event_not_published');
+    await r.removerEncontro(autor, rascunho.recurso.slug, rascunho.etag);
+    assert.deepEqual(
+      (await trilhaDe(await idDoEncontro(rascunho.recurso.slug))).map((t) => t.action),
+      ['admin.network_event.created', 'admin.network_event.removed'],
+    );
+  });
+
   void it('rascunho vencido volta a ser publicavel depois de mover a data (contra Postgres)', async () => {
     // Nasce no FUTURO, porque a criacao recusa encontro passado, e o relogio
     // deste arquivo e o de verdade. O que envelhece o rascunho e o UPDATE
