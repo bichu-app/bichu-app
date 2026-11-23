@@ -27,6 +27,40 @@
 # `compatibilidade contra main` abaixo, o passo e este, com o nome de hoje.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# LEIA ANTES DE SEGUIR QUALQUER CITACAO DESTE ARQUIVO A `30/11/2026`.
+#
+# AS TRES DISPENSAS VIVAS FORAM REDATADAS EM 23/11/2026, DE 30/11 PARA
+# 31/12/2026, por decisao do cliente. Ele escolheu 31/12 entre quatro opcoes
+# (15/12, 31/12, 31/01 e resolver em vez de adiar), e o motivo e dele,
+# verbatim: *da tempo de o Play Console andar sem a esteira travar antes, e
+# traz as tres de volta para revisao juntas na virada do ano*. Sao 38 dias
+# contados de 23/11/2026, e `responsavel: cliente` nas tres.
+#
+# A DATA E O UNICO CAMPO QUE MUDOU. Nenhum motivo foi amenizado, nenhum risco
+# declarado foi retirado, nenhuma dispensa entrou e nenhuma outra foi tocada.
+# As mencoes a `30/11/2026` que sobraram nos comentarios datados de 28/10
+# (nos blocos de `sonar`, `apk-assinado` e `ios`) ficaram VERBATIM, pela mesma
+# regra do bloco acima: cada uma e medicao datada, e reescrever medicao antiga
+# apaga o que foi medido. Onde se le `30/11/2026` naqueles blocos, a data de
+# hoje e 31/12/2026.
+#
+# E O MOTIVO DA `sonar` FOI REMEDIDO NO MESMO DIA, porque a contagem de linhas
+# que ela cita e o que decide se ela ainda e necessaria -- e a medicao quase me
+# fez errar, entao fica escrita inteira. No escopo EXATO que o Sonar analisa
+# (`sonar.sources=src` menos `sonar.exclusions`), as linhas NAO VAZIAS cairam
+# de 99.319 em 28/10 (`6b60db94`, praticamente as 99.118 que a entrada cita)
+# para 64.583 hoje -- 35% a menos. Pela regra de tres do proprio motivo
+# (99.118 nao vazias -> 52.909 LOC contadas pelo Sonar) isso daria cerca de
+# 34,5 mil, ABAIXO do teto de 50.000, e a conclusao seria que o motivo
+# caducou. ELA ESTARIA ERRADA. Descontando linha de comentario, que e
+# justamente o que o Sonar faz, sao cerca de 54,6 mil em 28/10 e 57,3 mil
+# HOJE: a queda de 34,7 mil linhas era TODA de comentario, e o codigo CRESCEU
+# cerca de 2,7 mil linhas. O teto continua estourado, e por mais do que em
+# 28/10. Deducao por regra de tres nao e medicao, e aqui ela apontava para o
+# lado contrario do fato.
+# ---------------------------------------------------------------------------
+
 dispensas:
   # A DISPENSA `sonarcloud-veredito` SAIU EM 28/09/2026, E NAO FOI REDATADA.
   #
@@ -139,9 +173,9 @@ dispensas:
   # exclusivamente `sonarcloud-veredito`, que nao esta aqui e nao volta.
   # ===================================================================
   - portao: sonar
-    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026, verbatim: nao rodar por enquanto -- o job `sonar` sai da esteira por ora, e esta entrada e o que torna a ausencia DECLARADA em vez de silenciosa. ELA NAO E A VOLTA DA `sonarcloud-veredito`, que saiu em 28/09/2026: aquela dispensava um VEREDITO negativo pela falta de linha de base de codigo novo, fato que deixou de existir quando o cliente definiu a linha de base no painel. A razao desta e outra e nova, MEDIDA EM 28/10 e nao deduzida: o job nao executa porque a analise de BRANCH da development vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09, sem produzir veredito, com a mensagem verbatim -- This analysis will make your organization 'bichu-app' reach the maximum allowed lines limit of 50000. Current LOC usage is: 0. LOC count in this analysis: 53057. Language distribution: js=148,ts=52909 -- isto e, TETO DE 50.000 LINHAS NA ORGANIZACAO e 53.057 analisadas. Analise de PR passava porque conta so o diff; analise de branch conta o projeto inteiro, e e por isso que o painel da development esta parado em 29/09, quando o projeto cruzou as 50 mil. Caber embaixo do teto exigiria tirar cerca de 3.100 linhas de PRODUCAO da analise, e a base cresce: o cliente recusou o corte e recusou contratar plano por ora. O QUE FICA SEM PORTAO, dito em voz alta: o veredito de qualidade do SonarCloud NAO E CONFERIDO POR NINGUEM, em lugar nenhum, enquanto esta dispensa valer -- nem cobertura, nem duplicacao, nem as metricas new_ do codigo novo. CAI QUANDO o teto da organizacao for levantado (plano contratado) OU o LOC analisado ficar abaixo de 50.000, momento em que a analise de branch volta a produzir veredito, o job volta a rodar e esta entrada sai por redundancia. ELA E O CAMINHO NOMEADO DO AGREGADOR: o passo `o decimo segundo job` do `portao` le este arquivo e aceita `sonar` pulado SO porque acha esta linha -- sem ela, `sonar` pulado reprova o `portao`, e a regra geral dos outros onze jobs nao foi afrouxada. Ela NAO dispensa veredito negativo: resultado que nao seja success nem skipped reprova com ela escrita. A data e escolha declarada e nao medicao: 30/11/2026 e a mesma de apk-assinado e de ios, para a revisao das tres acontecer de uma vez, e sao 33 dias contados de hoje"
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026, verbatim: nao rodar por enquanto -- o job `sonar` sai da esteira por ora, e esta entrada e o que torna a ausencia DECLARADA em vez de silenciosa. ELA NAO E A VOLTA DA `sonarcloud-veredito`, que saiu em 28/09/2026: aquela dispensava um VEREDITO negativo pela falta de linha de base de codigo novo, fato que deixou de existir quando o cliente definiu a linha de base no painel. A razao desta e outra e nova, MEDIDA EM 28/10 e nao deduzida: o job nao executa porque a analise de BRANCH da development vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09, sem produzir veredito, com a mensagem verbatim -- This analysis will make your organization 'bichu-app' reach the maximum allowed lines limit of 50000. Current LOC usage is: 0. LOC count in this analysis: 53057. Language distribution: js=148,ts=52909 -- isto e, TETO DE 50.000 LINHAS NA ORGANIZACAO e 53.057 analisadas. Analise de PR passava porque conta so o diff; analise de branch conta o projeto inteiro, e e por isso que o painel da development esta parado em 29/09, quando o projeto cruzou as 50 mil. Caber embaixo do teto exigiria tirar cerca de 3.100 linhas de PRODUCAO da analise, e a base cresce: o cliente recusou o corte e recusou contratar plano por ora. O QUE FICA SEM PORTAO, dito em voz alta: o veredito de qualidade do SonarCloud NAO E CONFERIDO POR NINGUEM, em lugar nenhum, enquanto esta dispensa valer -- nem cobertura, nem duplicacao, nem as metricas new_ do codigo novo. CAI QUANDO o teto da organizacao for levantado (plano contratado) OU o LOC analisado ficar abaixo de 50.000, momento em que a analise de branch volta a produzir veredito, o job volta a rodar e esta entrada sai por redundancia. ELA E O CAMINHO NOMEADO DO AGREGADOR: o passo `o decimo segundo job` do `portao` le este arquivo e aceita `sonar` pulado SO porque acha esta linha -- sem ela, `sonar` pulado reprova o `portao`, e a regra geral dos outros onze jobs nao foi afrouxada. Ela NAO dispensa veredito negativo: resultado que nao seja success nem skipped reprova com ela escrita. A data e escolha declarada e nao medicao, e foi REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, escolhida por ele entre quatro opcoes (15/12, 31/12, 31/01 e resolver em vez de adiar), com o motivo dele verbatim: da tempo de o Play Console andar sem a esteira travar antes, e traz as tres de volta para revisao juntas na virada do ano. 31/12/2026 e a mesma data de apk-assinado e de ios, para a revisao das tres acontecer de uma vez, e sao 38 dias contados de 23/11/2026. A data ANTERIOR era 30/11/2026, decidida em 28/10 com o mesmo argumento de revisao conjunta, e a redatacao nao mexeu em fato nenhum: o teto da organizacao continua estourado e o job continua sem produzir veredito"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # `apk-assinado` FOI REDATADA EM 28/09/2026, E O MOTIVO FOI REESCRITO INTEIRO.
   #
@@ -301,9 +335,9 @@ dispensas:
   #    aqui -- quem a deixar ficar depois disso esta estendendo essa permissao
   #    de proposito, e e melhor que esteja escrito.
   - portao: apk-assinado
-    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026: Play App Signing, e nao keystore proprio (BICHUS-106) -- a pergunta que esta dispensa carregou pendente desde 28/09 esta respondida, e a dispensa CONTINUA porque o insumo nao e a decisao, e a chave. MEDIDO em 28/10, nao deduzido: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, entao nao existe assinatura de release de nenhum tipo -- e Play App Signing NAO dispensa keystore, ele troca qual chave e a nossa (segue faltando o keystore de UPLOAD). E a digital SHA-256 que entra em assetlinks.json passa a ser a da chave de assinatura do app que o Google guarda, lida no Play Console em Configuracao > Integridade do app, que nao existe antes de o app existir no console e um bundle subir. MUDOU EM 28/10: sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json NAO esta mais vazio -- entrou a digital de DEBUG desta maquina (5D:7A:C5:50...) para o passkey ligar no APK de homologacao, o que vale so para APK compilado aqui e e o estado que o cabecalho desta entrada manda evitar; fica declarado em vez de silencioso. CAI QUANDO a digital da chave do Play substituir a de debug em assetlinks.json E o release for assinado pelo keystore de upload, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho"
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026: Play App Signing, e nao keystore proprio (BICHUS-106) -- a pergunta que esta dispensa carregou pendente desde 28/09 esta respondida, e a dispensa CONTINUA porque o insumo nao e a decisao, e a chave. MEDIDO em 28/10, nao deduzido: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, entao nao existe assinatura de release de nenhum tipo -- e Play App Signing NAO dispensa keystore, ele troca qual chave e a nossa (segue faltando o keystore de UPLOAD). E a digital SHA-256 que entra em assetlinks.json passa a ser a da chave de assinatura do app que o Google guarda, lida no Play Console em Configuracao > Integridade do app, que nao existe antes de o app existir no console e um bundle subir. MUDOU EM 28/10: sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json NAO esta mais vazio -- entrou a digital de DEBUG desta maquina (5D:7A:C5:50...) para o passkey ligar no APK de homologacao, o que vale so para APK compilado aqui e e o estado que o cabecalho desta entrada manda evitar; fica declarado em vez de silencioso. CAI QUANDO a digital da chave do Play substituir a de debug em assetlinks.json E o release for assinado pelo keystore de upload, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho. REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, para as tres dispensas vivas voltarem juntas na virada do ano -- sao 38 dias contados de 23/11/2026. As citacoes de 30/11/2026 no cabecalho sao de 28/10 e ficaram VERBATIM: reescrever medicao datada apaga o que foi medido"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
   # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
@@ -366,9 +400,9 @@ dispensas:
   # unica coisa que a data significa. Encurtar isso e decisao de quem
   # coordena, nao minha.
   - portao: ios
-    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora. REAFIRMADO PELO CLIENTE EM 28/10/2026, verbatim: por enquanto nao consegui criar o id team na ios, vamos deixar isso pendente -- e na mesma data, ao fiar o passkey, apple-app-site-association foi mantido com applinks.details e webcredentials.apps VAZIOS de proposito: servir um Team ID que nao existe deixaria o arquivo com cara de configurado e a falha sem sintoma nenhum, que e o pior dos desfechos descritos acima"
+    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora. REAFIRMADO PELO CLIENTE EM 28/10/2026, verbatim: por enquanto nao consegui criar o id team na ios, vamos deixar isso pendente -- e na mesma data, ao fiar o passkey, apple-app-site-association foi mantido com applinks.details e webcredentials.apps VAZIOS de proposito: servir um Team ID que nao existe deixaria o arquivo com cara de configurado e a falha sem sintoma nenhum, que e o pior dos desfechos descritos acima. REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, e a data continua significando so de quanto em quanto tempo alguem reabre a pergunta: sao 38 dias contados de 23/11/2026, e as tres dispensas vivas voltam juntas na virada do ano. A citacao de 30/11 no cabecalho e de 28/10 e ficou VERBATIM"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # A DISPENSA `oasdiff-logout-corpo-obrigatorio` SAIU EM 28/09/2026, E NAO FOI
   # REDATADA. Ela venceria hoje, e o motivo escrito nela CADUCOU pelo unico
