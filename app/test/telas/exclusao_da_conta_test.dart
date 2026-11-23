@@ -54,8 +54,23 @@
 //     afirmacao, e o caso procura a afirmacao e nao a palavra `limite`.
 //
 // (d) Trocar `_concluida = true` por um `Navigator.pop()` seco depois do `202`
-//     reprova `o 202 diz que funcionou, e diz o prazo de 30 dias`: ninguem le
-//     o prazo.
+//     reprova `o 202 diz que funcionou, e diz que os dados ficam`: ninguem le
+//     o que aconteceu com os dados.
+//
+// ===========================================================================
+// 23/11/2026: AS DUAS FRASES FALSAS SAIRAM, E OS CASOS PASSARAM A COBRAR A
+// VERDADE
+// ===========================================================================
+//
+// A folha prometia *"o apagamento definitivo dos seus dados acontece 30 dias
+// depois"* e *"os casos de pet perdido que estiverem em aberto sao
+// encerrados"*, e os casos deste arquivo COBRAVAM a primeira (`concluido`
+// tinha de conter `30 `). Nenhuma das duas acontece: nao ha apagamento por
+// prazo (emenda 6 de `adr/ADR-0010-privacidade-e-lgpd.md`, 26/10/2026) e
+// `registrarPedidoDeExclusao` toca so `users` e `pet_tags`. A assercao que
+// cobrava o prazo foi TROCADA pela que cobra o fato, e a varredura de
+// promessas ganhou as palavras do prazo: asserir a mentira era pior que nao
+// asserir nada.
 //
 // (e) Passar `escopoDeSenha: EscopoDeReautenticacao.exclusaoDaConta` ao
 //     catalogo no ramo de `reautenticacao-required` reprova
@@ -282,7 +297,7 @@ void main() {
 
   group('o 202 leva ao desfecho desenhado', () {
     testWidgets(
-      'o 202 diz que funcionou, e diz o prazo de 30 dias',
+      'o 202 diz que funcionou, e diz que os dados ficam',
       (tester) async {
         await _abrirAFolha(tester);
         await _pedirAExclusao(tester);
@@ -315,9 +330,16 @@ void main() {
         expect(
           find.text(TextosDaExclusaoDaConta.concluido),
           findsOneWidget,
-          reason: 'REPROVA: o prazo de 30 dias nao foi dito. Ele e a UNICA '
-              'informacao deste fluxo que nao da para consultar depois -- '
-              'depois nao ha mais conta de onde ler nada.',
+          reason: 'REPROVA: a folha nao disse o que aconteceu com os dados. '
+              'Isso e a UNICA informacao deste fluxo que nao da para '
+              'consultar depois -- depois nao ha mais conta de onde ler nada.',
+        );
+        expect(
+          find.text(TextosDaExclusaoDaConta.pedidoDeApagamento),
+          findsOneWidget,
+          reason: 'REPROVA: o desfecho nao disse por onde pedir o apagamento '
+              'dos dados. Sem conta, nao ha outro lugar de onde ela tire esse '
+              'e-mail.',
         );
         expect(
           find.text(TextosDaExclusaoDaConta.desconexao),
@@ -332,8 +354,8 @@ void main() {
           find.byType(TelaEntrar),
           findsNothing,
           reason: 'REPROVA: a tela de entrada apareceu antes de a pessoa ler o '
-              'desfecho. O texto do `202` e a unica chance de ela saber do '
-              'prazo de 30 dias.',
+              'desfecho. O texto do `202` e a unica chance de ela saber o que '
+              'aconteceu com os seus dados.',
         );
 
         await tester.tap(find.text(TextosDaExclusaoDaConta.entendi));
@@ -562,7 +584,7 @@ void main() {
     );
 
     test(
-      'o desfecho do 202 afirma a exclusao E o prazo de 30 dias',
+      'o desfecho do 202 afirma a exclusao E que os dados ficam guardados',
       () {
         expect(
           TextosDaExclusaoDaConta.tituloConcluido,
@@ -571,21 +593,38 @@ void main() {
               'passado. `Pronto!` ou `Recebemos o seu pedido` deixariam a '
               'pessoa sem saber se a conta saiu ou se entrou numa fila.',
         );
+        // ATE 23/11/2026 ESTA ASSERCAO COBRAVA `contains('30 ')`, e com isso
+        // ela cobrava a MENTIRA: nao ha apagamento por prazo (emenda 6 da
+        // ADR-0010). O que o desfecho tem de dizer e o fato.
         expect(
           TextosDaExclusaoDaConta.concluido,
-          contains('30 '),
-          reason: 'REPROVA: o desfecho do `202` nao diz o prazo de 30 dias, '
-              'que e o unico prazo que o contrato declara.',
+          contains('ficam guardados'),
+          reason: 'REPROVA: o desfecho do `202` nao diz que os dados ficam '
+              'guardados, que e o que de fato acontece com eles.',
+        );
+        expect(
+          TextosDaExclusaoDaConta.pedidoDeApagamento,
+          contains('privacidade@bichu.app'),
+          reason: 'REPROVA: a folha nao diz o e-mail do encarregado, e ele e '
+              'o MESMO do texto juridico publicado '
+              '(`web/src/conteudo/juridico/privacidade.md`). Sem ele a folha '
+              'conta o que acontece e nao diz o que fazer a respeito.',
         );
       },
     );
 
     test(
-      'nenhuma frase promete desfazer, recuperar ou voltar atras',
+      'nenhuma frase promete desfazer, recuperar ou apagar por prazo',
       () {
         // O contrato NAO tem rota de arrependimento. Prometer uma na tinta e
         // a pior forma de mentir que este fluxo tem, e e a mais tentadora:
         // ela parece gentileza.
+        //
+        // **AS TRES ULTIMAS ENTRARAM EM 23/11/2026**, e elas nao sao sobre
+        // arrependimento: sao sobre o prazo que a folha prometia e que nunca
+        // existiu. Elas ficam na MESMA varredura porque a classe de defeito e
+        // uma so -- frase que promete o que o produto nao faz -- e porque
+        // assim a mentira nao volta por descuido numa frase nova.
         const List<String> promessas = <String>[
           'recuperar',
           'restaurar',
@@ -593,11 +632,15 @@ void main() {
           'cancelar o pedido',
           'mudar de ideia',
           'voltar atrás',
+          '30 dias',
+          'apagamento definitivo',
+          'expurgo',
         ];
         final Map<String, String> frases = <String, String>{
           'titulo': TextosDaExclusaoDaConta.titulo,
-          'prazo': TextosDaExclusaoDaConta.prazo,
-          'casos': TextosDaExclusaoDaConta.casos,
+          'saidaDoAr': TextosDaExclusaoDaConta.saidaDoAr,
+          'dadosFicam': TextosDaExclusaoDaConta.dadosFicam,
+          'pedidoDeApagamento': TextosDaExclusaoDaConta.pedidoDeApagamento,
           'plaquinhas': TextosDaExclusaoDaConta.plaquinhas,
           'semVolta': TextosDaExclusaoDaConta.semVolta,
           'motivoDaSenha': TextosDaExclusaoDaConta.motivoDaSenha,
@@ -615,7 +658,7 @@ void main() {
         // no vazio, e este caso ficaria verde sem conferir nada.
         expect(
           frases.length,
-          greaterThanOrEqualTo(14),
+          greaterThanOrEqualTo(15),
           reason: 'REPROVA: a varredura tem menos frases do que a folha. '
               'Frase nova que nao entre neste mapa nao e conferida por '
               'ninguem.',
@@ -632,9 +675,9 @@ void main() {
               e.value.toLowerCase(),
               isNot(contains(promessa)),
               reason: 'REPROVA: `${e.key}` promete `$promessa`. O contrato '
-                  'declara exclusao logica imediata e expurgo em 30 dias, e '
-                  'rota de arrependimento NENHUMA -- o que ele nao declara, a '
-                  'folha nao promete.',
+                  'declara exclusao logica imediata, NENHUM expurgo por prazo '
+                  'e rota de arrependimento NENHUMA -- o que ele nao declara, '
+                  'a folha nao promete.',
             );
           }
         }

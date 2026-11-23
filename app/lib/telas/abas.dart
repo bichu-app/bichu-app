@@ -446,9 +446,32 @@ class _FolhaDeSair extends StatelessWidget {
 /// OS TEXTOS DA EXCLUSAO DA CONTA, num lugar so.
 ///
 /// Eles sao as palavras do CONTRATO e nao as minhas: `DELETE /v1/me`
-/// (`deleteMyAccount`) declara *"Exclusao logica imediata, expurgo definitivo
-/// em 30 dias. Casos abertos sao encerrados e as tags, revogadas."*. Nenhum
-/// prazo, nenhum efeito e nenhuma ressalva daqui foi inventada: o que o
+/// (`deleteMyAccount`) declara *"Exclusao logica imediata, e NAO HA EXPURGO
+/// POR PRAZO."* -- o dado NAO e apagado, nem agora nem depois, a conta fica
+/// DESABILITADA, e a eliminacao de fato (art. 18, VI, da LGPD) e pedida pelo
+/// privacidade@bichu.app e conduzida por alguem da equipe, uma a uma.
+///
+/// **ATE 23/11/2026 DUAS DESTAS FRASES ERAM FALSAS, e a correcao e desta
+/// data.** A folha prometia *"o apagamento definitivo dos seus dados acontece
+/// 30 dias depois"* e *"os casos de pet perdido que estiverem em aberto sao
+/// encerrados"*. Nenhuma das duas acontece:
+///
+///   - por decisao do cliente de 26/10/2026 (emenda 6 de
+///     `adr/ADR-0010-privacidade-e-lgpd.md`, *"nao apague nada, mantenha e
+///     corrija a politica"*) NENHUM dado do produto e apagado por decurso de
+///     prazo, e `expurgar-contas-excluidas.ts` devolve tres zeros sem tocar
+///     banco nem balde;
+///   - `registrarPedidoDeExclusao` (`kysely-identity-repository.ts`) toca SO
+///     `users` e `pet_tags`, e nenhuma migracao tem gatilho sobre
+///     `deletion_requested`: caso de pet perdido em aberto CONTINUA aberto.
+///
+/// O cliente decidiu em 23/11/2026 corrigir o TEXTO, sem mexer em
+/// comportamento. O e-mail que a folha passou a dizer **nao e rota de
+/// arrependimento**: ele serve para pedir MAIS apagamento, nunca para
+/// desfazer a exclusao -- e quem le precisa dele aqui porque depois nao ha
+/// mais conta de onde ler nada.
+///
+/// Nenhum prazo, nenhum efeito e nenhuma ressalva daqui foi inventada: o que o
 /// contrato nao declara, a folha nao promete -- e por isso NENHUMA frase
 /// daqui oferece desfazer, recuperar ou falar com alguem para voltar atras.
 /// O contrato nao tem rota de arrependimento, e prometer uma na tinta seria
@@ -484,12 +507,29 @@ abstract final class TextosDaExclusaoDaConta {
   /// `irreversible_write` em `x-effects` virado em frase.
   static const String semVolta = 'Não dá para desfazer.';
 
-  static const String prazo =
-      'A sua conta sai do ar na hora. O apagamento definitivo dos seus '
-      'dados acontece 30 dias depois.';
+  /// O que acontece NA HORA, e e tudo o que acontece na hora.
+  static const String saidaDoAr =
+      'A sua conta sai do ar na hora: você deixa de aparecer no Bichu e '
+      'todos os seus aparelhos são desconectados.';
 
-  static const String casos =
-      'Os casos de pet perdido que estiverem em aberto são encerrados.';
+  /// A FRASE QUE ERA MENTIRA, consertada em 23/11/2026.
+  ///
+  /// Ela dizia *"O apagamento definitivo dos seus dados acontece 30 dias
+  /// depois"*, e nao ha apagamento por prazo nenhum. Dizer o que de fato
+  /// acontece e pior noticia e texto melhor: quem le num momento assim
+  /// precisa saber onde os seus dados ficaram, e a politica publicada
+  /// (`web/src/conteudo/juridico/privacidade.md`) diz exatamente isto.
+  static const String dadosFicam =
+      'Os seus dados ficam guardados. Eles não são apagados depois '
+      'de um prazo.';
+
+  /// A OUTRA frase que era mentira ocupava este lugar: *"os casos de pet
+  /// perdido que estiverem em aberto sao encerrados"*. Caso aberto continua
+  /// aberto, e no lugar dela entra o que a pessoa PODE fazer pelos seus
+  /// dados -- com o MESMO e-mail do texto juridico, nao um inventado aqui.
+  static const String pedidoDeApagamento =
+      'Se você quiser pedir o apagamento dos seus dados, escreva para '
+      'privacidade@bichu.app.';
 
   static const String plaquinhas =
       'As plaquinhas dos seus pets são revogadas: o QR delas para de abrir a '
@@ -521,17 +561,18 @@ abstract final class TextosDaExclusaoDaConta {
   /// O que ela precisa saber depois do `202`, e por que ela precisa saber.
   ///
   /// O `202` NAO e um recibo de nada: o contrato declara exclusao logica
-  /// IMEDIATA e expurgo em 30 dias, e os dois fatos tem consequencia para
-  /// quem leu. O primeiro explica por que o app vai se comportar como se a
-  /// conta nao existisse a partir de agora; o segundo e o unico prazo que o
-  /// contrato declara, e esconde-lo faria a pessoa achar que tudo ja virou po.
+  /// IMEDIATA e NENHUM expurgo por prazo, e os dois fatos tem consequencia
+  /// para quem leu. O primeiro explica por que o app vai se comportar como se
+  /// a conta nao existisse a partir de agora; o segundo e a informacao que
+  /// ela nao tem como obter depois, porque depois nao ha mais conta de onde
+  /// ler nada -- e esconde-lo faria a pessoa achar que tudo ja virou po.
   ///
-  /// `você não precisa fazer mais nada` nao e enfeite: o resto (encerrar os
-  /// casos, revogar as plaquinhas, agendar o expurgo) e trabalho do servidor,
-  /// e quem sai sem essa frase fica procurando um passo que nao existe.
+  /// `você não precisa fazer mais nada` nao e enfeite: o resto (derrubar as
+  /// sessoes, revogar as plaquinhas) e trabalho do servidor, e quem sai sem
+  /// essa frase fica procurando um passo que nao existe.
   static const String concluido =
-      'Ela já saiu do ar. O apagamento definitivo dos seus dados acontece 30 '
-      'dias depois deste pedido, e você não precisa fazer mais nada.';
+      'Ela já saiu do ar, e você não precisa fazer mais nada. Os seus dados '
+      'ficam guardados e não são apagados depois de um prazo.';
 
   /// O aviso da saida, dito ANTES de ela acontecer.
   ///
@@ -640,10 +681,11 @@ abstract final class TextosDaExclusaoDaConta {
 /// O QUE FOI ACRESCENTADO AO VIZINHO, e nao e enfeite: entre o `202` e a tela
 /// de entrada entra uma PALAVRA. `_ItemDeSair` pode mandar a pessoa embora em
 /// silencio porque sair da conta e reversivel e ela sabe o que fez; excluir
-/// nao e nenhuma das duas coisas. Quem acaba de apagar a propria conta merece
-/// ler que funcionou e que existe um prazo de 30 dias antes do apagamento
-/// definitivo -- e esse prazo e informacao que ela nao tem como obter depois,
-/// porque depois ela nao tem mais conta de onde ler nada.
+/// nao e nenhuma das duas coisas. Quem acaba de pedir a exclusao da propria
+/// conta merece ler que funcionou e o que aconteceu com os seus dados -- que
+/// eles ficam guardados, e por onde pedir o apagamento deles --, e isso e
+/// informacao que ela nao tem como obter depois, porque depois ela nao tem
+/// mais conta de onde ler nada.
 ///
 /// **A ORDEM, que e o lugar onde isto da errado em silencio:** limpar o cache
 /// e derrubar a sessao acontecem DEPOIS de o servidor confirmar, nunca antes.
@@ -912,9 +954,9 @@ class _EstadoDaFolhaDeExcluirAConta extends State<_FolhaDeExcluirAConta> {
   Widget build(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     // DEPOIS DO `202` NAO HA MAIS VOLTAR: o voltar do sistema e o toque fora
-    // deixariam a folha sem ter dito o prazo de 30 dias, que e a unica
-    // informacao deste fluxo que nao da para consultar depois. O `Entendi` e
-    // a saida, e ele e uma so.
+    // deixariam a folha sem ter dito onde os dados ficaram e por onde pedir o
+    // apagamento deles, que e a unica informacao deste fluxo que nao da para
+    // consultar depois. O `Entendi` e a saida, e ele e uma so.
     return PopScope(
       canPop: !_concluida,
       child: SafeArea(
@@ -939,12 +981,12 @@ class _EstadoDaFolhaDeExcluirAConta extends State<_FolhaDeExcluirAConta> {
         ),
         const SizedBox(height: BichuEspaco.e2),
         Text(
-          TextosDaExclusaoDaConta.prazo,
+          TextosDaExclusaoDaConta.saidaDoAr,
           style: textos.bodyLarge,
         ),
         const SizedBox(height: BichuEspaco.e3),
         Text(
-          TextosDaExclusaoDaConta.casos,
+          TextosDaExclusaoDaConta.dadosFicam,
           style: textos.bodyLarge,
         ),
         const SizedBox(height: BichuEspaco.e2),
@@ -955,6 +997,11 @@ class _EstadoDaFolhaDeExcluirAConta extends State<_FolhaDeExcluirAConta> {
         const SizedBox(height: BichuEspaco.e3),
         Text(
           TextosDaExclusaoDaConta.semVolta,
+          style: textos.bodyLarge,
+        ),
+        const SizedBox(height: BichuEspaco.e2),
+        Text(
+          TextosDaExclusaoDaConta.pedidoDeApagamento,
           style: textos.bodyLarge,
         ),
         if (_faixa != null) ...<Widget>[
@@ -995,6 +1042,11 @@ class _EstadoDaFolhaDeExcluirAConta extends State<_FolhaDeExcluirAConta> {
         const SizedBox(height: BichuEspaco.e2),
         Text(
           TextosDaExclusaoDaConta.concluido,
+          style: textos.bodyLarge,
+        ),
+        const SizedBox(height: BichuEspaco.e2),
+        Text(
+          TextosDaExclusaoDaConta.pedidoDeApagamento,
           style: textos.bodyLarge,
         ),
         const SizedBox(height: BichuEspaco.e3),
