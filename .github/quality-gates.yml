@@ -27,6 +27,40 @@
 # `compatibilidade contra main` abaixo, o passo e este, com o nome de hoje.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# LEIA ANTES DE SEGUIR QUALQUER CITACAO DESTE ARQUIVO A `30/11/2026`.
+#
+# AS TRES DISPENSAS VIVAS FORAM REDATADAS EM 23/11/2026, DE 30/11 PARA
+# 31/12/2026, por decisao do cliente. Ele escolheu 31/12 entre quatro opcoes
+# (15/12, 31/12, 31/01 e resolver em vez de adiar), e o motivo e dele,
+# verbatim: *da tempo de o Play Console andar sem a esteira travar antes, e
+# traz as tres de volta para revisao juntas na virada do ano*. Sao 38 dias
+# contados de 23/11/2026, e `responsavel: cliente` nas tres.
+#
+# A DATA E O UNICO CAMPO QUE MUDOU. Nenhum motivo foi amenizado, nenhum risco
+# declarado foi retirado, nenhuma dispensa entrou e nenhuma outra foi tocada.
+# As mencoes a `30/11/2026` que sobraram nos comentarios datados de 28/10
+# (nos blocos de `sonar`, `apk-assinado` e `ios`) ficaram VERBATIM, pela mesma
+# regra do bloco acima: cada uma e medicao datada, e reescrever medicao antiga
+# apaga o que foi medido. Onde se le `30/11/2026` naqueles blocos, a data de
+# hoje e 31/12/2026.
+#
+# E O MOTIVO DA `sonar` FOI REMEDIDO NO MESMO DIA, porque a contagem de linhas
+# que ela cita e o que decide se ela ainda e necessaria -- e a medicao quase me
+# fez errar, entao fica escrita inteira. No escopo EXATO que o Sonar analisa
+# (`sonar.sources=src` menos `sonar.exclusions`), as linhas NAO VAZIAS cairam
+# de 99.319 em 28/10 (`6b60db94`, praticamente as 99.118 que a entrada cita)
+# para 64.583 hoje -- 35% a menos. Pela regra de tres do proprio motivo
+# (99.118 nao vazias -> 52.909 LOC contadas pelo Sonar) isso daria cerca de
+# 34,5 mil, ABAIXO do teto de 50.000, e a conclusao seria que o motivo
+# caducou. ELA ESTARIA ERRADA. Descontando linha de comentario, que e
+# justamente o que o Sonar faz, sao cerca de 54,6 mil em 28/10 e 57,3 mil
+# HOJE: a queda de 34,7 mil linhas era TODA de comentario, e o codigo CRESCEU
+# cerca de 2,7 mil linhas. O teto continua estourado, e por mais do que em
+# 28/10. Deducao por regra de tres nao e medicao, e aqui ela apontava para o
+# lado contrario do fato.
+# ---------------------------------------------------------------------------
+
 dispensas:
   # A DISPENSA `sonarcloud-veredito` SAIU EM 28/09/2026, E NAO FOI REDATADA.
   #
@@ -139,9 +173,9 @@ dispensas:
   # exclusivamente `sonarcloud-veredito`, que nao esta aqui e nao volta.
   # ===================================================================
   - portao: sonar
-    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026, verbatim: nao rodar por enquanto -- o job `sonar` sai da esteira por ora, e esta entrada e o que torna a ausencia DECLARADA em vez de silenciosa. ELA NAO E A VOLTA DA `sonarcloud-veredito`, que saiu em 28/09/2026: aquela dispensava um VEREDITO negativo pela falta de linha de base de codigo novo, fato que deixou de existir quando o cliente definiu a linha de base no painel. A razao desta e outra e nova, MEDIDA EM 28/10 e nao deduzida: o job nao executa porque a analise de BRANCH da development vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09, sem produzir veredito, com a mensagem verbatim -- This analysis will make your organization 'bichu-app' reach the maximum allowed lines limit of 50000. Current LOC usage is: 0. LOC count in this analysis: 53057. Language distribution: js=148,ts=52909 -- isto e, TETO DE 50.000 LINHAS NA ORGANIZACAO e 53.057 analisadas. Analise de PR passava porque conta so o diff; analise de branch conta o projeto inteiro, e e por isso que o painel da development esta parado em 29/09, quando o projeto cruzou as 50 mil. Caber embaixo do teto exigiria tirar cerca de 3.100 linhas de PRODUCAO da analise, e a base cresce: o cliente recusou o corte e recusou contratar plano por ora. O QUE FICA SEM PORTAO, dito em voz alta: o veredito de qualidade do SonarCloud NAO E CONFERIDO POR NINGUEM, em lugar nenhum, enquanto esta dispensa valer -- nem cobertura, nem duplicacao, nem as metricas new_ do codigo novo. CAI QUANDO o teto da organizacao for levantado (plano contratado) OU o LOC analisado ficar abaixo de 50.000, momento em que a analise de branch volta a produzir veredito, o job volta a rodar e esta entrada sai por redundancia. ELA E O CAMINHO NOMEADO DO AGREGADOR: o passo `o decimo segundo job` do `portao` le este arquivo e aceita `sonar` pulado SO porque acha esta linha -- sem ela, `sonar` pulado reprova o `portao`, e a regra geral dos outros onze jobs nao foi afrouxada. Ela NAO dispensa veredito negativo: resultado que nao seja success nem skipped reprova com ela escrita. A data e escolha declarada e nao medicao: 30/11/2026 e a mesma de apk-assinado e de ios, para a revisao das tres acontecer de uma vez, e sao 33 dias contados de hoje"
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026, verbatim: nao rodar por enquanto -- o job `sonar` sai da esteira por ora, e esta entrada e o que torna a ausencia DECLARADA em vez de silenciosa. ELA NAO E A VOLTA DA `sonarcloud-veredito`, que saiu em 28/09/2026: aquela dispensava um VEREDITO negativo pela falta de linha de base de codigo novo, fato que deixou de existir quando o cliente definiu a linha de base no painel. A razao desta e outra e nova, MEDIDA EM 28/10 e nao deduzida: o job nao executa porque a analise de BRANCH da development vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09, sem produzir veredito, com a mensagem verbatim -- This analysis will make your organization 'bichu-app' reach the maximum allowed lines limit of 50000. Current LOC usage is: 0. LOC count in this analysis: 53057. Language distribution: js=148,ts=52909 -- isto e, TETO DE 50.000 LINHAS NA ORGANIZACAO e 53.057 analisadas. Analise de PR passava porque conta so o diff; analise de branch conta o projeto inteiro, e e por isso que o painel da development esta parado em 29/09, quando o projeto cruzou as 50 mil. Caber embaixo do teto exigiria tirar cerca de 3.100 linhas de PRODUCAO da analise, e a base cresce: o cliente recusou o corte e recusou contratar plano por ora. O QUE FICA SEM PORTAO, dito em voz alta: o veredito de qualidade do SonarCloud NAO E CONFERIDO POR NINGUEM, em lugar nenhum, enquanto esta dispensa valer -- nem cobertura, nem duplicacao, nem as metricas new_ do codigo novo. CAI QUANDO o teto da organizacao for levantado (plano contratado) OU o LOC analisado ficar abaixo de 50.000, momento em que a analise de branch volta a produzir veredito, o job volta a rodar e esta entrada sai por redundancia. ELA E O CAMINHO NOMEADO DO AGREGADOR: o passo `o decimo segundo job` do `portao` le este arquivo e aceita `sonar` pulado SO porque acha esta linha -- sem ela, `sonar` pulado reprova o `portao`, e a regra geral dos outros onze jobs nao foi afrouxada. Ela NAO dispensa veredito negativo: resultado que nao seja success nem skipped reprova com ela escrita. A data e escolha declarada e nao medicao, e foi REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, escolhida por ele entre quatro opcoes (15/12, 31/12, 31/01 e resolver em vez de adiar), com o motivo dele verbatim: da tempo de o Play Console andar sem a esteira travar antes, e traz as tres de volta para revisao juntas na virada do ano. 31/12/2026 e a mesma data de apk-assinado e de ios, para a revisao das tres acontecer de uma vez, e sao 38 dias contados de 23/11/2026. A data ANTERIOR era 30/11/2026, decidida em 28/10 com o mesmo argumento de revisao conjunta, e a redatacao nao mexeu em fato nenhum: o teto da organizacao continua estourado e o job continua sem produzir veredito"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # `apk-assinado` FOI REDATADA EM 28/09/2026, E O MOTIVO FOI REESCRITO INTEIRO.
   #
@@ -301,9 +335,9 @@ dispensas:
   #    aqui -- quem a deixar ficar depois disso esta estendendo essa permissao
   #    de proposito, e e melhor que esteja escrito.
   - portao: apk-assinado
-    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026: Play App Signing, e nao keystore proprio (BICHUS-106) -- a pergunta que esta dispensa carregou pendente desde 28/09 esta respondida, e a dispensa CONTINUA porque o insumo nao e a decisao, e a chave. MEDIDO em 28/10, nao deduzido: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, entao nao existe assinatura de release de nenhum tipo -- e Play App Signing NAO dispensa keystore, ele troca qual chave e a nossa (segue faltando o keystore de UPLOAD). E a digital SHA-256 que entra em assetlinks.json passa a ser a da chave de assinatura do app que o Google guarda, lida no Play Console em Configuracao > Integridade do app, que nao existe antes de o app existir no console e um bundle subir. MUDOU EM 28/10: sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json NAO esta mais vazio -- entrou a digital de DEBUG desta maquina (5D:7A:C5:50...) para o passkey ligar no APK de homologacao, o que vale so para APK compilado aqui e e o estado que o cabecalho desta entrada manda evitar; fica declarado em vez de silencioso. CAI QUANDO a digital da chave do Play substituir a de debug em assetlinks.json E o release for assinado pelo keystore de upload, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho"
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026: Play App Signing, e nao keystore proprio (BICHUS-106) -- a pergunta que esta dispensa carregou pendente desde 28/09 esta respondida, e a dispensa CONTINUA porque o insumo nao e a decisao, e a chave. MEDIDO em 28/10, nao deduzido: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, entao nao existe assinatura de release de nenhum tipo -- e Play App Signing NAO dispensa keystore, ele troca qual chave e a nossa (segue faltando o keystore de UPLOAD). E a digital SHA-256 que entra em assetlinks.json passa a ser a da chave de assinatura do app que o Google guarda, lida no Play Console em Configuracao > Integridade do app, que nao existe antes de o app existir no console e um bundle subir. MUDOU EM 28/10: sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json NAO esta mais vazio -- entrou a digital de DEBUG desta maquina (5D:7A:C5:50...) para o passkey ligar no APK de homologacao, o que vale so para APK compilado aqui e e o estado que o cabecalho desta entrada manda evitar; fica declarado em vez de silencioso. CAI QUANDO a digital da chave do Play substituir a de debug em assetlinks.json E o release for assinado pelo keystore de upload, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho. REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, para as tres dispensas vivas voltarem juntas na virada do ano -- sao 38 dias contados de 23/11/2026. As citacoes de 30/11/2026 no cabecalho sao de 28/10 e ficaram VERBATIM: reescrever medicao datada apaga o que foi medido"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
   # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
@@ -366,9 +400,9 @@ dispensas:
   # unica coisa que a data significa. Encurtar isso e decisao de quem
   # coordena, nao minha.
   - portao: ios
-    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora. REAFIRMADO PELO CLIENTE EM 28/10/2026, verbatim: por enquanto nao consegui criar o id team na ios, vamos deixar isso pendente -- e na mesma data, ao fiar o passkey, apple-app-site-association foi mantido com applinks.details e webcredentials.apps VAZIOS de proposito: servir um Team ID que nao existe deixaria o arquivo com cara de configurado e a falha sem sintoma nenhum, que e o pior dos desfechos descritos acima"
+    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora. REAFIRMADO PELO CLIENTE EM 28/10/2026, verbatim: por enquanto nao consegui criar o id team na ios, vamos deixar isso pendente -- e na mesma data, ao fiar o passkey, apple-app-site-association foi mantido com applinks.details e webcredentials.apps VAZIOS de proposito: servir um Team ID que nao existe deixaria o arquivo com cara de configurado e a falha sem sintoma nenhum, que e o pior dos desfechos descritos acima. REDATADA EM 23/11/2026 PARA 31/12/2026 por decisao do cliente, e a data continua significando so de quanto em quanto tempo alguem reabre a pergunta: sao 38 dias contados de 23/11/2026, e as tres dispensas vivas voltam juntas na virada do ano. A citacao de 30/11 no cabecalho e de 28/10 e ficou VERBATIM"
     responsavel: cliente
-    vence_em: 2026-11-30
+    vence_em: 2026-12-31
 
   # A DISPENSA `oasdiff-logout-corpo-obrigatorio` SAIU EM 28/09/2026, E NAO FOI
   # REDATADA. Ela venceria hoje, e o motivo escrito nela CADUCOU pelo unico
@@ -767,216 +801,197 @@ dispensas:
   # ---------------------------------------------------------------------
 
   # ---------------------------------------------------------------------
-  # AS 20 DISPENSAS `oasdiff-*` DE 28/10/2026: `store` e `hospital` como
-  # atividade do diretorio (`20261028000001`).
+  # AS 35 DISPENSAS `oasdiff-*` SAIRAM EM 23/11/2026, E NENHUMA FOI REDATADA.
+  # Elas moravam em tres blocos deste arquivo e saem juntas porque caducaram
+  # pelo MESMO desfecho -- a base da comparacao passou a carregar o contrato
+  # novo -- e porque todas venciam no MESMO dia, 30/11/2026. Eram:
   #
-  # SAO 20 ENTRADAS E NAO UMA porque a dispensa deste portao e por MUDANCA,
-  # e nao por portao: `verificar_quebras_de_contrato.py` casa o par
-  # `id da regra` + `operationId`, e qualquer quebra fora da lista reprova --
-  # inclusive outra quebra na MESMA operacao. Uma entrada que dissesse "as
-  # quebras do diretorio" nao seria portao com excecao, e sim portao
-  # desligado com data.
+  #   28/10/2026, `store` e `hospital` no diretorio (migracao 20261028000001),
+  #   doze de `response-property-enum-value-added`:
+  #     `oasdiff-atividade-nova-approve-admin-directory-suggestion`
+  #     `oasdiff-atividade-nova-create-admin-directory-entry`
+  #     `oasdiff-atividade-nova-decline-admin-directory-suggestion`
+  #     `oasdiff-atividade-nova-get-admin-directory-entry`
+  #     `oasdiff-atividade-nova-get-admin-directory-suggestion`
+  #     `oasdiff-atividade-nova-get-directory-entry`
+  #     `oasdiff-atividade-nova-list-admin-directory-entries`
+  #     `oasdiff-atividade-nova-list-admin-directory-suggestions`
+  #     `oasdiff-atividade-nova-list-directory-entries`
+  #     `oasdiff-atividade-nova-list-my-directory-suggestions`
+  #     `oasdiff-atividade-nova-list-public-directory-entries`
+  #     `oasdiff-atividade-nova-update-admin-directory-entry`
+  #   e oito de `response-property-max-items-increased`:
+  #     `oasdiff-teto-de-atividades-approve-admin-directory-suggestion`
+  #     `oasdiff-teto-de-atividades-create-admin-directory-entry`
+  #     `oasdiff-teto-de-atividades-get-admin-directory-entry`
+  #     `oasdiff-teto-de-atividades-get-directory-entry`
+  #     `oasdiff-teto-de-atividades-list-admin-directory-entries`
+  #     `oasdiff-teto-de-atividades-list-directory-entries`
+  #     `oasdiff-teto-de-atividades-list-public-directory-entries`
+  #     `oasdiff-teto-de-atividades-update-admin-directory-entry`
   #
-  # O cliente pediu dois valores novos sabendo o preco; o que esta pago aqui
-  # e exatamente esse preco, item a item, com a contagem medida no motivo.
-  # ---------------------------------------------------------------------
-  - portao: oasdiff-atividade-nova-approve-admin-directory-suggestion
-    mudanca: response-property-enum-value-added approveAdminDirectorySuggestion
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-create-admin-directory-entry
-    mudanca: response-property-enum-value-added createAdminDirectoryEntry
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-decline-admin-directory-suggestion
-    mudanca: response-property-enum-value-added declineAdminDirectorySuggestion
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-get-admin-directory-entry
-    mudanca: response-property-enum-value-added getAdminDirectoryEntry
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-get-admin-directory-suggestion
-    mudanca: response-property-enum-value-added getAdminDirectorySuggestion
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-get-directory-entry
-    mudanca: response-property-enum-value-added getDirectoryEntry
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-list-admin-directory-entries
-    mudanca: response-property-enum-value-added listAdminDirectoryEntries
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-list-admin-directory-suggestions
-    mudanca: response-property-enum-value-added listAdminDirectorySuggestions
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-list-directory-entries
-    mudanca: response-property-enum-value-added listDirectoryEntries
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-list-my-directory-suggestions
-    mudanca: response-property-enum-value-added listMyDirectorySuggestions
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-list-public-directory-entries
-    mudanca: response-property-enum-value-added listPublicDirectoryEntries
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-atividade-nova-update-admin-directory-entry
-    mudanca: response-property-enum-value-added updateAdminDirectoryEntry
-    motivo: "o `enum` ProfessionalKind ganhou `store` e `hospital` (decisao do cliente de 28/10/2026, verbatim: precisamos adicionar outros tipos de atividade no parceiro -- Loja e Hospital), e ele SAI EM RESPOSTA desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-approve-admin-directory-suggestion
-    mudanca: response-property-max-items-increased approveAdminDirectorySuggestion
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-create-admin-directory-entry
-    mudanca: response-property-max-items-increased createAdminDirectoryEntry
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-get-admin-directory-entry
-    mudanca: response-property-max-items-increased getAdminDirectoryEntry
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-get-directory-entry
-    mudanca: response-property-max-items-increased getDirectoryEntry
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-list-admin-directory-entries
-    mudanca: response-property-max-items-increased listAdminDirectoryEntries
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-list-directory-entries
-    mudanca: response-property-max-items-increased listDirectoryEntries
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-list-public-directory-entries
-    mudanca: response-property-max-items-increased listPublicDirectoryEntries
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-teto-de-atividades-update-admin-directory-entry
-    mudanca: response-property-max-items-increased updateAdminDirectoryEntry
-    motivo: "ProfessionalKinds.maxItems subiu de 6 para 8 porque o teto E o tamanho da lista fechada, e deixa-lo em 6 com oito valores recusaria uma entrada que legitimamente faz as oito coisas -- a recusa viria do TETO e nao do vocabulario. O campo sai em RESPOSTA desta operacao, entao um cliente que dimensionou buffer pelo teto antigo pode receber lista maior. MEDIDO em 28/10/2026 e nao herdado: `tufin/oasdiff:v1.32.1`, `breaking --format json` do `development` em 6b60db94 contra esta arvore, 50 mudancas = 34 erros (26 response-property-enum-value-added + 8 response-property-max-items-increased) e 16 avisos, em 20 pares regra+operacao. A contagem que o repositorio carregava antes, 12 erros medidos em 18/10, era de UM valor hipotetico num contrato sem `GET /public/directory-entries` nem o `rating` -- quem alargar a lista de novo MEDE OUTRA VEZ. O APK em campo nao quebra: `AtividadeDoDiretorio.porCodigo` devolve nulo para valor desconhecido e `glifoDoInscrito` tem a reserva, caminho que existe desde 18/10 exatamente para isto. CAI QUANDO o aplicativo publicado conhecer os dois valores (enum Dart + arm do switch de icone), momento em que a quebra deixa de ter quem a sofra e esta entrada sai por redundancia. A data acompanha as outras tres deste arquivo e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  # ---------------------------------------------------------------------
-  # O APELIDO ANULAVEL NA LISTA DE CONEXOES (04/11/2026)
+  #   04/11/2026, o apelido anulavel na lista de conexoes, uma:
+  #     `oasdiff-apelido-anulavel-list-my-connections`
   #
-  # Uma entrada so, para uma quebra so. A dispensa aqui e por MUDANCA e nao
-  # por portao: qualquer outra quebra, inclusive outra nesta mesma operacao,
-  # continua reprovando o passo.
-  # ---------------------------------------------------------------------
-  - portao: oasdiff-apelido-anulavel-list-my-connections
-    mudanca: response-property-became-nullable listMyConnections
-    motivo: "o contrato DECLARAVA FALSO: `ConnectedPerson.handle` era nao anulavel enquanto `users.handle` aceita nulo POR DECISAO ESCRITA de 18/10/2026 -- o apelido nao esta em `required` de `RegisterRequest`, o campo do cadastro e `opcional: true`, e o `COMMENT ON COLUMN` da migracao `20261018000021` diz literalmente que com nulo a tela cai para o nome de exibicao e nenhum fluxo obriga a escolher. Para sustentar a declaracao, a consulta da lista carregava `AND (to_jsonb(outro) ->> 'handle') IS NOT NULL`, e o efeito foi o defeito que o cliente relatou em 03/11/2026: uma conexao ACEITA desaparecia da lista de uma pessoa porque a OUTRA conta nao tinha apelido. MEDIDO no banco de homologacao e nao deduzido: 22 das 61 contas sem apelido, e a aresta do par relatado com `state = accepted` e `origin = people_search`. NAO HA REESCRITA COMPATIVEL: manter o campo nao anulavel exige OMITIR a pessoa (que e o defeito) ou INVENTAR um apelido (que e pior), entao corrigir a declaracao falsa e incompativel por natureza. MEDIDO em 04/11/2026 com `tufin/oasdiff:v1.32.1`, `breaking --format json`: contra a BASE QUE O PORTAO USA -- `origin/development` em 315fb815, porque o passo le `origin/${{ github.base_ref }}` e o base deste PR e `development` -- sao 1 mudanca e 1 erro, exatamente esta. ATENCAO A ARMADILHA: o passo se CHAMA `compatibilidade contra main` e NAO compara contra a main; contra `origin/main` em 84a2d751 o mesmo comando devolve 163 mudancas e 157 erros, que o portao nunca olha. OS CONSUMIDORES FORAM REGERADOS e estao verdes: `src/shared/types/generated/api.ts`, `admin/src/api/generated/api.ts` e `web/src/api/generated/api.ts` passaram de `string` para `string | null`, com `verify:types` na raiz, `verify:api`/`typecheck`/`lint`/`test` no admin e `verify:api`/`check`/`lint`/`test:unidade` no web. O APLICATIVO EM CAMPO e quem sofreria de verdade, e ele trata o nulo: `PessoaConectada.doJson` le `json['handle'] as String?`, `nomeParaLer` cai para o nome de exibicao e depois para `Usuario sem nome`, `temPorta` recusa a porta do perfil, e ha dois casos de widget medindo isso. CAI QUANDO este PR entrar na `development`: a partir dai a quebra nao aparece em diff nenhum contra `development` e a entrada sai por redundancia. Ela reaparece UMA vez num PR `development -> main`, quando a main receber este contrato. A data acompanha as outras entradas deste arquivo e e escolha declarada, nao medicao. ADENDO DE 04/11/2026, DEPOIS DESTA MEDICAO: a armadilha apontada acima deixou de existir, porque o passo foi RENOMEADO para `compatibilidade contra a base do PR` no PR 160, na mesma integracao que levou este PR para a `development`. A frase acima, no tempo presente, passou a ser falsa quanto ao NOME -- e continua certa quanto ao COMPORTAMENTO, que nao mudou. Quem falsificou a frase fui eu, renomeando o passo depois de medir; ela fica como estava porque e medicao datada"
-    responsavel: app
-    vence_em: 2026-11-30
-  # ---------------------------------------------------------------------
-  # AS 14 DISPENSAS `oasdiff-*` DE 15/11/2026: encontro do painel nasce
-  # RASCUNHO (PR 182).
+  #   15/11/2026, encontro do painel nasce RASCUNHO (PR 182), sete de
+  #   `response-property-became-nullable` e sete de
+  #   `response-property-enum-value-added`, sobre as mesmas sete operacoes:
+  #     `oasdiff-sem-data-de-publicacao-list-admin-network-events`
+  #     `oasdiff-sem-data-de-publicacao-create-admin-network-event`
+  #     `oasdiff-sem-data-de-publicacao-get-admin-network-event`
+  #     `oasdiff-sem-data-de-publicacao-update-admin-network-event`
+  #     `oasdiff-sem-data-de-publicacao-change-admin-network-event-access`
+  #     `oasdiff-sem-data-de-publicacao-cancel-admin-network-event`
+  #     `oasdiff-sem-data-de-publicacao-relocate-admin-network-event`
+  #     `oasdiff-estado-rascunho-list-admin-network-events`
+  #     `oasdiff-estado-rascunho-create-admin-network-event`
+  #     `oasdiff-estado-rascunho-get-admin-network-event`
+  #     `oasdiff-estado-rascunho-update-admin-network-event`
+  #     `oasdiff-estado-rascunho-change-admin-network-event-access`
+  #     `oasdiff-estado-rascunho-cancel-admin-network-event`
+  #     `oasdiff-estado-rascunho-relocate-admin-network-event`
   #
-  # SAO 14 ENTRADAS E NAO UMA, nem sete: a dispensa deste portao e por
-  # MUDANCA e nao por portao -- `verificar_quebras_de_contrato.py:38` casa o
-  # par `id da regra` + `operationId`, e qualquer quebra fora da lista
-  # reprova o passo, INCLUSIVE outra quebra na mesma operacao. Sao 7
-  # operacoes x 2 regras: `published_at` virou anulavel (rascunho nao tem
-  # data de publicacao) e `draft` entrou no enum de estado.
+  # O MOTIVO DE CATORZE DELAS JA DIZIA ISSO, verbatim nas de 15/11: "CAI NA
+  # MESCLA, e nao por insumo que chega: o passo compara contra
+  # `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base
+  # carregar este contrato o `oasdiff breaking` para de produzir a quebra e
+  # esta entrada deve SAIR, nao ser redatada". E a de 04/11 dizia "CAI QUANDO
+  # este PR entrar na `development`". E o mesmo desfecho que apagou as quinze
+  # `oasdiff-unidade-nova-*` em 17/10/2026, as seis de 18/10 em 26/10, as
+  # cinco `oasdiff-sem-senha-*` em 21/10, as quatro da BICHUS-41 em 01/10 e a
+  # `oasdiff-logout-corpo-obrigatorio` em 28/09.
   #
-  # POR QUE NAO `x-extensible-enum`, que e o que a mensagem do oasdiff
-  # sugere: ele tem ZERO ocorrencias em `api/openapi.yaml` (`grep -c` sai 1,
-  # sem casamento) contra 161 linhas com `enum:` -- 103 em bloco e 58 em
-  # forma de linha --, entao nao e padrao deste repositorio; e, pior, ele nao
-  # resolve metade do problema, porque `published_at` virar anulavel e quebra
-  # de verdade e `x-extensible-enum` nao fala disso.
+  # BASE DA MEDICAO: `origin/development` em `3c967329` (merge do PR 182),
+  # `api/openapi.yaml` no blob `df7d9084`.
+  #
+  # AS CINCO MUDANCAS ESTAO NA BASE, conferidas LINHA POR LINHA em
+  # `origin/development:api/openapi.yaml` e nao deduzidas do merge:
+  #
+  #   1. linha 18473 -- `ProfessionalKind` e
+  #      `[vet, groomer, walker, sitter, trainer, clinic, store, hospital,
+  #      boarding, daycare]`. `store` e `hospital` estao la, entao
+  #      `response-property-enum-value-added` nao tem como acusar as doze
+  #      operacoes do diretorio por causa deles.
+  #   2. linha 18478 -- `ProfessionalKinds.maxItems: 10`. As oito entradas de
+  #      teto nasceram quando ele subiu de 6 para 8; em 29/10 ele subiu de 8
+  #      para 10 com `boarding` e `daycare`, e como a dispensa casa o par
+  #      `regra + operationId` e nao o VALOR, as mesmas oito entradas
+  #      passaram a cobrir tambem o segundo aumento sem ninguem decidir isso.
+  #      Mais uma razao para sairem: dispensa que cobre mudanca que ninguem
+  #      mediu e dispensa larga demais.
+  #   3. linha 24227 -- `AdminNetworkEventPublicationStatus` e
+  #      `[draft, published, cancelled, removed]`. `draft` esta no enum.
+  #   4. linha 24292 -- `AdminNetworkEvent.published_at` e
+  #      `{ type: [string, 'null'], format: date-time }`, isto e, anulavel.
+  #   5. linha 15674 -- `ConnectedPerson.handle` com `nullable: true`.
+  #
+  # O VEREDITO DO `oasdiff` E DESTA MAQUINA, com o binario da esteira
+  # (`tufin/oasdiff:v1.32.1`, o mesmo digest de `ci.yml`). Duas medicoes, e a
+  # primeira sozinha NAO vale:
+  #
+  #   * base == ponta devolve `[]`. Isso e verdadeiro POR CONSTRUCAO e nao
+  #     prova nada: arquivos iguais nao produzem quebra, e seria o mesmo
+  #     resultado se o juizo estivesse cego.
+  #   * CONTROLE POSITIVO, que e o que prova que o metodo sabe dizer "VIVA":
+  #     uma base FORJADA a partir da propria base, com as cinco linhas acima
+  #     REVERTIDAS (enum sem `store`/`hospital`, `maxItems` de volta a 6, enum
+  #     sem `draft`, `published_at` nao anulavel, `handle` nao anulavel),
+  #     comparada contra o contrato da base, devolve 67 mudancas, 51 em nivel
+  #     ERR, em 38 pares `regra + operationId` distintos. OS 35 PARES QUE
+  #     ESTAS DISPENSAS NOMEAVAM ESTAO TODOS NESSES 38, um a um, com
+  #     diferenca de conjunto VAZIA nos dois sentidos para as 35. Quer dizer:
+  #     se a mudanca NAO estivesse na base, o metodo acusaria exatamente
+  #     estas 35 -- entao o `[]` da base real e ausencia de quebra, e nao
+  #     ausencia de medicao.
+  #
+  # OS DOIS PARES A MAIS SAO `publishAdminNetworkEvent`, e eles NAO sao
+  # dispensa que faltou: a operacao NASCEU no PR 182
+  # (`grep -c publishAdminNetworkEvent` sai 0 em `3c967329^1:api/openapi.yaml`
+  # e 5 em `3c967329^2`), e operacao nova nao tem lado antigo com que ser
+  # comparada, entao o `oasdiff` nunca produziu quebra para ela contra a base
+  # daquele PR. Ela so aparece na forja porque a forja parte da base de HOJE,
+  # onde a operacao ja existe.
+  #
+  # A CONDICAO DE SAIDA ESCRITA NAS VINTE DE 28/10 ERA OUTRA, E ELA TAMBEM
+  # ESTA CUMPRIDA. O motivo delas dizia "CAI QUANDO o aplicativo publicado
+  # conhecer os dois valores (enum Dart + arm do switch de icone)" -- nao
+  # falava de mescla. As duas metades estao no codigo, medidas e nao supostas:
+  # `app/lib/api/modelos_diretorio.dart:12-13` tem `hospital('hospital',
+  # 'Hospital')` e `store('store', 'Loja')` no `enum AtividadeDoDiretorio`, e
+  # `app/lib/widgets/icone_do_inscrito.dart:20-21` tem os dois arms do
+  # `glifoDoInscrito`. O que NAO foi medido daqui, e por isso nao esta
+  # afirmado: qual APK esta no aparelho de quem. Mas isso nao muda o destino
+  # da entrada, porque a entrada nao governa aparelho nenhum: ela governa o
+  # que o passo de contrato aceita, e contra a base de hoje o passo nao
+  # produz essas quebras.
+  #
+  # UMA PREVISAO ESCRITA NA DE 04/11 ESTA ERRADA, e fica registrado porque
+  # ela era o unico argumento para manter alguma destas 35. Ela dizia: "Ela
+  # reaparece UMA vez num PR `development -> main`, quando a main receber
+  # este contrato". MEDIDO contra `origin/main` em `84a2d751`: a operacao
+  # `listMyConnections` NAO EXISTE na main (`grep -c` sai 0, com CONTROLE
+  # POSITIVO de 7 ocorrencias na `development`, entao a varredura enxerga), e
+  # sem lado antigo nao ha `response-property-became-nullable` para acusar. O
+  # par nao reaparece. E o quadro maior diz a mesma coisa para as 35: um PR
+  # `development -> main` HOJE levanta 163 mudancas, 157 em nivel ERR, em 90
+  # pares distintos, e ZERO desses 90 pares e coberto por qualquer uma destas
+  # 35 entradas -- a main carrega um contrato de 5.337 linhas contra as 26.679
+  # da `development`, e o que o `oasdiff` acusa ali sao outras regras, em
+  # outras operacoes. Nenhuma destas 35 protegia aquele PR, nem antes nem
+  # depois deste commit.
+  #
+  # O EFEITO DE DEIXA-LAS DE PE SERIA SO UM, E ELE SERIA CARO: em 01/12/2026
+  # as 35 medem `VENCIDA`, `verificar_dispensas.py` reprova com exit 1, o job
+  # `rapidos` cai e o `portao` cai com ele -- em TODO PR, inclusive nos que
+  # nao tocam o contrato. Medido antes deste commit: exit 0 com as 38
+  # entradas em `[7d]`, no relogio local e com `TZ=UTC`, saidas
+  # byte-identicas (`diff` vazio). Depois: exit 0 com tres entradas, nos dois
+  # relogios.
+  #
+  # REDATAR SERIA PIOR QUE APAGAR, e e por isso que a data nao foi tocada:
+  # renovar exigiria escrever um motivo afirmando que a quebra existe, e ela
+  # nao existe. Dispensa cuja razao deixou de valer e pior que dispensa
+  # nenhuma -- ela continua escondendo um portao que ninguem mais olha, e com
+  # a aparencia de ter sido conferida. Pior ainda aqui: enquanto a entrada
+  # fica, uma quebra NOVA no mesmo par `regra + operationId` entra ACEITA sem
+  # ninguem decidir -- um terceiro valor no `ProfessionalKind`, ou um segundo
+  # campo anulavel em `getAdminNetworkEvent`, passariam calados. Foi
+  # exatamente o que aconteceu com o `maxItems` de 8 para 10 em 29/10.
+  #
+  # O QUE FICOU SEM PORTAO: nada que estas entradas segurassem. Elas eram
+  # EXCECOES, e apagar excecao devolve rigor, nao tira. CONFERIDO, e nao
+  # afirmado: as 35 mudancas foram forjadas em nivel ERR (`level: 3`, com
+  # `id` e `operationId`) num arquivo de entrada e passadas a
+  # `verificar_quebras_de_contrato.py`. Com o registro de ANTES, `exit 0` e as
+  # 35 impressas como `ACEITA por dispensa datada`; com o registro DESTE
+  # commit, `exit 1`, `REPROVADO: 35 quebra(s) sem dispensa`, cada uma nomeada
+  # em `::error::quebra de contrato SEM dispensa`. O juizo passou a cobrar o
+  # que antes dispensava. As iscas do `--autoteste` passam os 7 casos.
+  #
+  # POR QUE APAGAR AQUI NAO E A ARMADILHA DO `apk-assinado`:
+  # `verificar_borda_local.py:227` (`dispensa_vencida`) reprova quando NAO
+  # acha a entrada, e a lista `casos` que ela consulta (:271-278) continua com
+  # DOIS portoes e so dois, `apk-assinado` e `ios` -- reconferido no codigo em
+  # 23/11 e nao herdado do comentario anterior. Os 35 nomes acima nao eram
+  # consultados por ela nem por mais nada: `git grep -F` de cada um dos 35
+  # sobre a arvore rastreada inteira acha cada um SO neste arquivo, com
+  # `apk-assinado` (4 arquivos, entre eles `verificar_borda_local.py`) como
+  # CONTROLE POSITIVO da varredura. Apagar nao derruba
+  # `verificar-borda-local`.
+  #
+  # DUAS MIGRACOES APONTAM PARA CA, e os ponteiros continuam valendo porque
+  # apontam para o ARQUIVO e nao para a entrada:
+  # `migrations/20261028000001_loja-e-hospital-no-diretorio.sql:54` ("carrega a
+  # contagem nova, nao a velha") e
+  # `migrations/20261029000002_hospedagem-creche-e-a-indicacao-completa.sql:143`
+  # ("esta na dispensa datada em `.github/quality-gates.yml`"). Quem seguir
+  # qualquer um dos dois cai neste registro, que e onde a contagem medida
+  # agora vive. As migracoes nao foram tocadas: elas ja foram aplicadas, e
+  # reescrever medicao datada apaga o que foi medido.
+  #
+  # DITO EM VOZ ALTA, e nao e consequencia deste commit: o portao de quebra
+  # de contrato roda so em `pull_request` e depende de `docker run
+  # tufin/oasdiff:v1.32.1`. Nao existe alvo local de `oasdiff` no `Makefile`,
+  # entao a comparacao desta medicao foi feita a mao, com o mesmo binario.
+  # Quem da o veredito e a esteira.
   # ---------------------------------------------------------------------
-  - portao: oasdiff-sem-data-de-publicacao-list-admin-network-events
-    mudanca: response-property-became-nullable listAdminNetworkEvents
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-create-admin-network-event
-    mudanca: response-property-became-nullable createAdminNetworkEvent
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 201 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-get-admin-network-event
-    mudanca: response-property-became-nullable getAdminNetworkEvent
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-update-admin-network-event
-    mudanca: response-property-became-nullable updateAdminNetworkEvent
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-change-admin-network-event-access
-    mudanca: response-property-became-nullable changeAdminNetworkEventAccess
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-cancel-admin-network-event
-    mudanca: response-property-became-nullable cancelAdminNetworkEvent
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-sem-data-de-publicacao-relocate-admin-network-event
-    mudanca: response-property-became-nullable relocateAdminNetworkEvent
-    motivo: "`AdminNetworkEvent.published_at` passou a aceitar nulo porque encontro criado pelo painel nasce RASCUNHO e rascunho nao tem data de publicacao (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e o campo SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber nulo onde o contrato prometia string. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-list-admin-network-events
-    mudanca: response-property-enum-value-added listAdminNetworkEvents
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-create-admin-network-event
-    mudanca: response-property-enum-value-added createAdminNetworkEvent
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 201 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-get-admin-network-event
-    mudanca: response-property-enum-value-added getAdminNetworkEvent
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-update-admin-network-event
-    mudanca: response-property-enum-value-added updateAdminNetworkEvent
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-change-admin-network-event-access
-    mudanca: response-property-enum-value-added changeAdminNetworkEventAccess
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-cancel-admin-network-event
-    mudanca: response-property-enum-value-added cancelAdminNetworkEvent
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
-  - portao: oasdiff-estado-rascunho-relocate-admin-network-event
-    mudanca: response-property-enum-value-added relocateAdminNetworkEvent
-    motivo: "o `enum` AdminNetworkEventPublicationStatus ganhou o valor `draft` porque encontro criado pelo painel nasce rascunho (decisao do cliente de 15/11/2026, verbatim: preciso que novos eventos cadastrados sejam sempre salvos como Rascunho, para depois eu aprovar manualmente depois), e ele SAI EM RESPOSTA 200 desta operacao, entao um cliente escrito contra o contrato antigo pode receber valor que ele nao trata. NAO EXISTE CLIENTE EM CAMPO contra estas rotas, e isso foi MEDIDO em 16/11/2026 nesta arvore e nao deduzido: o unico consumidor de `/admin/network/events` e o backoffice (`grep -rc admin/network/events admin/src` casa 2 arquivos, `admin/src/api/generated/api.ts` com 7 linhas e `admin/src/rede/api/redeApi.ts` com 9), e ele sobe no mesmo lote e foi atualizado neste mesmo PR; o app Flutter nao cita `/admin/` em arquivo nenhum de `app/lib` (`grep -rc` sai 1 sem casamento, com CONTROLE POSITIVO de `network/events` em 14 linhas de `app/lib/api/rede_api.dart`, entao a varredura enxerga); e em `web/src` o prefixo `/admin/` aparece SO no artefato gerado `web/src/api/generated/api.ts` (52 linhas, porque ele tipa o contrato inteiro e nao porque o site chame a rota) e em zero arquivo escrito a mao, com CONTROLE POSITIVO de `v1/` em 4 arquivos de `web/src/dominio`. O QUE NAO FOI MEDIDO, e por isso nao esta afirmado aqui: versoes do painel ja publicadas e qualquer chamador fora deste repositorio. CAI NA MESCLA, e nao por insumo que chega: o passo compara contra `origin/${github.base_ref}:api/openapi.yaml`, entao assim que a base carregar este contrato o `oasdiff breaking` para de produzir a quebra e esta entrada deve SAIR, nao ser redatada -- e o mesmo desfecho que apagou as quinze `oasdiff-unidade-nova-*` em 17/10/2026. O `vence_em` acompanha as outras dispensas vivas deste arquivo para a revisao acontecer de uma vez, e e escolha declarada, nao medicao"
-    responsavel: cliente
-    vence_em: 2026-11-30
