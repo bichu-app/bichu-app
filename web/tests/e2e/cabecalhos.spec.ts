@@ -51,7 +51,14 @@ test('termos e privacidade: noindex enquanto forem rascunho', async ({ request }
   for (const rota of ['/termos', '/privacidade']) {
     const html = await (await request.get(rota)).text();
     expect(html, rota).toContain('<meta name="robots" content="noindex, nofollow">');
-    expect(html, rota).toContain('Rascunho — pendente de revisão jurídica');
+    // A FRASE INTEIRA, e nao `toContain('Rascunho')`: o que este portao protege
+    // e o aviso COMPLETO visivel nas duas paginas legais, e meio aviso nao
+    // avisa. A pontuacao mudou em 28/11/2026 porque o cliente proibiu travessao
+    // no texto do site, e `LEGAL.aviso` passou a usar virgula. Isto e
+    // reapontamento, nao afrouxamento: a asserção continua exigindo as mesmas
+    // palavras na mesma ordem. Travessao dentro de string pode ser VALOR
+    // FIXADO por teste, e nao so prosa: foi o caso deste.
+    expect(html, rota).toContain('Rascunho, pendente de revisão jurídica');
   }
 });
 
