@@ -4,7 +4,7 @@ Escrevemos do jeito mais direto que conseguimos. Onde uma regra ainda não está
 
 ## 1. Quem somos e como falar com a gente
 
-- **Controlador dos dados:** [NOME DA EMPRESA — DECISÃO DO CLIENTE], CNPJ [DECISÃO DO CLIENTE], com sede em [ENDEREÇO — DECISÃO DO CLIENTE].
+- **Controlador dos dados:** Tecla Consulting Ltda, CNPJ 44.131.060/0001-19, com sede em [ENDEREÇO — DECISÃO DO CLIENTE]. O Bichu é a plataforma desenvolvida por ela.
 - **Encarregado pelo tratamento de dados pessoais (DPO):** Leandro Panegassi, pelo e-mail **privacidade@bichu.app**.
 - **Dúvidas gerais e denúncias:** oi@bichu.app.
 - **Instagram:** @bichu.app. Use o Instagram para conversar com a gente, e não para pedidos sobre os seus dados: mensagens ali ficam também sob as regras da Meta. Pedidos sobre dados vão para privacidade@bichu.app.
@@ -278,12 +278,12 @@ Pelo art. 18 da LGPD, você pode pedir:
 - excluir um pet pelo app;
 - sair de todos os aparelhos.
 
-**Exclusão da conta.** Hoje a exclusão da conta é pedida pelo privacidade@bichu.app. [PENDENTE: o botão de excluir a conta no app ainda não existe] O que acontece:
+**Exclusão da conta.** Você exclui a sua conta pelo próprio app: toque na sua foto, no alto da tela, e desça até **Excluir a conta**. A gente pede a sua senha antes de confirmar. Se preferir, peça pelo privacidade@bichu.app. O que acontece:
 
 - a conta deixa de funcionar na hora, as sessões são encerradas, a localização de referência é apagada e o e-mail fica livre para uma conta nova;
 - os dados da conta, dos pets, das tags, dos casos, dos achados e das conversas **não são apagados da base**. A conta fica desabilitada: você deixa de ser encontrado em qualquer página ou função do Bichu, e é a desabilitação, e não a ausência do registro, que faz você desaparecer do produto. Essa é uma decisão nossa, e preferimos dizê-la a prometer um apagamento que não acontece;
 - **se você quer a eliminação de fato**, peça pelo privacidade@bichu.app. O art. 18, VI, da LGPD é o seu direito, e o pedido é tratado por uma pessoa, uma a uma — não por um prazo automático;
-- **o que isso quer dizer, item por item:** a trilha de auditoria continua, e ela é a única coisa aqui que de fato é apagada por prazo, em 24 meses (item 4.14); os arquivos de foto ficam (item 4.4); e as cópias de segurança ficam até vencerem, em até [PRAZO DAS CÓPIAS DE SEGURANÇA — CONFIRMAR EM PRODUÇÃO] dias;
+- **o que isso quer dizer, item por item:** a trilha de auditoria continua, e ela é a única coisa aqui que de fato é apagada por prazo, em 24 meses (item 4.14); os arquivos de foto ficam (item 4.4); e as cópias de segurança ficam até vencerem, em até 14 dias — esse é o prazo hoje, e se ele mudar este texto muda junto;
 - as conversas de que você participou deixam de aparecer para você e para a outra pessoa, e não são apagadas.
 
 **Cópia dos seus dados.** Hoje a cópia é preparada manualmente, a partir do pedido pelo privacidade@bichu.app. Ela traz os seus dados e as mensagens que você escreveu. Não traz dados de outras pessoas, como o nome ou o contato de quem conversou com você.

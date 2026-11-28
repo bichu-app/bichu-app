@@ -601,8 +601,33 @@ export interface paths {
         post?: never;
         /**
          * Pede a exclusao da conta (LGPD, art. 18)
-         * @description Exclusao logica imediata, expurgo definitivo em 30 dias. Casos abertos
-         *     sao encerrados e as tags, revogadas.
+         * @description **Exclusao logica imediata, e NAO HA EXPURGO POR PRAZO.**
+         *
+         *     No `202`, e numa transacao so: as sessoes caem em todos os aparelhos
+         *     (`account_deleted`), os tokens pendentes sao invalidados, a conta vai a
+         *     `status = 'deletion_requested'` com `deleted_at` preenchido, e as
+         *     plaquinhas ativas dos pets dela sao revogadas (`owner_request`, com o
+         *     texto cifrado do codigo apagado). Um aviso vai para o e-mail da conta.
+         *
+         *     **O dado NAO e apagado**, nem agora nem depois. Por decisao do cliente
+         *     de 26/10/2026 (`adr/ADR-0010-privacidade-e-lgpd.md`, emenda 6, *"nao
+         *     apague nada, mantenha e corrija a politica"*), nenhum dado do produto e
+         *     apagado por decurso de prazo: a guarda e amarrada a finalidade. A conta
+         *     fica DESABILITADA, e e a desabilitacao -- e nao a ausencia do registro
+         *     -- que faz a pessoa desaparecer do produto. `expurgarContasExcluidas`
+         *     (`src/modules/identity/application/expurgar-contas-excluidas.ts`)
+         *     devolve tres zeros sem tocar banco nem balde.
+         *
+         *     A eliminacao de fato (art. 18, VI, da LGPD) continua sendo direito do
+         *     titular e **nao tem implementacao em codigo**: ela e pedida pelo
+         *     privacidade@bichu.app e conduzida por uma pessoa, uma a uma. A politica
+         *     publicada (`web/src/conteudo/juridico/privacidade.md`) diz isso nestes
+         *     termos.
+         *
+         *     Esta descricao dizia *"expurgo definitivo em 30 dias"* ate 23/11/2026, e
+         *     a frase deixou de ser verdade em 17/10/2026. A trilha ainda grava
+         *     `purge_after` (`PRAZO_DE_EXPURGO_EM_MS`, 30 dias) no evento
+         *     `privacy.account_deletion_requested`, e **nada consome esse carimbo**.
          */
         delete: operations["deleteMyAccount"];
         options?: never;
