@@ -126,6 +126,21 @@ jobs:
       - name: as iscas do guarda de push de branch de integracao reprovam
         run: sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
 
+      # AS ISCAS DO PORTAO DA BORDA, aqui no primeiro estagio e nao no job
+      # `integracao`, onde o portao de verdade roda: elas nao sobem pilha, nao
+      # usam docker e nao leem rede (0,05 s).
+      #
+      # O defeito que elas pegam e o de 23/11/2026: o julgamento dos dois
+      # arquivos de `/.well-known/` era `if valores: continue`, e o
+      # `assetlinks.json` deixou de estar vazio em 28/10 -- passou a carregar a
+      # digital de DEBUG da maquina de quem compila. O portao ficou verde com a
+      # chave errada por 26 dias, e nenhuma suite ficou vermelha. Sete das 22
+      # iscas PRECISAM passar: portao que reprova quem esta certo e desligado na
+      # primeira semana, e o par decisivo e a MESMA digital aprovando no destino
+      # que a declara e reprovando no que nao a declara.
+      - name: as iscas da digital de associacao por destino reprovam
+        run: python3 infra/verificacao/verificar_borda_local.py --autoteste
+
 
 
       # BICHUS-211, as duas iscas. Nenhuma das duas precisa de docker nem de

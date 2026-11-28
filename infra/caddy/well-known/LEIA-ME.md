@@ -241,8 +241,46 @@ correto -- sao ambientes diferentes, e credencial de teste nao deve atravessar
 precisar cadastrar de novo. Nao e defeito; e o que ter ambientes separados
 significa.
 
-`infra/verificacao/verificar_borda_local.py` acusa lista vazia a cada execucao e
-**reprova** assim que a dispensa correspondente vencer. Com a digital preenchida,
-o caso `assetlinks.json` passa a sair limpo; o caso `apple-app-site-association`
-continua saindo como aviso enquanto a dispensa `ios` valer, e vira reprovacao em
-2026-10-31.
+## 2026-11-23: o portao conferia SE a lista tinha valor, nunca QUAL
+
+O paragrafo que estava aqui dizia: *"com a digital preenchida, o caso
+`assetlinks.json` passa a sair limpo"*. Estava certo e era o problema. Preencher
+com a digital de DEBUG em 28/10 deixou o caso `assetlinks.json` **limpo**, e
+limpo era mentira: o julgamento de `verificar_borda_local.py` era
+`if valores: continue`, isto e, ele reclamava so de lista VAZIA. Medido em
+23/11/2026 com o `apple-app-site-association` como controle positivo: o caso
+`assetlinks.json` **nao produzia achado em data nenhuma** -- nem em 23/11, nem em
+31/12/2026, nem em 01/01/2027, nem em 15/06/2030 --, porque a dispensa
+`apk-assinado` nunca chegava a ser consultada; o `continue` vinha antes.
+
+**E e exatamente o desfecho que a secao do Team ID deste arquivo previu por
+escrito**, uma secao acima: "arquivo servido declarando um Team ID que nao existe
+e PIOR que arquivo vazio... o preenchido com valor falso **parece
+configurado**". Aconteceu com o Android, pela outra porta, e por 26 dias.
+
+O conserto (decisao do cliente em 23/11/2026, verbatim: *"Sim, e passa a exigir a
+digital certa"*) poe o ancora **fora** do arquivo que esta sendo conferido:
+`infra/verificacao/digitais-de-associacao-por-destino.txt` declara, por destino,
+a **impressao** da digital aceitavel -- nunca a digital. Sao tres estados no
+lugar de dois: lista vazia, digital que casa com a declarada (**passa**) e
+digital que nao casa com nenhuma (tratada como a vazia). Leia aquele arquivo
+antes de mexer em qualquer um destes dois JSON.
+
+**O QUE MUDA PARA QUEM FOR PREENCHER.** No dia da publicacao nao e mais uma
+edicao, sao duas, e a segunda nao e opcional: a digital de release entra como
+segundo elemento de `sha256_cert_fingerprints` **e** a impressao dela entra na
+declaracao, nas linhas `DIGITAL ... digital-do-apk`. So o JSON nao deixa o portao
+verde -- de proposito, porque era assim que ele ficava verde com a chave errada.
+
+**E A CONSEQUENCIA ESTA PROGRAMADA.** A dispensa `apk-assinado` passou a ser
+consultada de verdade: enquanto ela valer sai `[aviso]`, e no dia seguinte ao
+`vence_em` dela o portao REPROVA, derrubando `make verificar` e o job da esteira.
+A data que vale e a de `.github/quality-gates.yml` e **nao esta repetida** em
+codigo nenhum (dois prazos para o mesmo insumo divergem, e o mais frouxo vence).
+Medido em 23/11/2026: `apk-assinado` e `ios` estao em `vence_em: 2026-11-30`,
+logo o vermelho comeca em **01/12/2026**; o cliente disse nesta data que a
+dispensa vai para 31/12/2026, e quando essa redatacao entrar no
+`quality-gates.yml` o vermelho anda para 01/01/2027 sozinho. **Quem vier achar
+esse vermelho: ele foi programado, nao e regressao.** O caso
+`apple-app-site-association` continua saindo como aviso pela mesma mecanica, pela
+dispensa `ios`.

@@ -767,6 +767,20 @@ docker compose logs migracao | tail -5
 
 # 3. a borda responde o que o contrato promete, PELA PORTA PUBLICADA.
 #    AQUI o IP é legítimo: a sonda bate na porta, não configura base nenhuma.
+#
+#    DESDE 23/11/2026 ESTE PORTÃO RESOLVE ENDEREÇO -> DESTINO. Ele confere QUAL
+#    digital os arquivos de associação carregam, e para isso precisa saber qual
+#    destino aquele endereço é: a declaração está em
+#    `infra/verificacao/digitais-de-associacao-por-destino.txt`. Endereço sem
+#    linha `HOST` lá reprova com `DESTINO_NAO_DECLARADO`, e isso é deliberado --
+#    chutar o destino faria o portão julgar pela regra do destino errado.
+#    O IP cru não está declarado de propósito (duplicar o IP da VM, que
+#    `infra/verificacao/associacao.yml` já declara, cria uma segunda cópia que
+#    envelhece sozinha). Duas saídas, nesta ordem de preferência:
+#      a) rode contra o HOSTNAME, que já está declarado:
+#         python3 infra/verificacao/verificar_borda_local.py https://hml.bichu.app .
+#      b) se o DNS ainda não cortou e você precisa do IP, acrescente UMA linha
+#         `HOST <ip> <destino>` na declaração, com o motivo, e tire-a depois.
 python3 infra/verificacao/verificar_borda_local.py "http://$IP" .
 
 # 4. o artefato NO AR e o commit que voce pediu -- nao um qualquer, e nao nulo
@@ -896,6 +910,30 @@ docker compose logs edge | grep -i 'certificate obtained'
 python3 infra/verificacao/verificar_borda_local.py https://bichu.app .
 curl -sI http://bichu.app/v1/health | head -1   # 301/308 para https, e não 200
 ```
+
+**`bichu.app` não tem linha na declaração de digitais, e a primeira coisa que
+este comando vai dizer é `DESTINO_NAO_DECLARADO`. Isso é parte do passo, não um
+defeito.** Desde 23/11/2026 o portão confere QUAL digital os arquivos de
+associação carregam, e a tabela é
+`infra/verificacao/digitais-de-associacao-por-destino.txt`. `bichu.app` ficou de
+fora porque hoje ele resolve para a VM de **homologação** (medido com
+`dig +short` em 23/11/2026: `35.247.247.16`, o mesmo de `hml.bichu.app`), e
+declará-lo como `prod` antes do corte faria o portão julgar homologação pela
+regra de produção — que é exatamente a armadilha de expectativa velha que
+`infra/verificacao/associacao.yml` descreve sobre o próprio `ip_esperado`.
+
+Então, **neste passo**, depois de o DNS cortar: acrescente
+
+```
+HOST bichu.app       prod
+HOST www.bichu.app   prod
+HOST tag.bichu.app   prod
+```
+
+à declaração, nos hosts que de fato cortaram, e rode o comando de novo. E leia a
+linha `DIGITAL prod digital-do-apk` antes de comemorar: enquanto ela estiver em
+`AINDA-NAO-EXISTE`, o portão vai acusar a digital servida — o insumo é a chave do
+Play Console, e o aviso vira reprovação quando a dispensa `apk-assinado` vencer.
 
 ---
 
