@@ -50,13 +50,13 @@ export const TAG = {
   ajudaTelefoneDoAchador: 'Com DDD. Por exemplo: 11 91234-5678.',
   campoRecado: 'Recado para o tutor',
   ajudaRecado:
-    'Onde você está com ele e como ele está. Telefone, e-mail e endereço escritos aqui são retirados — para isso existem os campos acima.',
+    'Onde você está com ele e como ele está. Telefone, e-mail e endereço escritos aqui são retirados: para isso existem os campos acima.',
   consentimentoRotulo: 'Aceito compartilhar meus dados com o tutor do pet',
   // A finalidade, escrita junto da caixinha. Nao e o texto do registro -- o
   // texto do registro e `CONSENTIMENTO_DO_ACHADOR.texto`, exibido logo abaixo.
   consentimentoFinalidade: 'Para quê: o tutor entrar em contato com você e recuperar o pet. Mais nada.',
   erroConsentimento:
-    'Marque "Aceito compartilhar meus dados com o tutor do pet" para ele receber seu e-mail e telefone — ou apague os dois campos e avise sem eles.',
+    'Marque "Aceito compartilhar meus dados com o tutor do pet" para ele receber seu e-mail e telefone, ou apague os dois campos e avise sem eles.',
   erroTelefoneDoAchador: 'Confira o telefone: precisa do DDD e do número.',
   erroContatoVazio: 'Preencha seu e-mail ou seu telefone, senão não há contato para o tutor usar.',
   // Depois de avisar COM consentimento. Nao ha como desfazer, e a tela nao
