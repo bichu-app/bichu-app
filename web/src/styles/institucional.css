@@ -439,3 +439,22 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .lista-marcada li { display: flex; gap: var(--space-2); align-items: flex-start; color: var(--cor-text-secondary); }
 .lista-marcada .icone { flex: none; color: var(--cor-primary); }
 .encontro .recorte--encontro { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+
+/* PERGUNTAS FREQUENTES (cliente, 28/11/2026). Reusa `.secao`,
+   `.secao__cabecalho`, `.sobretitulo` e `.titulo-secao` do institucional; a
+   forma de abrir e fechar e a de `.contato` em publica.css, que ja estava no
+   site: `<details>` e `<summary>`, SEM JavaScript, com o marcador do proprio
+   navegador. E essa a razao da escolha e nao a economia: a divulgacao nativa
+   ja recebe foco, ja responde a Enter e a Espaco e ja e anunciada com o
+   estado aberto ou fechado, sem `aria-expanded` escrito a mao para sair de
+   sincronia. Marcador escondido so no menu (`.nav-celular__botao`), onde o
+   icone faz esse papel; aqui ele FICA, porque e o unico sinal de que a
+   resposta abre. Tudo em token: `verify:valores-soltos` reprova literal. */
+.faq__lista { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); padding: 0; list-style: none; }
+.faq__item { padding: var(--space-4); background: var(--cor-surface-sunken); border-radius: var(--radius-lg); }
+.faq__pergunta {
+  display: flex; align-items: center; min-height: var(--target-critico);
+  font-family: var(--type-label-family); font-weight: var(--type-label-weight);
+  color: var(--cor-text-primary); cursor: pointer;
+}
+.faq__resposta { padding-block-start: var(--space-3); color: var(--cor-text-secondary); }

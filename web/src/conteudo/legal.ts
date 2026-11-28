@@ -76,7 +76,7 @@ if (VERSAO_LEGAL.rotulo.length === 0) {
 const DATA_PUBLICADA = `${PUBLICADA_EM.slice(8, 10)}/${PUBLICADA_EM.slice(5, 7)}/${PUBLICADA_EM.slice(0, 4)}`;
 
 export const LEGAL = {
-  aviso: 'Rascunho — pendente de revisão jurídica',
+  aviso: 'Rascunho, pendente de revisão jurídica',
   versao: `Versão ${VERSAO_LEGAL.rotulo} de ${DATA_PUBLICADA}. O texto pode mudar antes da versão final.`,
   // A MESMA cadeia que o aplicativo grava no aceite. Exportada para que o
   // portao leia o valor pela porta da frente -- pelo modulo que o site

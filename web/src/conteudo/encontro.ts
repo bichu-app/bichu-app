@@ -31,7 +31,7 @@ export const ROTULOS = {
 export const ENCONTRO = {
   tituloDaAba: (titulo: string) => titulo,
   descricao: (titulo: string, regiao: string) =>
-    `${titulo} — um encontro de tutores e pets em ${regiao}. Veja os detalhes no Bichu.`,
+    `${titulo}: um encontro de tutores e pets em ${regiao}. Veja os detalhes no Bichu.`,
 
   sobretitulo: 'Encontro da comunidade',
   /** O acento manuscrito da folha. Decorativo, e redundante com o texto ao lado. */
@@ -82,9 +82,7 @@ export const ENCONTRO = {
   chamada: {
     titulo: 'Os encontros acontecem no Bichu',
     texto:
-      'O Bichu é onde tutores do bairro se encontram, indicam profissionais de '
-      + 'confiança e ajudam a achar quem se perdeu. Os encontros da comunidade '
-      + 'são combinados por aqui.',
+      'O Bichu é onde tutores do bairro se encontram, indicam profissionais de confiança e ajudam a achar quem se perdeu. Os encontros da comunidade são combinados por aqui.',
   },
 
   /**
@@ -124,8 +122,7 @@ export const ENCONTRO = {
   indisponivel: {
     titulo: 'Este encontro não está disponível',
     texto:
-      'O link pode ter expirado, ou o encontro já aconteceu. Veja como funcionam '
-      + 'os encontros da comunidade e encontre outros perto de você.',
+      'O link pode ter expirado, ou o encontro já aconteceu. Veja como funcionam os encontros da comunidade e encontre outros perto de você.',
     acao: 'Ver a comunidade',
     acaoHref: '/comunidade',
   },

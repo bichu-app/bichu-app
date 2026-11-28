@@ -389,7 +389,7 @@ test('ISCA -- as paginas institucionais nao prometem check-in nem lista de prese
   // fora do alcance da varredura.
   for (const [modulo, frase] of [
     ['home.ts', 'Pets conectam pessoas.'],
-    ['comunidade.ts', 'O que ninguém vê num evento'],
+    ['comunidade.ts', 'Quem indica é o vizinho'],
     ['institucional.ts (COMO_FUNCIONA)', 'A identidade do seu pet'],
     ['institucional.ts (PARA_PROFISSIONAIS)', 'Para profissionais'],
     ['institucional.ts (SOBRE)', 'Sobre'],

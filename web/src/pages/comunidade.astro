@@ -11,7 +11,6 @@ import iconeProximidade from '../assets/marca/icone-pilar-proximidade.svg';
 import p1 from '../assets/posts/post-ilustrativo-1.svg';
 import p2 from '../assets/posts/post-ilustrativo-2.svg';
 import p4 from '../assets/posts/post-ilustrativo-4.svg';
-import type { NomeDoSimbolo } from '../icones/simbolos.ts';
 import { COMUNIDADE as T } from '../conteudo/comunidade.ts';
 import { INSTAGRAM } from '../conteudo/instagram.ts';
 import { CONTATO, RODAPE } from '../conteudo/comum.ts';
@@ -70,24 +69,10 @@ const pro = T.profissionais.exemplo;
     </article>
   </section>
 
-  <section class="secao garantias" id="privacidade-nos-encontros" aria-labelledby="garantias-titulo">
-    <div class="secao__cabecalho">
-      <h2 class="titulo-secao" id="garantias-titulo">{T.garantias.titulo}</h2>
-      <p class="secao__lead texto-grande">{T.garantias.lead}</p>
-    </div>
-    <ul class="garantias__lista">
-      {T.garantias.itens.map((g) => (
-        <li class="garantia">
-          <span class="garantia__icone"><Icone nome={g.icone as NomeDoSimbolo} /></span>
-          <h3 class="titulo-item">{g.titulo}</h3>
-          <p class="garantia__texto">{g.texto}</p>
-        </li>
-      ))}
-    </ul>
-  </section>
 
   <section class="secao profissionais" id="profissionais" aria-labelledby="profissionais-titulo">
     <div class="secao__cabecalho">
+      <p class="secao__sobretitulo sobretitulo">{T.profissionais.sobretitulo}</p>
       <h2 class="titulo-secao" id="profissionais-titulo">{T.profissionais.titulo}</h2>
       <p class="secao__lead texto-grande">{T.profissionais.lead}</p>
       <Manuscrito variante="frase">{T.profissionais.manuscrito}</Manuscrito>

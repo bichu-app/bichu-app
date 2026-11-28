@@ -20,9 +20,17 @@ import { COMO_FUNCIONA as T } from '../conteudo/institucional.ts';
     </div>
   </section>
 
+  <section class="secao como-funciona" aria-labelledby="cadastro-titulo">
+    <div class="secao__cabecalho">
+      <p class="secao__sobretitulo sobretitulo">{T.cadastroSobretitulo}</p>
+      <h2 class="titulo-secao" id="cadastro-titulo">{T.cadastroTitulo}</h2>
+    </div>
+    <Passos passos={T.cadastro} numerados />
+  </section>
+
   <section class="secao como-funciona" aria-labelledby="passos-titulo">
     <h2 class="sr-only" id="passos-titulo">{T.passosTitulo}</h2>
-    <Passos passos={T.passos} numerados />
+    <Passos passos={T.passos} />
   </section>
 
   <span class="divisor-onda" aria-hidden="true"></span>

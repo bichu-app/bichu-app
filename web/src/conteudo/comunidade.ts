@@ -1,18 +1,18 @@
 export const COMUNIDADE = {
   titulo: 'Comunidade',
-  descricao: 'No Bichu, a comunidade publica os momentos dos pets, se conecta, se encontra nas praças do bairro e indica os profissionais em quem confia.',
+  descricao: 'No Bichu, o Mural reúne as publicações dos tutores, a Rede reúne os eventos do bairro e a Comunidade reúne os profissionais, as clínicas e os hospitais indicados.',
 
   hero: {
     sobretitulo: 'Comunidade',
     titulo: 'Os pets do bairro e as pessoas que cuidam deles.',
-    lead: 'No Bichu, a comunidade publica os momentos dos pets, se conecta, se encontra nas praças do bairro e indica os profissionais em quem confia. Nenhum evento mostra o endereço de ninguém.',
+    lead: 'No Mural você acompanha as publicações dos tutores, na Rede encontra os eventos do bairro e a busca por outros tutores, e na Comunidade os profissionais, as clínicas e os hospitais que os vizinhos indicam. Nenhum evento mostra o endereço de ninguém.',
     alt: 'Ilustração de três mulheres fazendo carinho num cachorro numa praça, com um gato ao lado, bandeirinhas, árvores e prédios ao fundo.',
   },
 
   mural: {
     sobretitulo: 'Mural',
-    titulo: 'No Mural, o dia a dia dos pets da comunidade.',
-    lead: 'É por aqui que a comunidade acompanha os pets entre um evento e outro, a começar pelo que o seu pet aprontou hoje.',
+    titulo: 'No Mural, a linha do tempo dos pets da comunidade.',
+    lead: 'É a timeline do Bichu: as publicações e os conteúdos que a comunidade acompanha todos os dias, a começar pelo que o seu pet aprontou hoje.',
     passos: [
       { icone: 'photo_camera', titulo: 'Publique um momento', texto: 'Um texto curto e, se você quiser, uma foto. A foto mostra o que estiver nela: envie só o que você aceita que outras pessoas vejam.' },
       { icone: 'person_add', titulo: 'Peça conexão', texto: 'Você pede, a outra pessoa aceita. São três caminhos: procurar a pessoa no Bichu, escanear o QR do perfil dela quando vocês se encontram, ou abrir um link de convite.' },
@@ -22,8 +22,8 @@ export const COMUNIDADE = {
 
   eventos: {
     sobretitulo: 'Rede',
-    titulo: 'Eventos na praça, com os pets do bairro',
-    lead: 'Passeios e eventos em praças e parques, criados pela equipe do Bichu e pela própria comunidade.',
+    titulo: 'Na Rede ficam os eventos na praça, com os pets do bairro',
+    lead: 'Passeios e eventos em praças e parques, criados pela equipe do Bichu e pela própria comunidade. É na Rede também que você busca outros tutores.',
     passos: [
       { icone: 'event', titulo: 'Ache um evento perto de você', texto: 'Os eventos aparecem no app com data, horário, o nome da praça ou do parque e o bairro. Sem mapa e sem endereço de ninguém.' },
       { icone: 'photo_library', titulo: 'Veja a galeria', texto: 'As fotos ficam reunidas na página do evento, sem o nome de quem enviou.' },
@@ -40,18 +40,10 @@ export const COMUNIDADE = {
     },
   },
 
-  garantias: {
-    titulo: 'O que ninguém vê num evento',
-    lead: 'O Bichu não usa o evento para mostrar onde você mora nem quais pets são seus.',
-    itens: [
-      { icone: 'hide_image', titulo: 'Foto sem autor', texto: 'As fotos pertencem ao evento. Quem enviou não aparece na galeria, mas a foto mostra o que estiver nela: envie só o que você aceita que o bairro veja.' },
-      { icone: 'location_off', titulo: 'Lugar pelo nome, sem mapa', texto: 'O evento mostra o nome da praça ou do parque e o bairro. Nunca um ponto no mapa.' },
-    ],
-  },
-
   profissionais: {
+    sobretitulo: 'Comunidade',
     titulo: 'Quem indica é o vizinho',
-    lead: 'Veterinários, banhistas, adestradores e passeadores indicados e avaliados por quem mora perto.',
+    lead: 'Veterinários, clínicas, hospitais, banhistas, creches, adestradores e passeadores indicados e avaliados por quem mora perto.',
     manuscrito: 'Vizinhos também cuidam de pets.',
     passos: [
       { icone: 'person_add', titulo: 'Indique alguém em quem você confia', texto: 'Você indica, o Bichu convida. O perfil do profissional só aparece depois que ele aceita.' },

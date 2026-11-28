@@ -100,5 +100,22 @@ const icones = { eventos: iconeEncontros, profissionais: iconeProximidade };
     <a class="botao botao--secundario" href={T.profissionais.botao.href}>{T.profissionais.botao.texto}</a>
   </section>
 
+  <section class="secao secao--alternada faq" aria-labelledby="faq-titulo">
+    <div class="secao__cabecalho">
+      <p class="secao__sobretitulo sobretitulo">{T.faq.sobretitulo}</p>
+      <h2 class="titulo-secao" id="faq-titulo">{T.faq.titulo}</h2>
+    </div>
+    <ul class="faq__lista">
+      {T.faq.itens.map((p) => (
+        <li>
+          <details class="faq__item">
+            <summary class="faq__pergunta">{p.pergunta}</summary>
+            <p class="faq__resposta">{p.resposta}</p>
+          </details>
+        </li>
+      ))}
+    </ul>
+  </section>
+
   <BaixeApp titulo={T.baixeApp.titulo} texto={T.baixeApp.texto} />
 </Institucional>
