@@ -92,9 +92,20 @@ export const HOME = {
   // nem no CSS. A ordem da lista e a ordem da pagina.
   //
   // O que entra aqui passa pela mesma regra do resto do site: nao pode
-  // prometer o que `api/openapi.yaml` e `migrations/` nao fazem. Duas
-  // perguntas do lote de 28/11 ficaram FORA por reprovarem nessa conferencia,
-  // e a decisao sobre elas e do cliente, nao deste arquivo.
+  // prometer o que `api/openapi.yaml` e `migrations/` nao fazem.
+  //
+  // UMA PERGUNTA DO LOTE ESTA RETIDA, e isso e decisao de 28/11/2026 e nao
+  // esquecimento: "Posso cadastrar o meu proprio negocio?". Hoje a resposta
+  // teria de ser NAO, porque autocadastro nao existe em rota nenhuma -- o
+  // unico `insertInto('professionals')` do repositorio esta em
+  // `src/modules/professionals/adapters/persistence/kysely-diretorio-administrativo.ts`,
+  // que e o painel, e `ORIGEM_DO_PAINEL` grava sempre `import`.
+  //
+  // O GATILHO DA VOLTA: ela entra junto com o formulario de cadastro de
+  // profissional, pedido pelo cliente em 28/11/2026 e em desenho noutra
+  // frente. Quem fechar esse formulario acrescenta a pergunta como UM objeto
+  // a mais na lista abaixo, com a resposta que o formulario tornar verdadeira.
+  // Pedido adiado nao volta sozinho: este paragrafo e o lembrete.
   faq: {
     sobretitulo: 'Perguntas frequentes',
     titulo: 'As dúvidas que mais chegam para a gente',

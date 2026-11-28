@@ -14,21 +14,21 @@ export const COMO_FUNCIONA = {
   // acontecem em sequencia -- este aqui acontece. Com os dois numerados a
   // pagina tinha duas listas comecando em 1, uma ao lado da outra.
   //
-  // SAO QUATRO E ELE ESCREVEU CINCO. O passo da indicacao ficou FORA, e a
-  // decisao e do cliente, nao deste arquivo: ele dizia que cadastrar uma
-  // indicacao faz o profissional passar a aparecer para a comunidade, e
-  // `POST /v1/directory/suggestions` diz o contrario no contrato -- "a
-  // sugestao nasce `pending` e NAO publica nada, nem agora nem
-  // automaticamente depois". Quem publica e o painel, aprovando
-  // (`approveAdminDirectorySuggestion`). Publicar o passo como escrito
-  // prometeria o que o produto nao faz E contradiria `passos` logo abaixo,
-  // que fala de convite e aceite. Passo novo entra como UM objeto aqui.
+  // O PASSO 4 ESTEVE RETIDO E VOLTOU REVISADO (cliente, 28/11/2026). Como ele
+  // escreveu, dizia que cadastrar uma indicacao faz o profissional passar a
+  // aparecer, e `POST /v1/directory/suggestions` diz o contrario no contrato:
+  // "a sugestao nasce `pending` e NAO publica nada, nem agora nem
+  // automaticamente depois". A revisao poe a conferencia da equipe no meio,
+  // que e `approveAdminDirectorySuggestion`, e ai o texto passa a descrever o
+  // que acontece. NAO tire a conferencia da frase sem tirar a aprovacao do
+  // fluxo. Passo novo entra como UM objeto aqui.
   cadastroTitulo: 'Como funciona',
   cadastroSobretitulo: 'Passo a passo',
   cadastro: [
     { icone: 'how_to_reg', titulo: 'Baixe o app e cadastre-se.', texto: 'Crie sua conta no Bichu e cadastre seu pet em poucos minutos.' },
     { icone: 'location_on', titulo: 'Encontre profissionais e estabelecimentos.', texto: 'Busque pelo tipo de serviço, como veterinário, banho e tosa ou creche.' },
     { icone: 'visibility', titulo: 'Veja o perfil e as avaliações.', texto: 'Cada perfil reúne informações, notas e os comentários de outros tutores para ajudar na sua escolha.' },
+    { icone: 'person_add', titulo: 'Indique quem você confia.', texto: 'Não achou o seu profissional de confiança? Cadastre uma indicação. A equipe do Bichu confere e ele passa a aparecer para toda a comunidade.' },
     { icone: 'star', titulo: 'Avalie.', texto: 'Conte como foi o atendimento, com uma nota de 1 a 5 e um comentário.' },
   ],
 
@@ -36,7 +36,7 @@ export const COMO_FUNCIONA = {
   passos: [
     { icone: 'pets', titulo: 'A identidade do seu pet', texto: 'Você cadastra o pet no app com foto, sinais e cuidados. Os pets perdidos ficam na seção Pets.' },
     { icone: 'park', titulo: 'Eventos no bairro, na Rede', texto: 'Eventos em praças e parques, criados pela equipe do Bichu e pela comunidade. É na Rede também que você busca outros tutores.' },
-    { icone: 'verified', titulo: 'Na Comunidade, quem os vizinhos indicam', texto: 'Veterinários, clínicas, hospitais, banhistas, adestradores e passeadores entram no Bichu pela indicação de quem já foi atendido e aceitam o convite. A nota é de quem mora perto.' },
+    { icone: 'verified', titulo: 'Na Comunidade, quem os vizinhos indicam', texto: 'Veterinários, clínicas, hospitais, banhistas, adestradores e passeadores entram no Bichu pela indicação de quem já foi atendido. A nota é de quem mora perto.' },
   ],
   sumiu: {
     titulo: 'E se o seu pet sumir, os tutores por perto procuram com você.',
@@ -58,7 +58,7 @@ export const PARA_PROFISSIONAIS = {
   },
   indicacao: {
     titulo: 'Indicação da comunidade',
-    lead: 'O perfil de um profissional nasce da indicação de um tutor e do aceite do profissional, e ganha força com as avaliações de quem mora perto. Ele aparece na Comunidade, junto das clínicas e dos hospitais indicados.',
+    lead: 'O perfil de um profissional nasce da indicação de um tutor, passa pela conferência da equipe do Bichu e ganha força com as avaliações de quem mora perto. Ele aparece na Comunidade, junto das clínicas e dos hospitais indicados.',
     manuscrito: 'Vizinhos também cuidam de pets.',
   },
 } as const;

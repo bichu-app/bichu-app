@@ -46,7 +46,7 @@ export const COMUNIDADE = {
     lead: 'Veterinários, clínicas, hospitais, banhistas, creches, adestradores e passeadores indicados e avaliados por quem mora perto.',
     manuscrito: 'Vizinhos também cuidam de pets.',
     passos: [
-      { icone: 'person_add', titulo: 'Indique alguém em quem você confia', texto: 'Você indica, o Bichu convida. O perfil do profissional só aparece depois que ele aceita.' },
+      { icone: 'person_add', titulo: 'Indique alguém em quem você confia', texto: 'Você indica e a equipe do Bichu confere. Depois disso o perfil passa a aparecer para toda a comunidade.' },
       { icone: 'star', titulo: 'Avalie com nota', texto: 'Nota de 1 a 5 e um comentário. A avaliação é sua: o profissional pode responder, mas não pode apagar.' },
       { icone: 'verified', titulo: 'Perfil oficial', texto: 'O perfil diz o que foi conferido: CRMV, CNPJ ou telefone do estabelecimento.' },
     ],
