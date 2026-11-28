@@ -2,7 +2,7 @@ Estes termos são o combinado entre você e o Bichu. Ao criar uma conta, ou ao u
 
 ## 1. Quem somos
 
-O Bichu é oferecido por [NOME DA EMPRESA — DECISÃO DO CLIENTE], CNPJ [DECISÃO DO CLIENTE], com sede em [ENDEREÇO — DECISÃO DO CLIENTE].
+O Bichu é uma plataforma desenvolvida e oferecida pela Tecla Consulting Ltda, CNPJ 44.131.060/0001-19, com sede em [ENDEREÇO — DECISÃO DO CLIENTE].
 
 - Dúvidas e denúncias: **oi@bichu.app**
 - Seus dados pessoais: **privacidade@bichu.app**, com o encarregado Leandro Panegassi
@@ -95,7 +95,7 @@ Estas funções ainda não estão no ar. As regras abaixo valem a partir do dia 
 
 ## 12. Moderação e denúncia
 
-**Como denunciar.** Escreva para **oi@bichu.app** com a palavra "Denúncia" no assunto, dizendo o que aconteceu e, se puder, o nome do pet ou o bairro do caso. [PENDENTE: o botão de denunciar e de bloquear dentro da conversa ainda não existe no app] Se houver risco imediato a você ou a alguém, procure antes a polícia (190).
+**Como denunciar.** Escreva para **oi@bichu.app** com a palavra "Denúncia" no assunto, dizendo o que aconteceu e, se puder, o nome do pet ou o bairro do caso. Se houver risco imediato a você ou a alguém, procure antes a polícia (190).
 
 **O que o Bichu faz sozinho.** Para proteger as pessoas, o Bichu:
 
@@ -138,7 +138,7 @@ Nada nestes termos tira de você um direito que o Código de Defesa do Consumido
 
 ## 15. Encerramento
 
-- Você pode excluir a sua conta quando quiser. Hoje o pedido é feito pelo privacidade@bichu.app. [PENDENTE: o botão de excluir a conta no app ainda não existe] A política de privacidade explica o que acontece com os seus dados.
+- Você pode excluir a sua conta quando quiser, pelo próprio app: toque na sua foto, no alto da tela, e desça até **Excluir a conta**. A gente pede a sua senha antes de confirmar. Se preferir, peça pelo privacidade@bichu.app. A política de privacidade explica o que acontece com os seus dados.
 - O Bichu pode suspender ou encerrar uma conta que descumpra estes termos, e vai dizer o motivo, a não ser que isso atrapalhe uma investigação ou exponha outra pessoa.
 
 ## 16. Mudanças nestes termos

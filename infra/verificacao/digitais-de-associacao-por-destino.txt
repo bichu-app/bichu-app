@@ -1,0 +1,162 @@
+*** QUAL DIGITAL CADA DESTINO ACEITA NOS ARQUIVOS DE ASSOCIACAO ***
+Declaracao lida por `infra/verificacao/verificar_borda_local.py`. Criada em
+23/11/2026. Mesmo desenho de `infra/cd/chaves-de-site-por-destino.txt` (04/11),
+e pelo mesmo motivo -- leia aquele arquivo antes de mexer neste.
+
+POR QUE ESTE ARQUIVO EXISTE. Ate 23/11/2026 o portao da borda conferia os dois
+arquivos de `/.well-known/` olhando SO se a lista estava vazia:
+
+    if valores: continue   # <- a cegueira
+
+E `infra/caddy/well-known/assetlinks.json` NAO esta vazio desde 28/10: ele
+carrega a digital da chave de DEBUG da maquina de quem compila
+(`5D:7A:C5:50:...`), que casa so com APK compilado naquela maquina. Medido em
+23/11/2026 contra os dois arquivos reais, com `apple-app-site-association` como
+controle positivo: em 23/11, 31/12/2026, 01/01/2027 e 15/06/2030 o caso
+`assetlinks.json` NAO PRODUZIU ACHADO NENHUM em data nenhuma -- a dispensa
+`apk-assinado` nunca chegava a ser consultada, porque o `continue` vinha antes.
+Portao verde com a chave errada, e um link desses nao abre o app de ninguem.
+
+A ironia e que `infra/caddy/well-known/LEIA-ME.md` previu isso por escrito, na
+secao do Team ID da Apple: "arquivo servido declarando um Team ID que nao existe
+e PIOR que arquivo vazio... o preenchido com valor falso PARECE configurado".
+Aconteceu com o Android, por outra porta.
+
+O ANCORA MUDOU DE LUGAR. A digital aceitavel por destino e DECLARADA aqui, fora
+do arquivo que esta sendo conferido. O portao resolve o destino pelo endereco,
+le a declaracao e so depois compara com o que a borda serviu. Nenhum dos dois
+lados e o controle positivo do outro.
+
+SO A IMPRESSAO DIGITAL, NUNCA O VALOR, e aqui isso tem um motivo A MAIS que no
+arquivo do reCAPTCHA. A digital SHA-256 do certificado e publica por desenho
+(ela vai servida no proprio `assetlinks.json`), entao nao e segredo que se
+esconde. O que se evita e outra coisa: se a declaracao trouxesse a digital
+LITERAL, o jeito mais curto de calar o portao seria copiar a linha daqui para
+dentro do `assetlinks.json` -- e o arquivo ficaria exatamente com a cara de
+configurado que o LEIA-ME manda evitar, agora com um portao verde por cima.
+Guardando so 12 digitos do sha256 isso nao se reconstroi: para deixar o portao
+verde e preciso ter a digital de verdade, que vem do Play Console.
+
+COMO SE CALCULA A IMPRESSAO. 12 primeiros digitos hexadecimais minusculos do
+sha256 do valor NORMALIZADO, sem nova linha no fim. A normalizacao e por
+exigencia, e esta escrita porque comparar impressao de texto nao normalizado
+reprova por diferenca de pontuacao:
+
+  digital-do-apk  -- MAIUSCULA, sem os dois-pontos e sem espaco:
+      printf '%s' "5D7AC5505FC6C47728F98675F8F97E9A6427AB954A2EB774B8FF726FCA3F1255" \
+        | shasum -a 256 | cut -c1-12
+
+  appid-da-apple  -- como escrito, so sem espaco nas pontas (o Team ID e
+                     MAIUSCULO e o bundle e minusculo; nao se dobra caixa):
+      printf '%s' "TEAMID.app.bichu" | shasum -a 256 | cut -c1-12
+
+DE ONDE SAI O VALOR DE VERDADE, no dia em que existir, e nunca de um arquivo
+copiado a mao:
+
+  digital-do-apk  -- Play Console > Configuracao > Integridade do app > chave de
+      assinatura do app. Decisao do cliente de 28/10/2026: Play App Signing, e
+      nao keystore proprio. A digital que entra e a do certificado que o GOOGLE
+      guarda, nao a da chave de upload -- e ela nao existe antes de um bundle
+      subir ao console.
+  appid-da-apple  -- `<TEAM_ID>.app.bichu`, com o Team ID da conta Apple
+      Developer do cliente. Em 28/10/2026 o cliente reafirmou que a identidade
+      de equipe nao existe ("por enquanto nao consegui criar o id team na ios").
+
+POR QUE OS TRES DESTINOS DECLARAM O MESMO VALOR HOJE, e por que isso nao torna o
+destino decorativo: pelo ADR-0028 item 6 os arquivos de associacao sao UM so,
+servido por tres blocos da borda, justamente para que as copias nao possam
+divergir. Entao hoje `local`, `hml` e `prod` cobram a mesma coisa. A estrutura
+por destino existe para o dia em que isso deixar de ser verdade -- release
+assinado por chave diferente da que o APK de homologacao usa --, e nesse dia a
+divergencia entra aqui, em uma linha, sem tocar em codigo.
+
+E E ISSO QUE IMPEDE O PORTAO DE FICAR VERMELHO PARA SEMPRE NO DESENVOLVIMENTO
+LOCAL. A digital de debug e da maquina de quem compila (medido em 22/09/2026:
+tres `keytool -genkeypair` identicos, tres digitais diferentes), entao ela nunca
+pode ser declarada aqui. Se a conta fosse "`local` aceita a digital de debug", o
+portao cobraria num desenvolvedor algo que ele nao tem como declarar. A conta e
+outra: o `assetlinks.json` aceita VARIAS digitais na lista, e o LEIA-ME manda
+acrescentar a de release como SEGUNDO elemento sem remover a de debug. O portao
+aprova quando QUALQUER digital servida casa com QUALQUER uma declarada -- ou
+seja, no dia em que a digital do Play entrar no arquivo e nesta declaracao, os
+tres destinos ficam verdes de uma vez, `local` incluido. O vermelho tem comeco e
+fim, e os dois sao a mesma coisa: a chave que falta.
+
+LINHA QUE FALTA NAO E LINHA QUE APROVA. Os desfechos de ausencia tem nome
+proprio e TODOS reprovam duro, sem passar pela dispensa -- a dispensa cobre
+insumo que falta ao CLIENTE, nao linha que falta a NOS:
+
+  TABELA_ILEGIVEL         este arquivo ausente ou ilegivel
+  TABELA_SEM_DECLARACAO   legivel e sem nenhuma linha `HOST` ou `DIGITAL`
+                          (controle positivo da leitura: zero casamentos sem
+                          controle vira "nao declarado" quando a verdade e
+                          "nao li nada")
+  DESTINO_NAO_DECLARADO   o hostname do endereco nao tem linha `HOST`
+  EXIGENCIA_NAO_DECLARADA o destino existe e nao declara ESTA exigencia
+  DECLARACAO_AMBIGUA      duas linhas para o mesmo host, ou duas para o mesmo
+                          par destino+exigencia
+  DECLARACAO_MAL_FORMADA  impressao fora da forma (12 hex minusculos) e
+                          diferente de `AINDA-NAO-EXISTE`
+
+Os dois desfechos que a dispensa GOVERNA sao os do conteudo servido, e so eles:
+`LISTA_VAZIA` (a lista nao tem nada) e `DIGITAL_NAO_DECLARADA` (a lista tem
+valor e nenhum casa com os declarados). Aviso enquanto a dispensa vale,
+reprovacao quando ela vencer.
+
+AS DUAS LINHAS DE DECLARACAO COMECAM COM `HOST` E `DIGITAL`, e o resto deste
+arquivo e prosa. O marcador nao e enfeite: sem ele o leitor teria de adivinhar
+quais linhas sao declaracao, e qualquer paragrafo com quatro palavras viraria
+uma. Com ele a regra e exata -- linha de declaracao e linha cujo PRIMEIRO campo
+e `HOST` ou `DIGITAL`, e mais nada neste arquivo pode ser lido como tal.
+
+SAO DUAS LINHAS E NAO UMA porque o portao recebe ENDERECO e nao destino. Medido
+em 23/11/2026, as tres unicas chamadas que existem:
+`Makefile:540` com `$${PUBLIC_BASE_URL:-http://localhost:$(PORTA)}`,
+`.github/workflows/ci.yml:1195` com `http://localhost:3000`, e
+`.github/workflows/dois-destinos.yml:104` com `${{ steps.destino.outputs.url }}`,
+cujo padrao e `https://hml.bichu.app`. Nenhuma delas passa nome de ambiente.
+A linha `HOST` e a traducao, e so o HOSTNAME conta -- porta e esquema ficam
+fora, porque a mesma pilha local atende em portas diferentes.
+
+#    hostname        destino
+HOST localhost       local
+HOST 127.0.0.1       local
+HOST site.localhost  local
+HOST tag.localhost   local
+HOST hml.bichu.app   hml
+
+OS HOSTS DE PRODUCAO NAO TEM LINHA, DE PROPOSITO, e isto e o contrario de
+esquecimento. `prod` tem exigencia declarada abaixo, e nenhum endereco mapeado
+para ele: hoje nao existe endereco que se possa afirmar ser producao. Medido com
+`dig +short` em 23/11/2026: `bichu.app` resolve para `35.247.247.16`, que e o IP
+declarado da VM de HOMOLOGACAO em `infra/verificacao/associacao.yml`, o mesmo de
+`hml.bichu.app`; `api.bichu.app` e `admin.bichu.app` nao resolvem. Ou seja, o
+endereco com cara de producao serve homologacao, e um `HOST bichu.app prod` aqui
+faria o portao julgar homologacao pela regra de producao. Apontar o portao para
+`bichu.app` hoje reprova com
+`DESTINO_NAO_DECLARADO`, que e a resposta certa: o portao nao sabe qual destino
+aquele endereco e, e chutar seria julgar pelo destino errado. No dia em que
+producao existir, e uma linha `HOST` aqui.
+
+#       destino exigencia       impressao          de-onde-sai
+DIGITAL local   digital-do-apk  AINDA-NAO-EXISTE   play-console-integridade-do-app
+DIGITAL local   appid-da-apple  AINDA-NAO-EXISTE   team-id-da-conta-apple
+DIGITAL hml     digital-do-apk  AINDA-NAO-EXISTE   play-console-integridade-do-app
+DIGITAL hml     appid-da-apple  AINDA-NAO-EXISTE   team-id-da-conta-apple
+DIGITAL prod    digital-do-apk  AINDA-NAO-EXISTE   play-console-integridade-do-app
+DIGITAL prod    appid-da-apple  AINDA-NAO-EXISTE   team-id-da-conta-apple
+
+`AINDA-NAO-EXISTE` E UMA DECLARACAO, E A MAIS ESTRITA QUE CABE. Ela nao e
+espera nem dispensa: ela diz "nenhuma digital e aceitavel aqui ainda", e o
+efeito e que QUALQUER valor servido cai em `DIGITAL_NAO_DECLARADA`. Isso e o
+estado medido do mundo em 23/11/2026, e nao um rodeio: nao existe chave de
+release de tipo nenhum (`app/android/app/build.gradle.kts` ainda assina
+`buildTypes.release` com `signingConfigs.getByName("debug")`) e nao existe Team
+ID. Apagar estas linhas seria PIOR: viraria `EXIGENCIA_NAO_DECLARADA`, que
+reprova duro e imediatamente, sem passar pela dispensa que o cliente datou.
+
+O QUE ESTE ARQUIVO DELIBERADAMENTE NAO AFIRMA. Ele nao diz nada sobre
+`webcredentials.apps` do `apple-app-site-association`, que tambem esta vazio e
+tambem e insumo do Team ID: o portao nunca leu esse campo, e trazer exigencia
+nova para ele e decisao de produto (passkey no iOS) e nao conserto de cegueira.
+Fica dito para nao sumir.
