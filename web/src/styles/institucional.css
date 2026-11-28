@@ -7,6 +7,24 @@
     calc(var(--moldura-raio-superior) / var(--moldura-proporcao) * 100%) calc(var(--moldura-raio-superior) / var(--moldura-proporcao) * 100%)
     calc(var(--moldura-raio-inferior) / var(--moldura-proporcao) * 100%) calc(var(--moldura-raio-inferior) / var(--moldura-proporcao) * 100%);
   --onda: var(--space-12);
+  /* Folga de rolagem do cabecalho fixo no desktop. NAO e a altura dele: a
+     altura VARIA, e isso foi medido em 28/11/2026 na home, no Chromium, com
+     o cabecalho de hoje. De 1000 px para cima o cabecalho tem 72 px (o
+     logotipo, --space-12, mais --space-3 de padding em cima e embaixo). De
+     905 a 999 px ele tem 92 px, porque "Baixar o app" nao cabe numa linha e
+     o botao vai para duas. Isso ja acontecia antes do cabecalho virar fixo;
+     o que muda e que agora o numero precisa ser escrito em algum lugar.
+     --space-16 + --space-12 da 112 px, acima dos 92 px do caso mais alto com
+     --space-5 de sobra, e por isso cobre os dois sem media query (905 a 999
+     nao e ponto de quebra e nao pode virar @media: o varredor de valores
+     soltos so aceita 600, 905 e 1240).
+     Nao resolvi pelo outro lado, com `white-space: nowrap` no botao para o
+     cabecalho ficar sempre com 72 px: medido a 905 px, isso cabe com folga
+     ZERO (a distancia entre o logotipo e o menu vira exatamente o gap de
+     --space-6), e uma palavra a mais em qualquer item viraria rolagem
+     horizontal. Cabecalho 20 px mais alto numa faixa estreita e falha mais
+     barata que isso. */
+  --cabecalho-folga-de-rolagem: calc(var(--space-16) + var(--space-12));
 }
 
 .cabecalho, .secao, .hero, .rodape {
@@ -29,6 +47,39 @@
 @media (min-width: 905px) {
   .nav { display: flex; align-items: center; gap: var(--space-6); }
   .nav-celular { display: none; }
+
+  /* MENU PRINCIPAL FIXO, SO NO DESKTOP (cliente, 28/11/2026: "no site, vamos
+     deixar o menu principal fixo na pagina na versao desktop, conforme o
+     usuario for rolando, ele fica aparecendo").
+     905 e o ponto de quebra que o site JA usa para desktop
+     (web.breakpoint.expanded): e exatamente aqui que .nav aparece e
+     .nav-celular sai. No celular nada muda: o .cabecalho segue
+     `position: relative` da regra acima.
+     `sticky` e nao `fixed` de proposito: fixed tira o cabecalho do fluxo e o
+     topo da pagina passa a nascer escondido embaixo dele, o que obrigaria a
+     compensar a altura no <main> de toda pagina. Com sticky o cabecalho
+     continua ocupando o lugar dele, o topo nao sobe por baixo de nada e nao ha
+     sobreposicao para corrigir.
+     O fundo e obrigatorio: `.cabecalho` era transparente e herdava a
+     superficie do body, e sem ele o texto das secoes atravessaria o menu ao
+     rolar. A sombra e --shadow-sm, a mais fraca do sistema, e separa o menu da
+     secao colorida que passa por baixo. Sem transicao e sem encolher ao rolar:
+     ele pediu fixo, nao pediu animacao, e assim nada ha a fazer sobre
+     prefers-reduced-motion. */
+  .cabecalho {
+    position: sticky; top: 0;
+    background: var(--cor-surface);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ANCORA DE ROLAGEM. Cabecalho fixo cobre o inicio do destino de todo link
+     interno: #baixe-app do proprio cabecalho e do rodape, #conteudo do "Pular
+     para o conteudo", e #mural, #eventos, #profissionais, #rede e
+     #privacidade-nos-encontros das paginas. `scroll-padding-top` no
+     recipiente de rolagem resolve todos de uma vez, inclusive o salto do
+     teclado, sem precisar de scroll-margin-top em cada id. O valor e
+     --cabecalho-folga-de-rolagem, justificado la em cima. */
+  html { scroll-padding-top: var(--cabecalho-folga-de-rolagem); }
 }
 .nav__lista { display: flex; gap: var(--space-1); }
 .nav__link {
