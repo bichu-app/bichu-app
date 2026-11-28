@@ -388,8 +388,10 @@ abstract final class RegistroDeSubDestinos {
       // `Perfil`, ACIMA de `Sair da conta` (o cliente foi literal em
       // 18/10/2026: o `Sair` e sempre a ultima opcao do menu, e ha portao de
       // coordenada cobrando isso). A folha diz as consequencias nas palavras
-      // do contrato (exclusao logica imediata, expurgo em 30 dias, casos
-      // encerrados, tags revogadas).
+      // do contrato (exclusao logica imediata, SEM expurgo por prazo, tags
+      // revogadas e dado guardado). Ela dizia `expurgo em 30 dias, casos
+      // encerrados` ate 23/11/2026, e as duas metades eram falsas: ver a
+      // prosa de `TextosDaExclusaoDaConta`, em `telas/abas.dart`.
       //
       // **O TOQUE FINAL FOI LIGADO NO MESMO DIA**, e a frase que dizia o
       // contrario saiu: `DELETE /v1/me` exige `reauth` no escopo

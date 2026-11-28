@@ -173,9 +173,14 @@ class MeApi implements IntencaoDeFotoDoUsuario {
   /// aberta.
   ///
   /// **Responde `202`, e nao `200`**: o que o servidor aceita e o PEDIDO. Pelo
-  /// contrato, a exclusao logica e imediata, o expurgo definitivo acontece em
-  /// 30 dias, os casos em aberto sao encerrados e as tags, revogadas. Nada
-  /// disso e do app: o servidor agenda, encerra e revoga.
+  /// contrato, a exclusao logica e imediata e **NAO HA EXPURGO POR PRAZO**: a
+  /// conta fica desabilitada, as sessoes caem, as tags sao revogadas e o dado
+  /// FICA. Nada disso e do app: o servidor desabilita e revoga.
+  ///
+  /// Esta prosa dizia *"o expurgo definitivo acontece em 30 dias, os casos em
+  /// aberto sao encerrados"* ate 23/11/2026, e as duas metades eram falsas --
+  /// `expurgar-contas-excluidas.ts` devolve tres zeros (emenda 6 da ADR-0010,
+  /// 26/10/2026) e `registrarPedidoDeExclusao` toca so `users` e `pet_tags`.
   ///
   /// O teto e de **3 pedidos por 24 h** por conta, com `deny_429` -- recusa de
   /// verdade, entao a quarta tentativa volta como falha de limite.
